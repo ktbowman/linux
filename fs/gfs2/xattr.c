@@ -283,7 +283,7 @@ static int ea_dealloc_unstuffed(struct gfs2_inode *ip, struct buffer_head *bh,
 			blen++;
 		else {
 			if (bstart)
-				gfs2_free_meta(ip, bstart, blen);
+				gfs2_free_meta(ip, rgd, bstart, blen);
 			bstart = bn;
 			blen = 1;
 		}
@@ -292,7 +292,7 @@ static int ea_dealloc_unstuffed(struct gfs2_inode *ip, struct buffer_head *bh,
 		gfs2_add_inode_blocks(&ip->i_inode, -1);
 	}
 	if (bstart)
-		gfs2_free_meta(ip, bstart, blen);
+		gfs2_free_meta(ip, rgd, bstart, blen);
 
 	if (prev && !leave) {
 		u32 len;
@@ -1254,6 +1254,7 @@ static int ea_dealloc_indirect(struct gfs2_inode *ip)
 {
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
 	struct gfs2_rgrp_list rlist;
+	struct gfs2_rgrpd *rgd;
 	struct buffer_head *indbh, *dibh;
 	__be64 *eablk, *end;
 	unsigned int rg_blocks = 0;
@@ -1306,8 +1307,7 @@ static int ea_dealloc_indirect(struct gfs2_inode *ip)
 	gfs2_rlist_alloc(&rlist);
 
 	for (x = 0; x < rlist.rl_rgrps; x++) {
-		struct gfs2_rgrpd *rgd = gfs2_glock2rgrp(rlist.rl_ghs[x].gh_gl);
-
+		rgd = gfs2_glock2rgrp(rlist.rl_ghs[x].gh_gl);
 		rg_blocks += rgd->rd_length;
 	}
 
@@ -1324,6 +1324,7 @@ static int ea_dealloc_indirect(struct gfs2_inode *ip)
 
 	eablk = (__be64 *)(indbh->b_data + sizeof(struct gfs2_meta_header));
 	bstart = 0;
+	rgd = NULL;
 	blen = 0;
 
 	for (; eablk < end; eablk++) {
@@ -1337,8 +1338,9 @@ static int ea_dealloc_indirect(struct gfs2_inode *ip)
 			blen++;
 		else {
 			if (bstart)
-				gfs2_free_meta(ip, bstart, blen);
+				gfs2_free_meta(ip, rgd, bstart, blen);
 			bstart = bn;
+			rgd = gfs2_blk2rgrpd(sdp, bstart, true);
 			blen = 1;
 		}
 
@@ -1346,7 +1348,7 @@ static int ea_dealloc_indirect(struct gfs2_inode *ip)
 		gfs2_add_inode_blocks(&ip->i_inode, -1);
 	}
 	if (bstart)
-		gfs2_free_meta(ip, bstart, blen);
+		gfs2_free_meta(ip, rgd, bstart, blen);
 
 	ip->i_diskflags &= ~GFS2_DIF_EA_INDIRECT;
 
@@ -1395,7 +1397,7 @@ static int ea_dealloc_block(struct gfs2_inode *ip)
 	if (error)
 		goto out_gunlock;
 
-	gfs2_free_meta(ip, ip->i_eattr, 1);
+	gfs2_free_meta(ip, rgd, ip->i_eattr, 1);
 
 	ip->i_eattr = 0;
 	gfs2_add_inode_blocks(&ip->i_inode, -1);
