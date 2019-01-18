@@ -12,13 +12,14 @@
 #include <linux/posix-timers.h>
 #include RH_KABI_HIDE_INCLUDE(<linux/mm_types.h>)
 #include RH_KABI_HIDE_INCLUDE(<asm/ptrace.h>)
+#include <linux/refcount.h>
 
 /*
  * Types defining task->signal and task->sighand and APIs using them:
  */
 
 struct sighand_struct {
-	atomic_t		count;
+	RH_KABI_REPLACE(atomic_t count, refcount_t count)
 	struct k_sigaction	action[_NSIG];
 	spinlock_t		siglock;
 	wait_queue_head_t	signalfd_wqh;
