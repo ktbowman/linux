@@ -886,9 +886,6 @@ struct gfs2_sbd {
 
 	unsigned long sd_last_warning;
 	struct dentry *debugfs_dir;    /* debugfs directory */
-	struct dentry *debugfs_dentry_glocks;
-	struct dentry *debugfs_dentry_glstats;
-	struct dentry *debugfs_dentry_sbstats;
 	unsigned long sd_glock_dqs_held;
 };
 
