@@ -1150,6 +1150,7 @@ asmlinkage long sys_ni_syscall(void);
 int ksys_mount(const char __user *dev_name, const char __user *dir_name,
 	       const char __user *type, unsigned long flags, void __user *data);
 int ksys_umount(char __user *name, int flags);
+int ksys_dup(unsigned int fildes);
 int ksys_chroot(const char __user *filename);
 ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count);
 int ksys_chdir(const char __user *filename);
