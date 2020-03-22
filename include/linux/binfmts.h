@@ -27,22 +27,26 @@ struct linux_binprm {
 	unsigned long p; /* current top of mem */
 	unsigned int
 		/*
-		 * True after the bprm_set_creds hook has been called once
-		 * (multiple calls can be made via prepare_binprm() for
-		 * binfmt_script/misc).
-		 */
-		called_set_creds:1,
-		/*
+		 * DEPRECATED
 		 * True if most recent call to the commoncaps bprm_set_creds
 		 * hook (due to multiple prepare_binprm() calls from the
 		 * binfmt_script/misc handlers) resulted in elevated
 		 * privileges.
+		 * NOTE: in a perfect world we'd use RH_KABI_DEPRECATE on
+		 * called_set_creds but it does not work on bitfields declared
+		 * using the comma separator. The best we can do is rename the
+		 * field.
+		 */
+		RH_KABI_RENAME(called_set_creds, deprecated_called_set_creds):1,
+		/*
+		 * True if most recent call to cap_bprm_set_creds
+		 * resulted in elevated privileges.
 		 */
 		cap_elevated:1,
 		/*
-		 * Set by bprm_set_creds hook to indicate a privilege-gaining
-		 * exec has happened. Used to sanitize execution environment
-		 * and to set AT_SECURE auxv for glibc.
+		 * Set by bprm_creds_for_exec hook to indicate a
+		 * privilege-gaining exec has happened. Used to set
+		 * AT_SECURE auxv for glibc.
 		 */
 		secureexec:1;
 		/*
