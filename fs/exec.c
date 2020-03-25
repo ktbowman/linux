@@ -1200,6 +1200,23 @@ no_thread_group:
 	flush_itimer_signals();
 #endif
 
+	BUG_ON(!thread_group_leader(tsk));
+	return 0;
+
+killed:
+	/* protects against exit_notify() and __exit_signal() */
+	qread_lock(&tasklist_lock);
+	sig->group_exit_task = NULL;
+	sig->notify_count = 0;
+	qread_unlock(&tasklist_lock);
+	return -EAGAIN;
+}
+
+
+static int unshare_sighand(struct task_struct *me)
+{
+	struct sighand_struct *oldsighand = me->sighand;
+
 	if (refcount_read(&oldsighand->count) != 1) {
 		struct sighand_struct *newsighand;
 		/*
@@ -1216,23 +1233,13 @@ no_thread_group:
 
 		qwrite_lock_irq(&tasklist_lock);
 		spin_lock(&oldsighand->siglock);
-		rcu_assign_pointer(tsk->sighand, newsighand);
+		rcu_assign_pointer(me->sighand, newsighand);
 		spin_unlock(&oldsighand->siglock);
 		qwrite_unlock_irq(&tasklist_lock);
 
 		__cleanup_sighand(oldsighand);
 	}
-
-	BUG_ON(!thread_group_leader(tsk));
 	return 0;
-
-killed:
-	/* protects against exit_notify() and __exit_signal() */
-	qread_lock(&tasklist_lock);
-	sig->group_exit_task = NULL;
-	sig->notify_count = 0;
-	qread_unlock(&tasklist_lock);
-	return -EAGAIN;
 }
 
 char *__get_task_comm(char *buf, size_t buf_size, struct task_struct *tsk)
@@ -1270,10 +1277,16 @@ int flush_old_exec(struct linux_binprm * bprm)
 	int retval;
 
 	/*
-	 * Make sure we have a private signal table and that
-	 * we are unassociated from the previous thread group.
+	 * Make this the only thread in the thread group.
 	 */
 	retval = de_thread(me);
+	if (retval)
+		goto out;
+
+	/*
+	 * Make the signal table private.
+	 */
+	retval = unshare_sighand(me);
 	if (retval)
 		goto out;
 
