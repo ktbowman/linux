@@ -246,6 +246,11 @@ struct signal_struct {
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
 	RH_KABI_EXTEND(struct posix_cputimers posix_cputimers)
+	RH_KABI_EXTEND(struct mutex exec_update_mutex)
+					/* Held while task_struct is being
+					 * updated during exec, and may have
+					 * inconsistent permissions.
+					 */
 } __randomize_layout;
 
 /*

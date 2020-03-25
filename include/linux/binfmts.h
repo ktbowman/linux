@@ -45,6 +45,12 @@ struct linux_binprm {
 		 * and to set AT_SECURE auxv for glibc.
 		 */
 		secureexec:1;
+		/*
+		 * Set by flush_old_exec, when exec_mmap has been called.
+		 * This is past the point of no return, when the
+		 * exec_update_mutex has been taken.
+		 */
+		RH_KABI_FILL_HOLE(unsigned int called_exec_mmap:1)
 #ifdef __alpha__
 	unsigned int taso:1;
 #endif
