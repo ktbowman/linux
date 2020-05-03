@@ -1278,7 +1278,7 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
  * signal (via de_thread() or coredump), or will have SEGV raised
  * (after exec_mmap()) by search_binary_handlers (see below).
  */
-int flush_old_exec(struct linux_binprm * bprm)
+int begin_new_exec(struct linux_binprm * bprm)
 {
 	struct task_struct *me = current;
 	int retval;
@@ -1414,7 +1414,7 @@ out_unlock:
 out:
 	return retval;
 }
-EXPORT_SYMBOL(flush_old_exec);
+EXPORT_SYMBOL(begin_new_exec);
 
 void would_dump(struct linux_binprm *bprm, struct file *file)
 {
