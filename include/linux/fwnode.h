@@ -19,12 +19,20 @@
 struct fwnode_operations;
 struct device;
 
+/*
+ * fwnode link flags
+ *
+ * LINKS_ADDED: The fwnode has already be parsed to add fwnode links.
+ */
+#define FWNODE_FLAG_LINKS_ADDED		BIT(0)
+
 struct fwnode_handle {
 	struct fwnode_handle *secondary;
 	const struct fwnode_operations *ops;
 	RH_KABI_EXTEND(struct device *dev)
 	RH_KABI_EXTEND(struct list_head suppliers)
 	RH_KABI_EXTEND(struct list_head consumers)
+	RH_KABI_EXTEND(u8 flags)
 };
 
 struct fwnode_link {
