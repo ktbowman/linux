@@ -14,6 +14,7 @@
 
 #include <linux/types.h>
 #include <linux/rh_kabi.h>
+#include <linux/list.h>
 
 struct fwnode_operations;
 struct device;
@@ -22,6 +23,15 @@ struct fwnode_handle {
 	struct fwnode_handle *secondary;
 	const struct fwnode_operations *ops;
 	RH_KABI_EXTEND(struct device *dev)
+	RH_KABI_EXTEND(struct list_head suppliers)
+	RH_KABI_EXTEND(struct list_head consumers)
+};
+
+struct fwnode_link {
+	struct fwnode_handle *supplier;
+	struct list_head s_hook;
+	struct fwnode_handle *consumer;
+	struct list_head c_hook;
 };
 
 /**
@@ -178,8 +188,12 @@ static inline void fwnode_init(struct fwnode_handle *fwnode,
 			       const struct fwnode_operations *ops)
 {
 	fwnode->ops = ops;
+	INIT_LIST_HEAD(&fwnode->consumers);
+	INIT_LIST_HEAD(&fwnode->suppliers);
 }
 
 extern u32 fw_devlink_get_flags(void);
+int fwnode_link_add(struct fwnode_handle *con, struct fwnode_handle *sup);
+void fwnode_links_purge(struct fwnode_handle *fwnode);
 
 #endif
