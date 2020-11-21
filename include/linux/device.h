@@ -1078,7 +1078,6 @@ enum dl_dev_state {
  * struct dev_links_info - Device data related to device links.
  * @suppliers: List of links to supplier devices.
  * @consumers: List of links to consumer devices.
- * @needs_suppliers: Hook to global list of devices waiting for suppliers.
  * @status: Driver status information.
  */
 struct dev_links_info {
@@ -1295,8 +1294,9 @@ struct device {
 	RH_KABI_RESERVE(2)
 
 	/* NB: See the note for struct dev_links_info: */
-	RH_KABI_USE(3, 4, struct list_head links_needs_suppliers)
-	RH_KABI_USE(5, bool links_need_for_probe)
+	RH_KABI_RESERVE(3)
+	RH_KABI_RESERVE(4)
+	RH_KABI_RESERVE(5)
 	RH_KABI_USE(6, 7, struct list_head links_defer_sync)
 
 	RH_KABI_RESERVE(8)
