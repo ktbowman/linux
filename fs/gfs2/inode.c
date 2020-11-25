@@ -38,6 +38,10 @@
 #include "super.h"
 #include "glops.h"
 
+static const struct inode_operations gfs2_file_iops;
+static const struct inode_operations gfs2_dir_iops;
+static const struct inode_operations gfs2_symlink_iops;
+
 static int iget_test(struct inode *inode, void *opaque)
 {
 	u64 no_addr = *(u64 *)opaque;
@@ -2138,7 +2142,7 @@ static int gfs2_update_time(struct inode *inode, struct timespec64 *time,
 	return generic_update_time(inode, time, flags);
 }
 
-const struct inode_operations gfs2_file_iops = {
+static const struct inode_operations gfs2_file_iops = {
 	.permission = gfs2_permission,
 	.setattr = gfs2_setattr,
 	.getattr = gfs2_getattr,
@@ -2149,7 +2153,7 @@ const struct inode_operations gfs2_file_iops = {
 	.update_time = gfs2_update_time,
 };
 
-const struct inode_operations gfs2_dir_iops = {
+static const struct inode_operations gfs2_dir_iops = {
 	.create = gfs2_create,
 	.lookup = gfs2_lookup,
 	.link = gfs2_link,
@@ -2170,7 +2174,7 @@ const struct inode_operations gfs2_dir_iops = {
 	.atomic_open = gfs2_atomic_open,
 };
 
-const struct inode_operations gfs2_symlink_iops = {
+static const struct inode_operations gfs2_symlink_iops = {
 	.get_link = gfs2_get_link,
 	.permission = gfs2_permission,
 	.setattr = gfs2_setattr,
