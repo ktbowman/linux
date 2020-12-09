@@ -57,6 +57,21 @@ void __weak arch_setup_pdev_archdata(struct platform_device *pdev)
 {
 }
 
+struct resource *platform_get_mem_or_io(struct platform_device *dev,
+					unsigned int num)
+{
+	u32 i;
+
+	for (i = 0; i < dev->num_resources; i++) {
+		struct resource *r = &dev->resource[i];
+
+		if ((resource_type(r) & (IORESOURCE_MEM|IORESOURCE_IO)) && num-- == 0)
+			return r;
+	}
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(platform_get_mem_or_io);
+
 /**
  * platform_get_resource - get a resource for a device
  * @dev: platform device
