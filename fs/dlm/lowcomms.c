@@ -1239,6 +1239,8 @@ static struct socket *tcp_create_listen_sock(struct connection *con,
 		goto create_out;
 	}
 
+	sock_set_mark(sock->sk, dlm_config.ci_mark);
+
 	/* Turn off Nagle's algorithm */
 	tcp_sock_set_nodelay(sock->sk);
 
@@ -1323,6 +1325,8 @@ static int sctp_listen_for_all(void)
 				   sizeof(one));
 	if (result < 0)
 		log_print("Could not set SCTP NODELAY error %d\n", result);
+
+	sock_set_mark(sock->sk, dlm_config.ci_mark);
 
 	write_lock_bh(&sock->sk->sk_callback_lock);
 	/* Init con struct */
