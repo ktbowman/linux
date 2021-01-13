@@ -1038,6 +1038,7 @@ static void sctp_connect_to_sock(struct connection *con)
 	int addr_len;
 	struct socket *sock;
 	struct timeval tv = { .tv_sec = 5, .tv_usec = 0 };
+	unsigned int mark;
 
 	if (con->nodeid == 0) {
 		log_print("attempt to connect sock 0 foiled");
@@ -1067,6 +1068,13 @@ static void sctp_connect_to_sock(struct connection *con)
 				  SOCK_STREAM, IPPROTO_SCTP, &sock);
 	if (result < 0)
 		goto socket_err;
+
+	/* set skb mark */
+	result = dlm_comm_mark(con->nodeid, &mark);
+	if (result < 0)
+		goto bind_err;
+
+	sock_set_mark(sock->sk, mark);
 
 	con->rx_action = receive_from_sock;
 	con->connect_action = sctp_connect_to_sock;
@@ -1134,6 +1142,7 @@ static void tcp_connect_to_sock(struct connection *con)
 	struct sockaddr_storage saddr, src_addr;
 	int addr_len;
 	struct socket *sock = NULL;
+	unsigned int mark;
 	int result;
 
 	if (con->nodeid == 0) {
@@ -1154,6 +1163,13 @@ static void tcp_connect_to_sock(struct connection *con)
 				  SOCK_STREAM, IPPROTO_TCP, &sock);
 	if (result < 0)
 		goto out_err;
+
+	/* set skb mark */
+	result = dlm_comm_mark(con->nodeid, &mark);
+	if (result < 0)
+		goto out_err;
+
+	sock_set_mark(sock->sk, mark);
 
 	memset(&saddr, 0, sizeof(saddr));
 	result = nodeid_to_addr(con->nodeid, &saddr, NULL, false);
