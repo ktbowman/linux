@@ -589,6 +589,7 @@ struct bpf_prog {
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
 	RH_KABI_BROKEN_INSERT(struct bpf_prog_stats __percpu *stats)
+	RH_KABI_BROKEN_INSERT(int __percpu		*active)
 	unsigned int		(*bpf_func)(const void *ctx,
 					    const struct bpf_insn *insn);
 	/* Instructions for interpreter */
