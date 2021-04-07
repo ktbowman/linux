@@ -1289,8 +1289,9 @@ static bool acpi_object_is_system_bus(acpi_handle handle)
 }
 
 static void acpi_set_pnp_ids(acpi_handle handle, struct acpi_device_pnp *pnp,
-				int device_type, struct acpi_device_info *info)
+			     int device_type)
 {
+	struct acpi_device_info *info = NULL;
 	struct acpi_pnp_device_id_list *cid_list;
 	int i;
 
@@ -1301,6 +1302,7 @@ static void acpi_set_pnp_ids(acpi_handle handle, struct acpi_device_pnp *pnp,
 			break;
 		}
 
+		acpi_get_object_info(handle, &info);
 		if (!info) {
 			pr_err(PREFIX "%s: Error reading device info\n",
 					__func__);
@@ -1325,6 +1327,8 @@ static void acpi_set_pnp_ids(acpi_handle handle, struct acpi_device_pnp *pnp,
 							GFP_KERNEL);
 		if (info->valid & ACPI_VALID_CLS)
 			acpi_add_id(pnp, info->class_code.string);
+
+		kfree(info);
 
 		/*
 		 * Some devices don't reliably have _HIDs & _CIDs, so add
@@ -1659,7 +1663,7 @@ static bool acpi_device_enumeration_by_parent(struct acpi_device *device)
 }
 
 void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
-			     int type, struct acpi_device_info *info)
+			     int type)
 {
 	INIT_LIST_HEAD(&device->pnp.ids);
 	device->device_type = type;
@@ -1668,7 +1672,7 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 	fwnode_init(&device->fwnode, &acpi_device_fwnode_ops);
 	acpi_set_device_status(device, ACPI_STA_DEFAULT);
 	acpi_device_get_busid(device);
-	acpi_set_pnp_ids(handle, &device->pnp, type, info);
+	acpi_set_pnp_ids(handle, &device->pnp, type);
 	acpi_init_properties(device);
 	acpi_bus_get_flags(device);
 	device->flags.match_driver = false;
@@ -1701,20 +1705,12 @@ static int acpi_add_single_object(struct acpi_device **child,
 	int result;
 	struct acpi_device *device;
 	struct acpi_buffer buffer = { ACPI_ALLOCATE_BUFFER, NULL };
-	struct acpi_device_info *info = NULL;
-
-	if (type == ACPI_BUS_TYPE_DEVICE && handle != ACPI_ROOT_OBJECT)
-		acpi_get_object_info(handle, &info);
 
 	device = kzalloc(sizeof(struct acpi_device), GFP_KERNEL);
-	if (!device) {
-		printk(KERN_ERR PREFIX "Memory allocation error\n");
-		kfree(info);
+	if (!device)
 		return -ENOMEM;
-	}
 
-	acpi_init_device_object(device, handle, type, info);
-	kfree(info);
+	acpi_init_device_object(device, handle, type);
 	/*
 	 * Getting the status is delayed till here so that we can call
 	 * acpi_bus_get_status() and use its quirk handling.  Note that
