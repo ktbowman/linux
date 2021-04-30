@@ -291,8 +291,16 @@ struct blk_mq_ops {
 	 */
 	RH_KABI_USE(1, cleanup_rq_fn           *cleanup_rq)
 
-	RH_KABI_RESERVE(2)
-	RH_KABI_RESERVE(3)
+	/*
+	 * Store rq's budget token
+	 */
+	RH_KABI_USE(2, void (*set_rq_budget_token)(struct request *, int))
+
+	/*
+	 * Retrieve rq's budget token
+	 */
+	RH_KABI_USE(3, int (*get_rq_budget_token)(struct request *))
+
 	RH_KABI_RESERVE(4)
 	RH_KABI_RESERVE(5)
 	RH_KABI_RESERVE(6)
