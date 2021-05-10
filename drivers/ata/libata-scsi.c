@@ -517,6 +517,7 @@ int ata_std_bios_param(struct scsi_device *sdev, struct block_device *bdev,
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(ata_std_bios_param);
 
 /**
  *	ata_scsi_unlock_native_capacity - unlock native capacity
@@ -546,6 +547,7 @@ void ata_scsi_unlock_native_capacity(struct scsi_device *sdev)
 	spin_unlock_irqrestore(ap->lock, flags);
 	ata_port_wait_eh(ap);
 }
+EXPORT_SYMBOL_GPL(ata_scsi_unlock_native_capacity);
 
 /**
  *	ata_get_identity - Handler for HDIO_GET_IDENTITY ioctl
@@ -1353,6 +1355,7 @@ int ata_scsi_slave_config(struct scsi_device *sdev)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(ata_scsi_slave_config);
 
 /**
  *	ata_scsi_slave_destroy - SCSI device is about to be destroyed
@@ -1392,6 +1395,7 @@ void ata_scsi_slave_destroy(struct scsi_device *sdev)
 	q->dma_drain_buffer = NULL;
 	q->dma_drain_size = 0;
 }
+EXPORT_SYMBOL_GPL(ata_scsi_slave_destroy);
 
 /**
  *	__ata_change_queue_depth - helper for ata_scsi_change_queue_depth
@@ -1435,6 +1439,7 @@ int __ata_change_queue_depth(struct ata_port *ap, struct scsi_device *sdev,
 
 	return scsi_change_queue_depth(sdev, queue_depth);
 }
+EXPORT_SYMBOL_GPL(__ata_change_queue_depth);
 
 /**
  *	ata_scsi_change_queue_depth - SCSI callback for queue depth config
@@ -1457,6 +1462,7 @@ int ata_scsi_change_queue_depth(struct scsi_device *sdev, int queue_depth)
 
 	return __ata_change_queue_depth(ap, sdev, queue_depth);
 }
+EXPORT_SYMBOL_GPL(ata_scsi_change_queue_depth);
 
 /**
  *	ata_scsi_start_stop_xlat - Translate SCSI START STOP UNIT command
@@ -4412,6 +4418,7 @@ int ata_scsi_queuecmd(struct Scsi_Host *shost, struct scsi_cmnd *cmd)
 
 	return rc;
 }
+EXPORT_SYMBOL_GPL(ata_scsi_queuecmd);
 
 /**
  *	ata_scsi_simulate - simulate SCSI command on ATA device
@@ -4535,6 +4542,7 @@ void ata_scsi_simulate(struct ata_device *dev, struct scsi_cmnd *cmd)
 
 	cmd->scsi_done(cmd);
 }
+EXPORT_SYMBOL_GPL(ata_scsi_simulate);
 
 int ata_scsi_add_hosts(struct ata_host *host, struct scsi_host_template *sht)
 {

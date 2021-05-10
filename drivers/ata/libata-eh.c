@@ -197,6 +197,7 @@ void __ata_ehi_push_desc(struct ata_eh_info *ehi, const char *fmt, ...)
 	__ata_ehi_pushv_desc(ehi, fmt, args);
 	va_end(args);
 }
+EXPORT_SYMBOL_GPL(__ata_ehi_push_desc);
 
 /**
  *	ata_ehi_push_desc - push error description with separator
@@ -220,6 +221,7 @@ void ata_ehi_push_desc(struct ata_eh_info *ehi, const char *fmt, ...)
 	__ata_ehi_pushv_desc(ehi, fmt, args);
 	va_end(args);
 }
+EXPORT_SYMBOL_GPL(ata_ehi_push_desc);
 
 /**
  *	ata_ehi_clear_desc - clean error description
@@ -235,6 +237,7 @@ void ata_ehi_clear_desc(struct ata_eh_info *ehi)
 	ehi->desc[0] = '\0';
 	ehi->desc_len = 0;
 }
+EXPORT_SYMBOL_GPL(ata_ehi_clear_desc);
 
 /**
  *	ata_port_desc - append port description
@@ -262,9 +265,9 @@ void ata_port_desc(struct ata_port *ap, const char *fmt, ...)
 	__ata_ehi_pushv_desc(&ap->link.eh_info, fmt, args);
 	va_end(args);
 }
+EXPORT_SYMBOL_GPL(ata_port_desc);
 
 #ifdef CONFIG_PCI
-
 /**
  *	ata_port_pbar_desc - append PCI BAR description
  *	@ap: target ATA port
@@ -301,7 +304,7 @@ void ata_port_pbar_desc(struct ata_port *ap, int bar, ssize_t offset,
 		ata_port_desc(ap, "%s 0x%llx", name,
 				start + (unsigned long long)offset);
 }
-
+EXPORT_SYMBOL_GPL(ata_port_pbar_desc);
 #endif /* CONFIG_PCI */
 
 static int ata_lookup_timeout_table(u8 cmd)
@@ -986,6 +989,7 @@ void ata_port_schedule_eh(struct ata_port *ap)
 	/* see: ata_std_sched_eh, unless you know better */
 	ap->ops->sched_eh(ap);
 }
+EXPORT_SYMBOL_GPL(ata_port_schedule_eh);
 
 static int ata_do_link_abort(struct ata_port *ap, struct ata_link *link)
 {
@@ -1028,6 +1032,7 @@ int ata_link_abort(struct ata_link *link)
 {
 	return ata_do_link_abort(link->ap, link);
 }
+EXPORT_SYMBOL_GPL(ata_link_abort);
 
 /**
  *	ata_port_abort - abort all qc's on the port
@@ -1045,6 +1050,7 @@ int ata_port_abort(struct ata_port *ap)
 {
 	return ata_do_link_abort(ap, NULL);
 }
+EXPORT_SYMBOL_GPL(ata_port_abort);
 
 /**
  *	__ata_port_freeze - freeze port
@@ -1101,6 +1107,7 @@ int ata_port_freeze(struct ata_port *ap)
 
 	return nr_aborted;
 }
+EXPORT_SYMBOL_GPL(ata_port_freeze);
 
 /**
  *	sata_async_notification - SATA async notification handler
@@ -1174,6 +1181,7 @@ int sata_async_notification(struct ata_port *ap)
 		return 0;
 	}
 }
+EXPORT_SYMBOL_GPL(sata_async_notification);
 
 /**
  *	ata_eh_freeze_port - EH helper to freeze port
@@ -1195,6 +1203,7 @@ void ata_eh_freeze_port(struct ata_port *ap)
 	__ata_port_freeze(ap);
 	spin_unlock_irqrestore(ap->lock, flags);
 }
+EXPORT_SYMBOL_GPL(ata_eh_freeze_port);
 
 /**
  *	ata_port_thaw_port - EH helper to thaw port
@@ -1223,6 +1232,7 @@ void ata_eh_thaw_port(struct ata_port *ap)
 
 	DPRINTK("ata%u port thawed\n", ap->print_id);
 }
+EXPORT_SYMBOL_GPL(ata_eh_thaw_port);
 
 static void ata_eh_scsidone(struct scsi_cmnd *scmd)
 {
@@ -1257,6 +1267,7 @@ void ata_eh_qc_complete(struct ata_queued_cmd *qc)
 	scmd->retries = scmd->allowed;
 	__ata_eh_qc_complete(qc);
 }
+EXPORT_SYMBOL_GPL(ata_eh_qc_complete);
 
 /**
  *	ata_eh_qc_retry - Tell midlayer to retry an ATA command after EH
@@ -1276,6 +1287,7 @@ void ata_eh_qc_retry(struct ata_queued_cmd *qc)
 		scmd->allowed++;
 	__ata_eh_qc_complete(qc);
 }
+EXPORT_SYMBOL_GPL(ata_eh_qc_retry);
 
 /**
  *	ata_dev_disable - disable ATA device
@@ -1302,6 +1314,7 @@ void ata_dev_disable(struct ata_device *dev)
 	 */
 	ata_ering_clear(&dev->ering);
 }
+EXPORT_SYMBOL_GPL(ata_dev_disable);
 
 /**
  *	ata_eh_detach_dev - detach ATA device
@@ -1744,6 +1757,7 @@ void ata_eh_analyze_ncq_error(struct ata_link *link)
 
 	ehc->i.err_mask &= ~AC_ERR_DEV;
 }
+EXPORT_SYMBOL_GPL(ata_eh_analyze_ncq_error);
 
 /**
  *	ata_eh_analyze_tf - analyze taskfile of a failed qc
@@ -4044,6 +4058,7 @@ void ata_do_eh(struct ata_port *ap, ata_prereset_fn_t prereset,
 
 	ata_eh_finish(ap);
 }
+EXPORT_SYMBOL_GPL(ata_do_eh);
 
 /**
  *	ata_std_error_handler - standard error handler
@@ -4065,6 +4080,7 @@ void ata_std_error_handler(struct ata_port *ap)
 
 	ata_do_eh(ap, ops->prereset, ops->softreset, hardreset, ops->postreset);
 }
+EXPORT_SYMBOL_GPL(ata_std_error_handler);
 
 #ifdef CONFIG_PM
 /**
