@@ -6213,20 +6213,15 @@ static void napi_hash_add(struct napi_struct *napi)
 /* Warning : caller is responsible to make sure rcu grace period
  * is respected before freeing memory containing @napi
  */
-bool napi_hash_del(struct napi_struct *napi)
+static void napi_hash_del(struct napi_struct *napi)
 {
-	bool rcu_sync_needed = false;
-
 	spin_lock(&napi_hash_lock);
 
-	if (test_and_clear_bit(NAPI_STATE_HASHED, &napi->state)) {
-		rcu_sync_needed = true;
+	if (test_and_clear_bit(NAPI_STATE_HASHED, &napi->state))
 		hlist_del_rcu(&napi->napi_hash_node);
-	}
+
 	spin_unlock(&napi_hash_lock);
-	return rcu_sync_needed;
 }
-EXPORT_SYMBOL_GPL(napi_hash_del);
 
 static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 {
@@ -6299,11 +6294,9 @@ static void gro_list_free(struct list_head *head)
 }
 
 /* Must be called in process context */
-void netif_napi_del(struct napi_struct *napi)
+void __netif_napi_del(struct napi_struct *napi)
 {
-	might_sleep();
-	if (napi_hash_del(napi))
-		synchronize_net();
+	napi_hash_del(napi);
 	list_del_init(&napi->dev_list);
 	napi_free_frags(napi);
 
@@ -6311,6 +6304,17 @@ void netif_napi_del(struct napi_struct *napi)
 	INIT_LIST_HEAD(&napi->gro_list);
 	napi->gro_count = 0;
 }
+EXPORT_SYMBOL(__netif_napi_del);
+
+/* RHEL: netif_napi_del was changed to be 'static inline' but this function
+ * is on KABI allowlist so we need to export it for older binary modules.
+ * Exporting of 'static inline' function seems to be confusing but it is
+ * working. Keyword 'inline' is just a hint for compiler and EXPORT_SYMBOL
+ * directive requires an adress of symbol so a compiler will generate
+ * function body. Although keyword 'static' causes that symbol has not
+ * external linkage this does not have an influence on modules that
+ * can use any symbol exported by EXPORT_SYMBOL.
+ */
 EXPORT_SYMBOL(netif_napi_del);
 
 static int napi_poll(struct napi_struct *n, struct list_head *repoll)
