@@ -2798,6 +2798,9 @@ int cifs_setup_cifs_sb(struct smb3_fs_context *ctx,
 void
 cifs_cleanup_volume_info_contents(struct smb3_fs_context *ctx)
 {
+	if (ctx == NULL)
+		return;
+
 	/*
 	 * Make sure this stays in sync with smb3_fs_context_dup()
 	 */
@@ -2817,6 +2820,9 @@ cifs_cleanup_volume_info_contents(struct smb3_fs_context *ctx)
 	ctx->iocharset = NULL;
 	kfree(ctx->prepath);
 	ctx->prepath = NULL;
+
+	unload_nls(ctx->local_nls);
+	ctx->local_nls = NULL;
 }
 
 void
@@ -3738,9 +3744,11 @@ CIFSTCon(const unsigned int xid, struct cifs_ses *ses,
 
 static void delayed_free(struct rcu_head *p)
 {
-	struct cifs_sb_info *sbi = container_of(p, struct cifs_sb_info, rcu);
-	unload_nls(sbi->local_nls);
-	kfree(sbi);
+	struct cifs_sb_info *cifs_sb = container_of(p, struct cifs_sb_info, rcu);
+
+	unload_nls(cifs_sb->local_nls);
+	cifs_cleanup_volume_info(cifs_sb->ctx);
+	kfree(cifs_sb);
 }
 
 void
