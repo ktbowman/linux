@@ -187,8 +187,8 @@ const struct fs_parameter_spec smb3_fs_parameters[] = {
 	{}
 };
 
-int
-cifs_parse_security_flavors(char *value, struct smb3_fs_context *ctx)
+static int
+cifs_parse_security_flavors(struct fs_context *fc, char *value, struct smb3_fs_context *ctx)
 {
 
 	substring_t args[MAX_OPT_ARGS];
@@ -253,8 +253,8 @@ static const match_table_t cifs_cacheflavor_tokens = {
 	{ Opt_cache_err, NULL }
 };
 
-int
-cifs_parse_cache_flavor(char *value, struct smb3_fs_context *ctx)
+static int
+cifs_parse_cache_flavor(struct fs_context *fc, char *value, struct smb3_fs_context *ctx)
 {
 	substring_t args[MAX_OPT_ARGS];
 
@@ -338,7 +338,7 @@ smb3_fs_context_dup(struct smb3_fs_context *new_ctx, struct smb3_fs_context *ctx
 }
 
 static int
-cifs_parse_smb_version(char *value, struct smb3_fs_context *ctx, bool is_smb3)
+cifs_parse_smb_version(struct fs_context *fc, char *value, struct smb3_fs_context *ctx, bool is_smb3)
 {
 	substring_t args[MAX_OPT_ARGS];
 
@@ -683,7 +683,8 @@ static void smb3_fs_context_free(struct fs_context *fc)
  * Compare the old and new proposed context during reconfigure
  * and check if the changes are compatible.
  */
-static int smb3_verify_reconfigure_ctx(struct smb3_fs_context *new_ctx,
+static int smb3_verify_reconfigure_ctx(struct fs_context *fc,
+				       struct smb3_fs_context *new_ctx,
 				       struct smb3_fs_context *old_ctx)
 {
 	if (new_ctx->posix_paths != old_ctx->posix_paths) {
@@ -746,7 +747,7 @@ static int smb3_reconfigure(struct fs_context *fc)
 	struct cifs_sb_info *cifs_sb = CIFS_SB(root->d_sb);
 	int rc;
 
-	rc = smb3_verify_reconfigure_ctx(ctx, cifs_sb->ctx);
+	rc = smb3_verify_reconfigure_ctx(fc, ctx, cifs_sb->ctx);
 	if (rc)
 		return rc;
 
@@ -1174,16 +1175,16 @@ static int smb3_fs_context_parse_param(struct fs_context *fc,
 		goto cifs_parse_mount_err;
 	case Opt_vers:
 		/* protocol version (dialect) */
-		if (cifs_parse_smb_version(param->string, ctx, is_smb3) != 0)
+		if (cifs_parse_smb_version(fc, param->string, ctx, is_smb3) != 0)
 			goto cifs_parse_mount_err;
 		ctx->got_version = true;
 		break;
 	case Opt_sec:
-		if (cifs_parse_security_flavors(param->string, ctx) != 0)
+		if (cifs_parse_security_flavors(fc, param->string, ctx) != 0)
 			goto cifs_parse_mount_err;
 		break;
 	case Opt_cache:
-		if (cifs_parse_cache_flavor(param->string, ctx) != 0)
+		if (cifs_parse_cache_flavor(fc, param->string, ctx) != 0)
 			goto cifs_parse_mount_err;
 		break;
 	case Opt_rootfs:
