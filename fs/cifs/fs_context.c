@@ -575,6 +575,11 @@ static int smb3_fs_context_parse_monolithic(struct fs_context *fc,
 			len = strlen(value);
 		}
 
+		/*
+		 * RHEL7 only patch. Must ignore this option.
+		 */
+		if (!strcmp(key, "relatime"))
+			continue;
 		ret = vfs_parse_fs_string(fc, key, value, len);
 		if (ret < 0)
 			break;
