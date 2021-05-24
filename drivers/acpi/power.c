@@ -195,13 +195,14 @@ int acpi_extract_power_resources(union acpi_object *package, unsigned int start,
 	return err;
 }
 
-static int acpi_power_get_state(acpi_handle handle, int *state)
+static int acpi_power_get_state(acpi_handle handle, u8 *state)
 {
 	acpi_status status = AE_OK;
 	unsigned long long sta = 0;
 	char node_name[5];
 	struct acpi_buffer buffer = { sizeof(node_name), node_name };
 
+	u8 cur_state;
 
 	if (!handle || !state)
 		return -EINVAL;
@@ -210,28 +211,26 @@ static int acpi_power_get_state(acpi_handle handle, int *state)
 	if (ACPI_FAILURE(status))
 		return -ENODEV;
 
-	*state = (sta & 0x01)?ACPI_POWER_RESOURCE_STATE_ON:
-			      ACPI_POWER_RESOURCE_STATE_OFF;
+	cur_state = sta & ACPI_POWER_RESOURCE_STATE_ON;
 
 	acpi_get_name(handle, ACPI_SINGLE_NAME, &buffer);
 
 	ACPI_DEBUG_PRINT((ACPI_DB_INFO, "Resource [%s] is %s\n",
-			  node_name,
-				*state ? "on" : "off"));
+			  node_name, cur_state ? "on" : "off"));
 
+	*state = cur_state;
 	return 0;
 }
 
-static int acpi_power_get_list_state(struct list_head *list, int *state)
+static int acpi_power_get_list_state(struct list_head *list, u8 *state)
 {
 	struct acpi_power_resource_entry *entry;
-	int cur_state;
+	u8 cur_state = ACPI_POWER_RESOURCE_STATE_OFF;
 
 	if (!list || !state)
 		return -EINVAL;
 
 	/* The state of the list is 'on' IFF all resources are 'on'. */
-	cur_state = 0;
 	list_for_each_entry(entry, list, node) {
 		struct acpi_power_resource *resource = entry->resource;
 		acpi_handle handle = resource->device.handle;
@@ -619,7 +618,7 @@ int acpi_power_wakeup_list_init(struct list_head *list, int *system_level_p)
 		struct acpi_power_resource *resource = entry->resource;
 		acpi_handle handle = resource->device.handle;
 		int result;
-		int state;
+		u8 state;
 
 		mutex_lock(&resource->resource_lock);
 
@@ -816,8 +815,8 @@ int acpi_disable_wakeup_device_power(struct acpi_device *dev)
 
 int acpi_power_get_inferred_state(struct acpi_device *device, int *state)
 {
+	u8 list_state = ACPI_POWER_RESOURCE_STATE_OFF;
 	int result = 0;
-	int list_state = 0;
 	int i = 0;
 
 	if (!device || !state)
@@ -946,7 +945,8 @@ struct acpi_device *acpi_add_power_resource(acpi_handle handle)
 	union acpi_object acpi_object;
 	struct acpi_buffer buffer = { sizeof(acpi_object), &acpi_object };
 	acpi_status status;
-	int state, result = -ENODEV;
+	int result;
+	u8 state;
 
 	acpi_bus_get_device(handle, &device);
 	if (device)
@@ -1006,7 +1006,8 @@ void acpi_resume_power_resources(void)
 	mutex_lock(&power_resource_list_lock);
 
 	list_for_each_entry(resource, &acpi_power_resource_list, list_node) {
-		int result, state;
+		int result;
+		u8 state;
 
 		mutex_lock(&resource->resource_lock);
 
@@ -1039,7 +1040,8 @@ static void acpi_power_turn_off_if_unused(struct acpi_power_resource *resource,
 		if (resource->users > 0)
 			return;
 	} else {
-		int result, state;
+		int result;
+		u8 state;
 
 		result = acpi_power_get_state(resource->device.handle, &state);
 		if (result || state == ACPI_POWER_RESOURCE_STATE_OFF)
