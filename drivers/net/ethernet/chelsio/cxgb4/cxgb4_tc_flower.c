@@ -544,13 +544,17 @@ static bool valid_pedit_action(struct net_device *dev,
 }
 
 int cxgb4_validate_flow_actions(struct net_device *dev,
-				struct flow_action *actions)
+				struct flow_action *actions,
+				struct netlink_ext_ack *extack)
 {
 	struct flow_action_entry *act;
 	bool act_redir = false;
 	bool act_pedit = false;
 	bool act_vlan = false;
 	int i;
+
+	if (!flow_action_basic_hw_stats_types_check(actions, extack))
+		return -EOPNOTSUPP;
 
 	flow_action_for_each(i, act, actions) {
 		switch (act->id) {
@@ -701,7 +705,7 @@ int cxgb4_tc_flower_replace(struct net_device *dev,
 	u8 inet_family;
 	int fidx, ret;
 
-	if (cxgb4_validate_flow_actions(dev, &rule->action))
+	if (cxgb4_validate_flow_actions(dev, &rule->action, extack))
 		return -EOPNOTSUPP;
 
 	if (cxgb4_validate_flow_match(dev, cls))
