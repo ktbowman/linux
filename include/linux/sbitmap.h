@@ -73,6 +73,11 @@ struct sbitmap {
 	unsigned int map_nr;
 
 	/**
+	 * @round_robin: Allocate bits in strict round-robin order.
+	 */
+	RH_KABI_FILL_HOLE(bool round_robin)
+
+	/**
 	 * @map: Allocated bitmap.
 	 */
 	struct sbitmap_word *map;
@@ -143,7 +148,7 @@ struct sbitmap_queue {
 	/**
 	 * @round_robin: Allocate bits in strict round-robin order.
 	 */
-	bool round_robin;
+	RH_KABI_DEPRECATE(bool, round_robin)
 
 	/**
 	 * @min_shallow_depth: The minimum shallow depth which may be passed to
@@ -160,11 +165,14 @@ struct sbitmap_queue {
  *         given, a good default is chosen.
  * @flags: Allocation flags.
  * @node: Memory node to allocate on.
+ * @round_robin: If true, be stricter about allocation order; always allocate
+ *               starting from the last allocated bit. This is less efficient
+ *               than the default behavior (false).
  *
  * Return: Zero on success or negative errno on failure.
  */
 int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
-		      gfp_t flags, int node);
+		      gfp_t flags, int node, bool round_robin);
 
 /**
  * sbitmap_free() - Free memory used by a &struct sbitmap.
@@ -190,15 +198,12 @@ void sbitmap_resize(struct sbitmap *sb, unsigned int depth);
  * sbitmap_get() - Try to allocate a free bit from a &struct sbitmap.
  * @sb: Bitmap to allocate from.
  * @alloc_hint: Hint for where to start searching for a free bit.
- * @round_robin: If true, be stricter about allocation order; always allocate
- *               starting from the last allocated bit. This is less efficient
- *               than the default behavior (false).
  *
  * This operation provides acquire barrier semantics if it succeeds.
  *
  * Return: Non-negative allocated bit number if successful, -1 otherwise.
  */
-int sbitmap_get(struct sbitmap *sb, unsigned int alloc_hint, bool round_robin);
+int sbitmap_get(struct sbitmap *sb, unsigned int alloc_hint);
 
 /**
  * sbitmap_get_shallow() - Try to allocate a free bit from a &struct sbitmap,
