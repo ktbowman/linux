@@ -1664,7 +1664,7 @@ void hsw_fdi_link_train(struct intel_encoder *encoder,
 
 	/* Configure Port Clock Select */
 	drm_WARN_ON(&dev_priv->drm, crtc_state->shared_dpll->info->id != DPLL_ID_SPLL);
-	intel_ddi_clk_select(encoder, crtc_state);
+	intel_ddi_enable_clock(encoder, crtc_state);
 
 	/* Start the training iterating through available voltages and emphasis,
 	 * testing each value twice. */
@@ -3456,6 +3456,23 @@ static void intel_ddi_clk_disable(struct intel_encoder *encoder)
 	}
 }
 
+void intel_ddi_enable_clock(struct intel_encoder *encoder,
+			    const struct intel_crtc_state *crtc_state)
+{
+	if (encoder->enable_clock)
+		encoder->enable_clock(encoder, crtc_state);
+	else
+		intel_ddi_clk_select(encoder, crtc_state);
+}
+
+static void intel_ddi_disable_clock(struct intel_encoder *encoder)
+{
+	if (encoder->disable_clock)
+		encoder->disable_clock(encoder);
+	else
+		intel_ddi_clk_disable(encoder);
+}
+
 static void
 icl_program_mg_dp_mode(struct intel_digital_port *dig_port,
 		       const struct intel_crtc_state *crtc_state)
@@ -3698,7 +3715,7 @@ static void tgl_ddi_pre_enable_dp(struct intel_atomic_state *state,
 	 * hsw_crtc_enable()->intel_enable_shared_dpll().  We need only
 	 * configure the PLL to port mapping here.
 	 */
-	intel_ddi_clk_select(encoder, crtc_state);
+	intel_ddi_enable_clock(encoder, crtc_state);
 
 	/* 5. If IO power is controlled through PWR_WELL_CTL, Enable IO Power */
 	if (!intel_phy_is_tc(dev_priv, phy) ||
@@ -3819,7 +3836,7 @@ static void hsw_ddi_pre_enable_dp(struct intel_atomic_state *state,
 
 	intel_pps_on(intel_dp);
 
-	intel_ddi_clk_select(encoder, crtc_state);
+	intel_ddi_enable_clock(encoder, crtc_state);
 
 	if (!intel_phy_is_tc(dev_priv, phy) ||
 	    dig_port->tc_mode != TC_PORT_TBT_ALT) {
@@ -3895,7 +3912,7 @@ static void intel_ddi_pre_enable_hdmi(struct intel_atomic_state *state,
 	int level = intel_ddi_hdmi_level(encoder, crtc_state);
 
 	intel_dp_dual_mode_set_tmds_output(intel_hdmi, true);
-	intel_ddi_clk_select(encoder, crtc_state);
+	intel_ddi_enable_clock(encoder, crtc_state);
 
 	drm_WARN_ON(&dev_priv->drm, dig_port->ddi_io_wakeref);
 	dig_port->ddi_io_wakeref = intel_display_power_get(dev_priv,
@@ -4061,7 +4078,7 @@ static void intel_ddi_post_disable_dp(struct intel_atomic_state *state,
 					dig_port->ddi_io_power_domain,
 					fetch_and_zero(&dig_port->ddi_io_wakeref));
 
-	intel_ddi_clk_disable(encoder);
+	intel_ddi_disable_clock(encoder);
 }
 
 static void intel_ddi_post_disable_hdmi(struct intel_atomic_state *state,
@@ -4084,7 +4101,7 @@ static void intel_ddi_post_disable_hdmi(struct intel_atomic_state *state,
 				dig_port->ddi_io_power_domain,
 				fetch_and_zero(&dig_port->ddi_io_wakeref));
 
-	intel_ddi_clk_disable(encoder);
+	intel_ddi_disable_clock(encoder);
 
 	intel_dp_dual_mode_set_tmds_output(intel_hdmi, false);
 }
@@ -4184,7 +4201,7 @@ void intel_ddi_fdi_post_disable(struct intel_atomic_state *state,
 	intel_de_write(dev_priv, FDI_RX_CTL(PIPE_A), val);
 
 	intel_disable_ddi_buf(encoder, old_crtc_state);
-	intel_ddi_clk_disable(encoder);
+	intel_ddi_disable_clock(encoder);
 
 	val = intel_de_read(dev_priv, FDI_RX_MISC(PIPE_A));
 	val &= ~(FDI_RX_PWRDN_LANE1_MASK | FDI_RX_PWRDN_LANE0_MASK);
