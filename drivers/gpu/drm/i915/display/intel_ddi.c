@@ -3456,8 +3456,12 @@ static void cnl_ddi_disable_clock(struct intel_encoder *encoder)
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	enum port port = encoder->port;
 
+	mutex_lock(&i915->dpll.lock);
+
 	intel_de_rmw(i915, DPCLKA_CFGCR0,
 		     0, DPCLKA_CFGCR0_DDI_CLK_OFF(port));
+
+	mutex_unlock(&i915->dpll.lock);
 }
 
 static void skl_ddi_enable_clock(struct intel_encoder *encoder,
@@ -3486,8 +3490,12 @@ static void skl_ddi_disable_clock(struct intel_encoder *encoder)
 	struct drm_i915_private *i915 = to_i915(encoder->base.dev);
 	enum port port = encoder->port;
 
+	mutex_lock(&i915->dpll.lock);
+
 	intel_de_rmw(i915, DPLL_CTRL2,
 		     0, DPLL_CTRL2_DDI_CLK_OFF(port));
+
+	mutex_unlock(&i915->dpll.lock);
 }
 
 void hsw_ddi_enable_clock(struct intel_encoder *encoder,
