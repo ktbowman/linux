@@ -58,26 +58,14 @@
 /* Forward declarations */
 struct amdgpu_device;
 struct drm_device;
-struct amdgpu_dm_irq_handler_data;
 struct dc;
 struct amdgpu_bo;
 struct dmub_srv;
+struct dc_plane_state;
 
 struct common_irq_params {
 	struct amdgpu_device *adev;
 	enum dc_irq_source irq_src;
-};
-
-/**
- * struct irq_list_head - Linked-list for low context IRQ handlers.
- *
- * @head: The list_head within &struct handler_data
- * @work: A work_struct containing the deferred handler work
- */
-struct irq_list_head {
-	struct list_head head;
-	/* In case this interrupt needs post-processing, 'work' will be queued*/
-	struct work_struct work;
 };
 
 /**
@@ -90,6 +78,20 @@ struct dm_compressor_info {
 	void *cpu_addr;
 	struct amdgpu_bo *bo_ptr;
 	uint64_t gpu_addr;
+};
+
+/**
+ * struct vblank_workqueue - Works to be executed in a separate thread during vblank
+ * @mall_work: work for mall stutter
+ * @dm: amdgpu display manager device
+ * @otg_inst: otg instance of which vblank is being set
+ * @enable: true if enable vblank
+ */
+struct vblank_workqueue {
+	struct work_struct mall_work;
+	struct amdgpu_display_manager *dm;
+	int otg_inst;
+	bool enable;
 };
 
 /**
@@ -244,6 +246,15 @@ struct amdgpu_display_manager {
 	struct mutex audio_lock;
 
 	/**
+	 * @vblank_work_lock:
+	 *
+	 * Guards access to deferred vblank work state.
+	 */
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	spinlock_t vblank_lock;
+#endif
+
+	/**
 	 * @audio_component:
 	 *
 	 * Used to notify ELD changes to sound driver.
@@ -270,7 +281,7 @@ struct amdgpu_display_manager {
 	 * Note that handlers are called in the same order as they were
 	 * registered (FIFO).
 	 */
-	struct irq_list_head irq_handler_list_low_tab[DAL_IRQ_SOURCES_NUMBER];
+	struct list_head irq_handler_list_low_tab[DAL_IRQ_SOURCES_NUMBER];
 
 	/**
 	 * @irq_handler_list_high_tab:
@@ -321,6 +332,10 @@ struct amdgpu_display_manager {
 	struct hdcp_workqueue *hdcp_workqueue;
 #endif
 
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	struct vblank_workqueue *vblank_workqueue;
+#endif
+
 	struct drm_atomic_state *cached_state;
 	struct dc_state *cached_dc_state;
 
@@ -335,6 +350,13 @@ struct amdgpu_display_manager {
 	 * available in FW
 	 */
 	const struct gpu_info_soc_bounding_box_v1_0 *soc_bounding_box;
+
+	/**
+	 * @active_vblank_irq_count:
+	 *
+	 * number of currently active vblank irqs
+	 */
+	uint32_t active_vblank_irq_count;
 
 	/**
 	 * @mst_encoders:
@@ -411,11 +433,6 @@ struct amdgpu_dm_connector {
 #define to_amdgpu_dm_connector(x) container_of(x, struct amdgpu_dm_connector, base)
 
 extern const struct amdgpu_ip_block_version dm_ip_block;
-
-struct amdgpu_framebuffer;
-struct amdgpu_display_manager;
-struct dc_validation_set;
-struct dc_plane_state;
 
 struct dm_plane_state {
 	struct drm_plane_state base;
