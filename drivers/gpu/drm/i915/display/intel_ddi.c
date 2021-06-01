@@ -1636,7 +1636,7 @@ void hsw_fdi_link_train(struct intel_encoder *encoder,
 {
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
 	struct drm_i915_private *dev_priv = to_i915(crtc->base.dev);
-	u32 temp, i, rx_ctl_val, ddi_pll_sel;
+	u32 temp, i, rx_ctl_val;
 
 	intel_prepare_dp_ddi_buffers(encoder, crtc_state);
 
@@ -1663,9 +1663,8 @@ void hsw_fdi_link_train(struct intel_encoder *encoder,
 	intel_de_write(dev_priv, FDI_RX_CTL(PIPE_A), rx_ctl_val);
 
 	/* Configure Port Clock Select */
-	ddi_pll_sel = hsw_pll_to_ddi_pll_sel(crtc_state->shared_dpll);
-	intel_de_write(dev_priv, PORT_CLK_SEL(PORT_E), ddi_pll_sel);
-	drm_WARN_ON(&dev_priv->drm, ddi_pll_sel != PORT_CLK_SEL_SPLL);
+	drm_WARN_ON(&dev_priv->drm, crtc_state->shared_dpll->info->id != DPLL_ID_SPLL);
+	intel_ddi_clk_select(encoder, crtc_state);
 
 	/* Start the training iterating through available voltages and emphasis,
 	 * testing each value twice. */
@@ -3375,8 +3374,8 @@ void icl_sanitize_encoder_pll_mapping(struct intel_encoder *encoder)
 		icl_sanitize_port_clk_off(dev_priv, port_mask, ddi_clk_needed);
 }
 
-static void intel_ddi_clk_select(struct intel_encoder *encoder,
-				 const struct intel_crtc_state *crtc_state)
+void intel_ddi_clk_select(struct intel_encoder *encoder,
+			  const struct intel_crtc_state *crtc_state)
 {
 	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
 	enum port port = encoder->port;
