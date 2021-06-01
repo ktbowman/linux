@@ -1783,6 +1783,9 @@ static inline bool run_as_guest(void)
 	return !hypervisor_is_type(X86_HYPER_NATIVE);
 }
 
+#define HAS_D12_PLANE_MINIMIZATION(dev_priv) (IS_ROCKETLAKE(dev_priv) || \
+					      IS_ALDERLAKE_S(dev_priv))
+
 static inline bool intel_vtd_active(void)
 {
 #ifdef CONFIG_INTEL_IOMMU
