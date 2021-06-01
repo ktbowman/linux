@@ -1424,7 +1424,6 @@ static void vlv_display_power_well_init(struct drm_i915_private *dev_priv)
 		return;
 
 	intel_hpd_init(dev_priv);
-	intel_hpd_poll_disable(dev_priv);
 
 	/* Re-enable the ADPA, if we have one */
 	for_each_intel_encoder(&dev_priv->drm, encoder) {
@@ -1450,7 +1449,7 @@ static void vlv_display_power_well_deinit(struct drm_i915_private *dev_priv)
 
 	/* Prevent us from re-enabling polling on accident in late suspend */
 	if (!dev_priv->drm.dev->power.is_suspended)
-		intel_hpd_poll_enable(dev_priv);
+		intel_hpd_poll_init(dev_priv);
 }
 
 static void vlv_display_power_well_enable(struct drm_i915_private *dev_priv,
@@ -3928,12 +3927,13 @@ tgl_tc_cold_request(struct drm_i915_private *i915, bool block)
 	int ret;
 
 	while (1) {
-		u32 low_val = 0, high_val;
+		u32 low_val;
+		u32 high_val = 0;
 
 		if (block)
-			high_val = TGL_PCODE_EXIT_TCCOLD_DATA_H_BLOCK_REQ;
+			low_val = TGL_PCODE_EXIT_TCCOLD_DATA_L_BLOCK_REQ;
 		else
-			high_val = TGL_PCODE_EXIT_TCCOLD_DATA_H_UNBLOCK_REQ;
+			low_val = TGL_PCODE_EXIT_TCCOLD_DATA_L_UNBLOCK_REQ;
 
 		/*
 		 * Spec states that we should timeout the request after 200us
@@ -3952,8 +3952,7 @@ tgl_tc_cold_request(struct drm_i915_private *i915, bool block)
 		if (++tries == 3)
 			break;
 
-		if (ret == -EAGAIN)
-			msleep(1);
+		msleep(1);
 	}
 
 	if (ret)
@@ -5264,7 +5263,7 @@ static void tgl_bw_buddy_init(struct drm_i915_private *dev_priv)
 	unsigned long abox_mask = INTEL_INFO(dev_priv)->abox_mask;
 	int config, i;
 
-	if (IS_TGL_REVID(dev_priv, TGL_REVID_A0, TGL_REVID_B0))
+	if (IS_TGL_DISP_REVID(dev_priv, TGL_REVID_A0, TGL_REVID_B0))
 		/* Wa_1409767108: tgl */
 		table = wa_1409767108_buddy_page_masks;
 	else
@@ -5302,6 +5301,12 @@ static void icl_display_core_init(struct drm_i915_private *dev_priv,
 	u32 val;
 
 	gen9_set_dc_state(dev_priv, DC_STATE_DISABLE);
+
+	/* Wa_14011294188:ehl,jsl,tgl,rkl */
+	if (INTEL_PCH_TYPE(dev_priv) >= PCH_JSP &&
+	    INTEL_PCH_TYPE(dev_priv) < PCH_DG1)
+		intel_de_rmw(dev_priv, SOUTH_DSPCLK_GATE_D, 0,
+			     PCH_DPMGUNIT_CLOCK_GATE_DISABLE);
 
 	/* 1. Enable PCH reset handshake. */
 	intel_pch_reset_handshake(dev_priv, !HAS_PCH_NOP(dev_priv));
@@ -5824,15 +5829,10 @@ static void intel_power_domains_verify_state(struct drm_i915_private *i915)
 
 void intel_display_power_suspend_late(struct drm_i915_private *i915)
 {
-	if (INTEL_GEN(i915) >= 11 || IS_GEN9_LP(i915)) {
+	if (INTEL_GEN(i915) >= 11 || IS_GEN9_LP(i915))
 		bxt_enable_dc9(i915);
-		/* Tweaked Wa_14010685332:icp,jsp,mcc */
-		if (INTEL_PCH_TYPE(i915) >= PCH_ICP && INTEL_PCH_TYPE(i915) <= PCH_MCC)
-			intel_de_rmw(i915, SOUTH_CHICKEN1,
-				     SBCLK_RUN_REFCLK_DIS, SBCLK_RUN_REFCLK_DIS);
-	} else if (IS_HASWELL(i915) || IS_BROADWELL(i915)) {
+	else if (IS_HASWELL(i915) || IS_BROADWELL(i915))
 		hsw_enable_pc8(i915);
-	}
 }
 
 void intel_display_power_resume_early(struct drm_i915_private *i915)
@@ -5840,10 +5840,6 @@ void intel_display_power_resume_early(struct drm_i915_private *i915)
 	if (INTEL_GEN(i915) >= 11 || IS_GEN9_LP(i915)) {
 		gen9_sanitize_dc_state(i915);
 		bxt_disable_dc9(i915);
-		/* Tweaked Wa_14010685332:icp,jsp,mcc */
-		if (INTEL_PCH_TYPE(i915) >= PCH_ICP && INTEL_PCH_TYPE(i915) <= PCH_MCC)
-			intel_de_rmw(i915, SOUTH_CHICKEN1, SBCLK_RUN_REFCLK_DIS, 0);
-
 	} else if (IS_HASWELL(i915) || IS_BROADWELL(i915)) {
 		hsw_disable_pc8(i915);
 	}

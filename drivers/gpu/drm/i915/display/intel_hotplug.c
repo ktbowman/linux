@@ -81,33 +81,12 @@
  *
  * It is only valid and used by digital port encoder.
  *
- * Return pin that is associatade with @port and HDP_NONE if no pin is
- * hard associated with that @port.
+ * Return pin that is associatade with @port.
  */
 enum hpd_pin intel_hpd_pin_default(struct drm_i915_private *dev_priv,
 				   enum port port)
 {
-	enum phy phy = intel_port_to_phy(dev_priv, port);
-
-	/*
-	 * RKL + TGP PCH is a special case; we effectively choose the hpd_pin
-	 * based on the DDI rather than the PHY (i.e., the last two outputs
-	 * shold be HPD_PORT_{D,E} rather than {C,D}.  Note that this differs
-	 * from the behavior of both TGL+TGP and RKL+CMP.
-	 */
-	if (IS_ROCKETLAKE(dev_priv) && HAS_PCH_TGP(dev_priv))
-		return HPD_PORT_A + port - PORT_A;
-
-	switch (phy) {
-	case PHY_F:
-		return IS_CNL_WITH_PORT_F(dev_priv) ? HPD_PORT_E : HPD_PORT_F;
-	case PHY_A ... PHY_E:
-	case PHY_G ... PHY_I:
-		return HPD_PORT_A + phy - PHY_A;
-	default:
-		MISSING_CASE(phy);
-		return HPD_NONE;
-	}
+	return HPD_PORT_A + port - PORT_A;
 }
 
 #define HPD_STORM_DETECT_PERIOD		1000
@@ -503,7 +482,6 @@ void intel_hpd_irq_handler(struct drm_i915_private *dev_priv,
 	 * only the one of them (DP) will have ->hpd_pulse().
 	 */
 	for_each_intel_encoder(&dev_priv->drm, encoder) {
-		bool has_hpd_pulse = intel_encoder_has_hpd_pulse(encoder);
 		enum port port = encoder->port;
 		bool long_hpd;
 
@@ -511,7 +489,7 @@ void intel_hpd_irq_handler(struct drm_i915_private *dev_priv,
 		if (!(BIT(pin) & pin_mask))
 			continue;
 
-		if (!has_hpd_pulse)
+		if (!intel_encoder_has_hpd_pulse(encoder))
 			continue;
 
 		long_hpd = long_mask & BIT(pin);
@@ -606,7 +584,7 @@ void intel_hpd_irq_handler(struct drm_i915_private *dev_priv,
  * This is a separate step from interrupt enabling to simplify the locking rules
  * in the driver load and resume code.
  *
- * Also see: intel_hpd_poll_enable() and intel_hpd_poll_disable().
+ * Also see: intel_hpd_poll_init(), which enables connector polling
  */
 void intel_hpd_init(struct drm_i915_private *dev_priv)
 {
@@ -616,6 +594,9 @@ void intel_hpd_init(struct drm_i915_private *dev_priv)
 		dev_priv->hotplug.stats[i].count = 0;
 		dev_priv->hotplug.stats[i].state = HPD_ENABLED;
 	}
+
+	WRITE_ONCE(dev_priv->hotplug.poll_enabled, false);
+	schedule_work(&dev_priv->hotplug.poll_init_work);
 
 	/*
 	 * Interrupt setup is already guaranteed to be single-threaded, this is
@@ -673,12 +654,12 @@ static void i915_hpd_poll_init_work(struct work_struct *work)
 }
 
 /**
- * intel_hpd_poll_enable - enable polling for connectors with hpd
+ * intel_hpd_poll_init - enables/disables polling for connectors with hpd
  * @dev_priv: i915 device instance
  *
- * This function enables polling for all connectors which support HPD.
- * Under certain conditions HPD may not be functional. On most Intel GPUs,
- * this happens when we enter runtime suspend.
+ * This function enables polling for all connectors, regardless of whether or
+ * not they support hotplug detection. Under certain conditions HPD may not be
+ * functional. On most Intel GPUs, this happens when we enter runtime suspend.
  * On Valleyview and Cherryview systems, this also happens when we shut off all
  * of the powerwells.
  *
@@ -686,9 +667,9 @@ static void i915_hpd_poll_init_work(struct work_struct *work)
  * dev->mode_config.mutex, we do the actual hotplug enabling in a seperate
  * worker.
  *
- * Also see: intel_hpd_init() and intel_hpd_poll_disable().
+ * Also see: intel_hpd_init(), which restores hpd handling.
  */
-void intel_hpd_poll_enable(struct drm_i915_private *dev_priv)
+void intel_hpd_poll_init(struct drm_i915_private *dev_priv)
 {
 	WRITE_ONCE(dev_priv->hotplug.poll_enabled, true);
 
@@ -698,31 +679,6 @@ void intel_hpd_poll_enable(struct drm_i915_private *dev_priv)
 	 * As well, there's no issue if we race here since we always reschedule
 	 * this worker anyway
 	 */
-	schedule_work(&dev_priv->hotplug.poll_init_work);
-}
-
-/**
- * intel_hpd_poll_disable - disable polling for connectors with hpd
- * @dev_priv: i915 device instance
- *
- * This function disables polling for all connectors which support HPD.
- * Under certain conditions HPD may not be functional. On most Intel GPUs,
- * this happens when we enter runtime suspend.
- * On Valleyview and Cherryview systems, this also happens when we shut off all
- * of the powerwells.
- *
- * Since this function can get called in contexts where we're already holding
- * dev->mode_config.mutex, we do the actual hotplug enabling in a seperate
- * worker.
- *
- * Also used during driver init to initialize connector->polled
- * appropriately for all connectors.
- *
- * Also see: intel_hpd_init() and intel_hpd_poll_enable().
- */
-void intel_hpd_poll_disable(struct drm_i915_private *dev_priv)
-{
-	WRITE_ONCE(dev_priv->hotplug.poll_enabled, false);
 	schedule_work(&dev_priv->hotplug.poll_init_work);
 }
 
