@@ -22,6 +22,7 @@
 #include <linux/poll.h>
 #include <linux/kref.h>
 #include <linux/percpu.h>
+#include <linux/rh_kabi.h>
 
 /*
  * Tracks changes to rchan/rchan_buf structs
@@ -101,25 +102,9 @@ struct rchan_callbacks
 			     void *prev_subbuf,
 			     size_t prev_padding);
 
-	/*
-	 * buf_mapped - relay buffer mmap notification
-	 * @buf: the channel buffer
-	 * @filp: relay file pointer
-	 *
-	 * Called when a relay file is successfully mmapped
-	 */
-        void (*buf_mapped)(struct rchan_buf *buf,
-			   struct file *filp);
+	RH_KABI_DEPRECATE_FN(void, buf_mapped, struct rchan_buf *buf, struct file *filp)
+	RH_KABI_DEPRECATE_FN(void, buf_unmapped, struct rchan_buf *buf, struct file *filp)
 
-	/*
-	 * buf_unmapped - relay buffer unmap notification
-	 * @buf: the channel buffer
-	 * @filp: relay file pointer
-	 *
-	 * Called when a relay file is successfully unmapped
-	 */
-        void (*buf_unmapped)(struct rchan_buf *buf,
-			     struct file *filp);
 	/*
 	 * create_buf_file - create file to represent a relay channel buffer
 	 * @filename: the name of the file to create
