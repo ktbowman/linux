@@ -146,7 +146,8 @@ struct dma_buf_ops {
 	 *
 	 * A &sg_table scatter list of or the backing storage of the DMA buffer,
 	 * already mapped into the device address space of the &device attached
-	 * with the provided &dma_buf_attachment.
+	 * with the provided &dma_buf_attachment. The addresses and lengths in
+	 * the scatter list are PAGE_SIZE aligned.
 	 *
 	 * On failure, returns a negative error value wrapped into a pointer.
 	 * May also return -EINTR when a signal was received while being
@@ -272,7 +273,7 @@ struct dma_buf_ops {
 
 /**
  * struct dma_buf - shared buffer object
- * @size: size of the buffer
+ * @size: size of the buffer; invariant over the lifetime of the buffer.
  * @file: file pointer used for sharing buffers across, and for refcounting.
  * @attachments: list of dma_buf_attachment that denotes all devices attached,
  *               protected by dma_resv lock.
@@ -404,7 +405,7 @@ struct dma_buf_attachment {
  * @exp_name:	name of the exporter - useful for debugging.
  * @owner:	pointer to exporter module - used for refcounting kernel module
  * @ops:	Attach allocator-defined dma buf ops to the new buffer
- * @size:	Size of the buffer
+ * @size:	Size of the buffer - invariant over the lifetime of the buffer
  * @flags:	mode flags for the file
  * @resv:	reservation-object, NULL to allocate default one
  * @priv:	Attach private data of allocator to this buffer

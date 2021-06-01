@@ -76,16 +76,28 @@ static void dma_buf_release(struct dentry *dentry)
 
 	dmabuf->ops->release(dmabuf);
 
-	mutex_lock(&db_list.lock);
-	list_del(&dmabuf->list_node);
-	mutex_unlock(&db_list.lock);
-
 	if (dmabuf->resv == (struct dma_resv *)&dmabuf[1])
 		dma_resv_fini(dmabuf->resv);
 
 	module_put(dmabuf->owner);
 	kfree(dmabuf->name);
 	kfree(dmabuf);
+}
+
+static int dma_buf_file_release(struct inode *inode, struct file *file)
+{
+	struct dma_buf *dmabuf;
+
+	if (!is_dma_buf_file(file))
+		return -EINVAL;
+
+	dmabuf = file->private_data;
+
+	mutex_lock(&db_list.lock);
+	list_del(&dmabuf->list_node);
+	mutex_unlock(&db_list.lock);
+
+	return 0;
 }
 
 static const struct dentry_operations dma_buf_dentry_ops = {
@@ -413,6 +425,7 @@ static void dma_buf_show_fdinfo(struct seq_file *m, struct file *file)
 }
 
 static const struct file_operations dma_buf_fops = {
+	.release	= dma_buf_file_release,
 	.mmap		= dma_buf_mmap_internal,
 	.llseek		= dma_buf_llseek,
 	.poll		= dma_buf_poll,
@@ -851,6 +864,9 @@ EXPORT_SYMBOL_GPL(dma_buf_unpin);
  * Returns sg_table containing the scatterlist to be returned; returns ERR_PTR
  * on error. May return -EINTR if it is interrupted by a signal.
  *
+ * On success, the DMA addresses and lengths in the returned scatterlist are
+ * PAGE_SIZE aligned.
+ *
  * A mapping must be unmapped by using dma_buf_unmap_attachment(). Note that
  * the underlying backing storage is pinned for as long as a mapping exists,
  * therefore users/importers should not hold onto a mapping for undue amounts of
@@ -903,6 +919,24 @@ struct sg_table *dma_buf_map_attachment(struct dma_buf_attachment *attach,
 		attach->sgt = sg_table;
 		attach->dir = direction;
 	}
+
+#ifdef CONFIG_DMA_API_DEBUG
+	if (!IS_ERR(sg_table)) {
+		struct scatterlist *sg;
+		u64 addr;
+		int len;
+		int i;
+
+		for_each_sgtable_dma_sg(sg_table, sg, i) {
+			addr = sg_dma_address(sg);
+			len = sg_dma_len(sg);
+			if (!PAGE_ALIGNED(addr) || !PAGE_ALIGNED(len)) {
+				pr_debug("%s: addr %llx or len %x is not page aligned!\n",
+					 __func__, addr, len);
+			}
+		}
+	}
+#endif /* CONFIG_DMA_API_DEBUG */
 
 	return sg_table;
 }
