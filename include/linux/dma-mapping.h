@@ -111,8 +111,11 @@ struct dma_map_ops {
 	RH_KABI_USE(4, void (*free_pages)(struct device *dev, size_t size,\
 					  struct page *vaddr, dma_addr_t dma_handle,\
 					  enum dma_data_direction dir))
-	RH_KABI_RESERVE(5)
-	RH_KABI_RESERVE(6)
+	RH_KABI_USE(5, void* (*alloc_noncoherent)(struct device *dev, size_t size,\
+			dma_addr_t *dma_handle, enum dma_data_direction dir,\
+						  gfp_t gfp))
+	RH_KABI_USE(6, void (*free_noncoherent)(struct device *dev, size_t size, void *vaddr,\
+						dma_addr_t dma_handle, enum dma_data_direction dir))
 	void (*sync_single_for_cpu)(struct device *dev,
 				    dma_addr_t dma_handle, size_t size,
 				    enum dma_data_direction dir);
