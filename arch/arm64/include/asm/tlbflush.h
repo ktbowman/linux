@@ -261,6 +261,9 @@ static inline void __flush_tlb_range(struct vm_area_struct *vma,
 	unsigned long addr;
 	enum tlb_flush_types flush;
 
+	start = round_down(start, stride);
+	end = round_up(end, stride);
+
 	if ((end - start) >= (MAX_TLBI_OPS * stride)) {
 		flush_tlb_mm(mm);
 		return;
