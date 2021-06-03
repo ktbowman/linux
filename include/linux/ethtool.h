@@ -139,6 +139,7 @@ struct ethtool_link_ksettings {
 	 */
 	RH_KABI_EXTEND_WITH_SIZE(struct {
 				 u32	lanes;
+				 enum ethtool_link_mode_bit_indices link_mode;
 				 },
 				 4)
 };
