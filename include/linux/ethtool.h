@@ -130,6 +130,17 @@ struct ethtool_link_ksettings {
 		__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
 		__ETHTOOL_DECLARE_LINK_MODE_MASK(lp_advertising);
 	} link_modes;
+	/*
+	 * RHEL: NIC drivers do not allocate instances of this structure
+	 * by themselves and there is no exported function that works
+	 * with this structure on KABI allow-list. But this could be changed
+	 * if functions like __ethtool_get_link_ksettings() would be placed
+	 * on KABI allow-list.
+	 */
+	RH_KABI_EXTEND_WITH_SIZE(struct {
+				 u32	lanes;
+				 },
+				 4)
 };
 
 /**
@@ -270,6 +281,8 @@ struct ethtool_ops_extended_rh {
 
 /**
  * struct ethtool_ops - optional netdev operations
+ * @cap_link_lanes_supported: indicates if the driver supports lanes
+ *	parameter.
  * @supported_coalesce_params: supported types of interrupt coalescing.
  * @get_settings: DEPRECATED, use %get_link_ksettings/%set_link_ksettings
  *	API. Get various device settings including Ethernet link
@@ -530,7 +543,8 @@ struct ethtool_ops {
 				      struct ethtool_link_ksettings *))
 	RH_KABI_USE(2, int	(*set_link_ksettings)(struct net_device *,
 				      const struct ethtool_link_ksettings *))
-	RH_KABI_USE(3, u32	supported_coalesce_params)
+	RH_KABI_USE_SPLIT(3,	u32	supported_coalesce_params,
+				u32     cap_link_lanes_supported:1)
 	RH_KABI_USE(4, int	(*get_link_ext_state)(struct net_device *,
 				      struct ethtool_link_ext_state_info *))
 	RH_KABI_USE(5, void	(*get_pause_stats)(struct net_device *dev,
