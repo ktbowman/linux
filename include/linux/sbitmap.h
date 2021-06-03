@@ -360,7 +360,7 @@ static inline void sbitmap_put(struct sbitmap *sb, unsigned int bitnr)
 	sbitmap_deferred_clear_bit(sb, bitnr);
 
 	if (likely(alloc_hint && !sb->round_robin && bitnr < sb->depth))
-		*this_cpu_ptr(alloc_hint) = bitnr;
+		*raw_cpu_ptr(alloc_hint) = bitnr;
 }
 
 static inline int sbitmap_test_bit(struct sbitmap *sb, unsigned int bitnr)
