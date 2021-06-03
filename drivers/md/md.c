@@ -2373,7 +2373,8 @@ int md_integrity_register(struct mddev *mddev)
 
 	pr_debug("md: data integrity enabled on %s\n", mdname(mddev));
 	if (bioset_integrity_create(&mddev->bio_set, BIO_POOL_SIZE) ||
-	    bioset_integrity_create(&mddev->io_acct_set, BIO_POOL_SIZE)) {
+	    (mddev->level != 1 && mddev->level != 10 &&
+	     bioset_integrity_create(&mddev->io_acct_set, BIO_POOL_SIZE))) {
 		pr_err("md: failed to create integrity pool for %s\n",
 		       mdname(mddev));
 		return -EINVAL;
@@ -5608,7 +5609,8 @@ static void md_free(struct kobject *ko)
 
 	bioset_exit(&mddev->bio_set);
 	bioset_exit(&mddev->sync_set);
-	bioset_exit(&mddev->io_acct_set);
+	if (mddev->level != 1 && mddev->level != 10)
+		bioset_exit(&mddev->io_acct_set);
 	kfree(mddev);
 }
 
@@ -5902,7 +5904,8 @@ int md_run(struct mddev *mddev)
 		if (err)
 			goto exit_bio_set;
 	}
-	if (!bioset_initialized(&mddev->io_acct_set)) {
+	if (mddev->level != 1 && mddev->level != 10 &&
+	    !bioset_initialized(&mddev->io_acct_set)) {
 		err = bioset_init(&mddev->io_acct_set, BIO_POOL_SIZE,
 				  offsetof(struct md_io_acct, bio_clone), 0);
 		if (err)
@@ -6086,7 +6089,8 @@ bitmap_abort:
 	module_put(pers->owner);
 	md_bitmap_destroy(mddev);
 abort:
-	bioset_exit(&mddev->io_acct_set);
+	if (mddev->level != 1 && mddev->level != 10)
+		bioset_exit(&mddev->io_acct_set);
 exit_sync_set:
 	bioset_exit(&mddev->sync_set);
 exit_bio_set:
@@ -6315,7 +6319,8 @@ void md_stop(struct mddev *mddev)
 	__md_stop(mddev);
 	bioset_exit(&mddev->bio_set);
 	bioset_exit(&mddev->sync_set);
-	bioset_exit(&mddev->io_acct_set);
+	if (mddev->level != 1 && mddev->level != 10)
+		bioset_exit(&mddev->io_acct_set);
 }
 
 EXPORT_SYMBOL_GPL(md_stop);
@@ -8647,7 +8652,10 @@ static void md_end_io_acct(struct bio *bio)
 	bio_endio(orig_bio);
 }
 
-/* used by personalities (raid0 and raid5) to account io stats */
+/*
+ * Used by personalities that don't already clone the bio and thus can't
+ * easily add the timestamp to their extended bio structure.
+ */
 void md_account_bio(struct mddev *mddev, struct bio **bio)
 {
 	struct md_io_acct *md_io_acct;
