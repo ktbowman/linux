@@ -534,8 +534,10 @@ struct ethtool_ops {
 				      struct ethtool_link_ext_state_info *))
 	RH_KABI_USE(5, void	(*get_pause_stats)(struct net_device *dev,
 				   struct ethtool_pause_stats *pause_stats))
-	RH_KABI_RESERVE(6)
-	RH_KABI_RESERVE(7)
+	RH_KABI_USE(6, int	(*get_phy_tunable)(struct net_device *,
+				   const struct ethtool_tunable *, void *))
+	RH_KABI_USE(7, int	(*set_phy_tunable)(struct net_device *,
+				   const struct ethtool_tunable *, const void *))
 	RH_KABI_RESERVE(8)
 	RH_KABI_RESERVE(9)
 	RH_KABI_RESERVE(10)
