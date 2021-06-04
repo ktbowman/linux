@@ -910,7 +910,7 @@ static inline int acpi_device_modalias(struct device *dev,
 	return -ENODEV;
 }
 
-static inline bool acpi_dma_supported(struct acpi_device *adev)
+static inline bool acpi_dma_supported(const struct acpi_device *adev)
 {
 	return false;
 }
