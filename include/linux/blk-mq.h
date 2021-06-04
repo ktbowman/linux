@@ -188,8 +188,8 @@ typedef blk_status_t (queue_rq_fn)(struct blk_mq_hw_ctx *,
 		const struct blk_mq_queue_data *);
 typedef void (commit_rqs_fn)(struct blk_mq_hw_ctx *);
 #ifndef __GENKSYMS__
-typedef bool (get_budget_fn)(struct request_queue *);
-typedef void (put_budget_fn)(struct request_queue *);
+typedef int (get_budget_fn)(struct request_queue *);
+typedef void (put_budget_fn)(struct request_queue *, int);
 #else
 typedef bool (get_budget_fn)(struct blk_mq_hw_ctx *);
 typedef void (put_budget_fn)(struct blk_mq_hw_ctx *);
