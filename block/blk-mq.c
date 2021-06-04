@@ -1322,7 +1322,7 @@ static enum prep_dispatch blk_mq_prep_dispatch_rq(struct request *rq,
 {
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 
-	if (need_budget && !blk_mq_get_dispatch_budget(hctx)) {
+	if (need_budget && !blk_mq_get_dispatch_budget(rq->q)) {
 		blk_mq_put_driver_tag(rq);
 		return PREP_DISPATCH_NO_BUDGET;
 	}
@@ -1341,7 +1341,7 @@ static enum prep_dispatch blk_mq_prep_dispatch_rq(struct request *rq,
 			 * together during handling partial dispatch
 			 */
 			if (need_budget)
-				blk_mq_put_dispatch_budget(hctx);
+				blk_mq_put_dispatch_budget(rq->q);
 			return PREP_DISPATCH_NO_TAG;
 		}
 	}
@@ -1350,13 +1350,13 @@ static enum prep_dispatch blk_mq_prep_dispatch_rq(struct request *rq,
 }
 
 /* release all allocated budgets before calling to blk_mq_dispatch_rq_list */
-static void blk_mq_release_budgets(struct blk_mq_hw_ctx *hctx,
+static void blk_mq_release_budgets(struct request_queue *q,
 		unsigned int nr_budgets)
 {
 	int i;
 
 	for (i = 0; i < nr_budgets; i++)
-		blk_mq_put_dispatch_budget(hctx);
+		blk_mq_put_dispatch_budget(q);
 }
 
 /*
@@ -1449,7 +1449,7 @@ out:
 			(hctx->flags & BLK_MQ_F_TAG_QUEUE_SHARED);
 		bool no_budget_avail = prep == PREP_DISPATCH_NO_BUDGET;
 
-		blk_mq_release_budgets(hctx, nr_budgets);
+		blk_mq_release_budgets(q, nr_budgets);
 
 		/*
 		 * If we didn't flush the entire list, we could have told
@@ -2065,11 +2065,11 @@ static blk_status_t __blk_mq_try_issue_directly(struct blk_mq_hw_ctx *hctx,
 	if (q->elevator && !bypass_insert)
 		goto insert;
 
-	if (!blk_mq_get_dispatch_budget(hctx))
+	if (!blk_mq_get_dispatch_budget(q))
 		goto insert;
 
 	if (!blk_mq_get_driver_tag(rq)) {
-		blk_mq_put_dispatch_budget(hctx);
+		blk_mq_put_dispatch_budget(q);
 		goto insert;
 	}
 
