@@ -83,6 +83,9 @@ struct sbitmap {
 	struct sbitmap_word *map;
 };
 
+#define SB_ALLOC_HINT_PTR(sb)	((sb)->map ? (unsigned int __percpu **)&(sb)->map[-1] : NULL)
+
+
 #define SBQ_WAIT_QUEUES 8
 #define SBQ_WAKE_BATCH 8
 
@@ -122,7 +125,7 @@ struct sbitmap_queue {
 	 * This is per-cpu, which allows multiple users to stick to different
 	 * cachelines until the map is exhausted.
 	 */
-	unsigned int __percpu *alloc_hint;
+	RH_KABI_DEPRECATE(unsigned int __percpu *, alloc_hint)
 
 	/**
 	 * @wake_batch: Number of bits which must be freed before we wake up any
@@ -168,11 +171,13 @@ struct sbitmap_queue {
  * @round_robin: If true, be stricter about allocation order; always allocate
  *               starting from the last allocated bit. This is less efficient
  *               than the default behavior (false).
+ * @alloc_hint: If true, apply percpu hint for where to start searching for
+ *              a free bit.
  *
  * Return: Zero on success or negative errno on failure.
  */
 int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
-		      gfp_t flags, int node, bool round_robin);
+		      gfp_t flags, int node, bool round_robin, bool alloc_hint);
 
 /**
  * sbitmap_free() - Free memory used by a &struct sbitmap.
@@ -180,7 +185,18 @@ int sbitmap_init_node(struct sbitmap *sb, unsigned int depth, int shift,
  */
 static inline void sbitmap_free(struct sbitmap *sb)
 {
-	kfree(sb->map);
+	unsigned int __percpu **alloc_hint_p;
+	struct sbitmap_word *map = sb->map;
+
+	/*
+	 * RHEL8: if map is NULL, can't access alloc_hint
+	 *        and kfree(--map) will panic, so check.
+	*/
+	alloc_hint_p = SB_ALLOC_HINT_PTR(sb);
+	if (alloc_hint_p)
+		free_percpu(*alloc_hint_p);
+	if (map)
+		kfree(--map);
 	sb->map = NULL;
 }
 
@@ -197,19 +213,17 @@ void sbitmap_resize(struct sbitmap *sb, unsigned int depth);
 /**
  * sbitmap_get() - Try to allocate a free bit from a &struct sbitmap.
  * @sb: Bitmap to allocate from.
- * @alloc_hint: Hint for where to start searching for a free bit.
  *
  * This operation provides acquire barrier semantics if it succeeds.
  *
  * Return: Non-negative allocated bit number if successful, -1 otherwise.
  */
-int sbitmap_get(struct sbitmap *sb, unsigned int alloc_hint);
+int sbitmap_get(struct sbitmap *sb);
 
 /**
  * sbitmap_get_shallow() - Try to allocate a free bit from a &struct sbitmap,
  * limiting the depth used from each word.
  * @sb: Bitmap to allocate from.
- * @alloc_hint: Hint for where to start searching for a free bit.
  * @shallow_depth: The maximum number of bits to allocate from a single word.
  *
  * This rather specific operation allows for having multiple users with
@@ -221,8 +235,7 @@ int sbitmap_get(struct sbitmap *sb, unsigned int alloc_hint);
  *
  * Return: Non-negative allocated bit number if successful, -1 otherwise.
  */
-int sbitmap_get_shallow(struct sbitmap *sb, unsigned int alloc_hint,
-			unsigned long shallow_depth);
+int sbitmap_get_shallow(struct sbitmap *sb, unsigned long shallow_depth);
 
 /**
  * sbitmap_any_bit_set() - Check for a set bit in a &struct sbitmap.
@@ -336,6 +349,20 @@ static inline void sbitmap_deferred_clear_bit(struct sbitmap *sb, unsigned int b
 	set_bit(SB_NR_TO_BIT(sb, bitnr), addr);
 }
 
+/*
+ * Pair of sbitmap_get, and this one applies both cleared bit and
+ * allocation hint.
+ */
+static inline void sbitmap_put(struct sbitmap *sb, unsigned int bitnr)
+{
+	unsigned int __percpu *alloc_hint = *SB_ALLOC_HINT_PTR(sb);
+
+	sbitmap_deferred_clear_bit(sb, bitnr);
+
+	if (likely(alloc_hint && !sb->round_robin && bitnr < sb->depth))
+		*this_cpu_ptr(alloc_hint) = bitnr;
+}
+
 static inline int sbitmap_test_bit(struct sbitmap *sb, unsigned int bitnr)
 {
 	return test_bit(SB_NR_TO_BIT(sb, bitnr), __sbitmap_word(sb, bitnr));
@@ -384,7 +411,6 @@ int sbitmap_queue_init_node(struct sbitmap_queue *sbq, unsigned int depth,
 static inline void sbitmap_queue_free(struct sbitmap_queue *sbq)
 {
 	kfree(sbq->ws);
-	free_percpu(sbq->alloc_hint);
 	sbitmap_free(&sbq->sb);
 }
 
