@@ -41,6 +41,7 @@
 #include <linux/pci.h>
 #include <acpi/apei.h>
 #include <linux/suspend.h>
+#include <linux/prmt.h>
 
 #include "internal.h"
 
@@ -1338,6 +1339,7 @@ static int __init acpi_init(void)
 	if (!acpi_kobj)
 		printk(KERN_WARNING "%s: kset create error\n", __func__);
 
+	init_prmt();
 	result = acpi_bus_init();
 	if (result) {
 		kobject_put(acpi_kobj);
