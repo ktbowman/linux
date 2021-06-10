@@ -36,7 +36,7 @@ xfs_qm_fill_state(
 	}
 	tstate->flags |= QCI_SYSFILE;
 	tstate->blocks = ip->i_d.di_nblocks;
-	tstate->nextents = ip->i_d.di_nextents;
+	tstate->nextents = ip->i_df.if_nextents;
 	tstate->spc_timelimit = (u32)defq->btimelimit;
 	tstate->ino_timelimit = (u32)defq->itimelimit;
 	tstate->rt_spc_timelimit = (u32)defq->rtbtimelimit;
