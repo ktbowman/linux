@@ -3553,42 +3553,42 @@ static int chcr_stats_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "IPSec PDU: %10u\n",
 		   atomic_read(&adap->ch_ipsec_stats.ipsec_cnt));
 #endif
-#ifdef CONFIG_CHELSIO_TLS_DEVICE
+#if IS_ENABLED(CONFIG_CHELSIO_TLS_DEVICE)
 	seq_puts(seq, "\nChelsio KTLS Crypto Accelerator Stats\n");
 	seq_printf(seq, "Tx TLS offload refcount:          %20u\n",
 		   refcount_read(&adap->chcr_ktls.ktls_refcount));
 	seq_printf(seq, "Tx HW offload contexts added:     %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_ctx));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_ctx));
 	seq_printf(seq, "Tx connection created:            %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_connection_open));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_connection_open));
 	seq_printf(seq, "Tx connection failed:             %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_connection_fail));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_connection_fail));
 	seq_printf(seq, "Tx connection closed:             %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_connection_close));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_connection_close));
 	seq_printf(seq, "Packets passed for encryption :   %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_encrypted_packets));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_encrypted_packets));
 	seq_printf(seq, "Bytes passed for encryption :     %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_encrypted_bytes));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_encrypted_bytes));
 	seq_printf(seq, "Tx records send:                  %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_send_records));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_send_records));
 	seq_printf(seq, "Tx partial start of records:      %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_start_pkts));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_start_pkts));
 	seq_printf(seq, "Tx partial middle of records:     %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_middle_pkts));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_middle_pkts));
 	seq_printf(seq, "Tx partial end of record:         %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_end_pkts));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_end_pkts));
 	seq_printf(seq, "Tx complete records:              %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_complete_pkts));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_complete_pkts));
 	seq_printf(seq, "TX trim pkts :                    %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_trimmed_pkts));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_trimmed_pkts));
 	seq_printf(seq, "Tx out of order packets:          %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_ooo));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_ooo));
 	seq_printf(seq, "Tx drop pkts before HW offload:   %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_skip_no_sync_data));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_skip_no_sync_data));
 	seq_printf(seq, "Tx drop not synced packets:       %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_drop_no_sync_data));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_drop_no_sync_data));
 	seq_printf(seq, "Tx drop bypass req:               %20llu\n",
-		   (u64)atomic64_read(&adap->chcr_stats.ktls_tx_drop_bypass_req));
+		   (u64)atomic64_read(&adap->ch_ktls_stats.ktls_tx_drop_bypass_req));
 #endif
 
 	return 0;
