@@ -1933,6 +1933,9 @@ static int chcr_ktls_xmit(struct sk_buff *skb, struct net_device *dev)
 						       flags);
 				goto out;
 			}
+
+			if (th->fin)
+				skb_get(skb);
 		}
 
 		if (unlikely(tls_record_is_start_marker(record))) {
@@ -2007,8 +2010,11 @@ static int chcr_ktls_xmit(struct sk_buff *skb, struct net_device *dev)
 			__skb_frag_unref(&record->frags[i]);
 		}
 		/* if any failure, come out from the loop. */
-		if (ret)
+		if (ret) {
+			if (th->fin)
+				dev_kfree_skb_any(skb);
 			return NETDEV_TX_OK;
+		}
 
 		/* length should never be less than 0 */
 		WARN_ON(data_len < 0);
@@ -2021,8 +2027,10 @@ static int chcr_ktls_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* tcp finish is set, send a separate tcp msg including all the options
 	 * as well.
 	 */
-	if (th->fin)
+	if (th->fin) {
 		chcr_ktls_write_tcp_options(tx_info, skb, q, tx_info->tx_chan);
+		dev_kfree_skb_any(skb);
+	}
 
 	return NETDEV_TX_OK;
 out:
