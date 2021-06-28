@@ -1561,9 +1561,6 @@ int mlx5e_poll_rx_cq(struct mlx5e_cq *cq, int budget)
 	if (rq->page_pool)
 		page_pool_nid_changed(rq->page_pool, numa_mem_id());
 
-	if (rq->page_pool)
-		page_pool_nid_changed(rq->page_pool, numa_mem_id());
-
 	if (rq->cqd.left) {
 		work_done += mlx5e_decompress_cqes_cont(rq, cqwq, 0, budget);
 		if (rq->cqd.left || work_done >= budget)
