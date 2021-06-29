@@ -5460,9 +5460,9 @@ static const struct mlx5e_profile mlx5e_nic_profile = {
 };
 
 /* mlx5e generic netdev management API (move to en_common.c) */
-int mlx5e_netdev_init(struct net_device *netdev,
-		      struct mlx5e_priv *priv,
-		      struct mlx5_core_dev *mdev)
+int mlx5e_priv_init(struct mlx5e_priv *priv,
+		    struct net_device *netdev,
+		    struct mlx5_core_dev *mdev)
 {
 	memset(priv, 0, sizeof(*priv));
 
@@ -5497,7 +5497,7 @@ err_free_cpumask:
 	return -ENOMEM;
 }
 
-void mlx5e_netdev_cleanup(struct net_device *netdev, struct mlx5e_priv *priv)
+void mlx5e_priv_cleanup(struct mlx5e_priv *priv)
 {
 	int i;
 
@@ -5521,9 +5521,9 @@ mlx5e_create_netdev(struct mlx5_core_dev *mdev, unsigned int txqs, unsigned int 
 		return NULL;
 	}
 
-	err = mlx5e_netdev_init(netdev, netdev_priv(netdev), mdev);
+	err = mlx5e_priv_init(netdev_priv(netdev), netdev, mdev);
 	if (err) {
-		mlx5_core_err(mdev, "mlx5e_netdev_init failed, err=%d\n", err);
+		mlx5_core_err(mdev, "mlx5e_priv_init failed, err=%d\n", err);
 		goto err_free_netdev;
 	}
 	dev_net_set(netdev, mlx5_core_net(mdev));
@@ -5628,9 +5628,9 @@ mlx5e_netdev_attach_profile(struct mlx5e_priv *priv,
 	struct mlx5_core_dev *mdev = priv->mdev;
 	int err;
 
-	err = mlx5e_netdev_init(netdev, priv, mdev);
+	err = mlx5e_priv_init(priv, netdev, mdev);
 	if (err) {
-		mlx5_core_err(mdev, "mlx5e_netdev_init failed, err=%d\n", err);
+		mlx5_core_err(mdev, "mlx5e_priv_init failed, err=%d\n", err);
 		return err;
 	}
 	priv->profile = new_profile;
@@ -5663,7 +5663,7 @@ int mlx5e_netdev_change_profile(struct mlx5e_priv *priv,
 	/* cleanup old profile */
 	mlx5e_detach_netdev(priv);
 	priv->profile->cleanup(priv);
-	mlx5e_netdev_cleanup(priv->netdev, priv);
+	mlx5e_priv_cleanup(priv);
 
 	err = mlx5e_netdev_attach_profile(priv, new_profile, new_ppriv);
 	if (err) { /* roll back to original profile */
@@ -5688,7 +5688,7 @@ void mlx5e_destroy_netdev(struct mlx5e_priv *priv)
 {
 	struct net_device *netdev = priv->netdev;
 
-	mlx5e_netdev_cleanup(netdev, priv);
+	mlx5e_priv_cleanup(priv);
 	free_netdev(netdev);
 }
 
