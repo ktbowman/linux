@@ -1506,7 +1506,7 @@ mlx5e_init_fib_work_ipv4(struct mlx5e_priv *priv,
 
 	fen_info = container_of(info, struct fib_entry_notifier_info, info);
 	fib_dev1 = fen_info->fi->fib_dev;
-	if (fib_dev1->netdev_ops != &mlx5e_netdev_ops ||
+	if (!fib_dev1 || fib_dev1->netdev_ops != &mlx5e_netdev_ops ||
 	    fen_info->dst_len != 32)
 		return NULL;
 
