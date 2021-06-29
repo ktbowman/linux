@@ -650,6 +650,7 @@ struct mlx5e_resources {
 		struct mlx5_core_mkey      mkey;
 		struct mlx5_sq_bfreg       bfreg;
 	} hw_objs;
+	struct net_device *uplink_netdev;
 };
 
 enum mlx5_sw_icm_type {
