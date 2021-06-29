@@ -569,6 +569,7 @@ struct mlx5_priv {
 	int			host_pf_pages;
 
 	struct mlx5_core_health health;
+	struct list_head	traps;
 
 	/* start: qp staff */
 	struct dentry	       *qp_debugfs;
