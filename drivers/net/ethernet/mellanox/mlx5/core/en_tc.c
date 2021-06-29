@@ -4789,10 +4789,6 @@ int mlx5e_tc_nic_init(struct mlx5e_priv *priv)
 
 	tc->ct = mlx5_tc_ct_init(priv, tc->chains, &priv->fs.tc.mod_hdr,
 				 MLX5_FLOW_NAMESPACE_KERNEL);
-	if (IS_ERR(tc->ct)) {
-		err = PTR_ERR(tc->ct);
-		goto err_ct;
-	}
 
 	tc->netdevice_nb.notifier_call = mlx5e_tc_netdev_event;
 	err = register_netdevice_notifier_dev_net(priv->netdev,
@@ -4808,7 +4804,6 @@ int mlx5e_tc_nic_init(struct mlx5e_priv *priv)
 
 err_reg:
 	mlx5_tc_ct_clean(tc->ct);
-err_ct:
 	mlx5_chains_destroy(tc->chains);
 err_chains:
 	mapping_destroy(chains_mapping);
@@ -4870,8 +4865,6 @@ int mlx5e_tc_esw_init(struct rhashtable *tc_ht)
 					       esw_chains(esw),
 					       &esw->offloads.mod_hdr,
 					       MLX5_FLOW_NAMESPACE_FDB);
-	if (IS_ERR(uplink_priv->ct_priv))
-		goto err_ct;
 
 #if IS_ENABLED(CONFIG_MLX5_TC_SAMPLE)
 	uplink_priv->esw_psample = mlx5_esw_sample_init(netdev_priv(priv->netdev));
@@ -4918,7 +4911,6 @@ err_tun_mapping:
 	mlx5_esw_sample_cleanup(uplink_priv->esw_psample);
 #endif
 	mlx5_tc_ct_clean(uplink_priv->ct_priv);
-err_ct:
 	netdev_warn(priv->netdev,
 		    "Failed to initialize tc (eswitch), err: %d", err);
 	return err;
