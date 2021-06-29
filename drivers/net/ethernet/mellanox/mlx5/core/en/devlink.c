@@ -72,6 +72,9 @@ struct devlink_port *mlx5e_get_devlink_port(struct net_device *dev)
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
 	struct mlx5_core_dev *mdev = priv->mdev;
 
+	if (!netif_device_present(dev))
+		return NULL;
+
 	if (mdev->priv.eswitch && rpriv && rpriv->rep && rpriv->rep->vport)
 		return mlx5_esw_offloads_devlink_port(mdev->priv.eswitch, rpriv->rep->vport);
 
