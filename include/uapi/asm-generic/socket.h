@@ -114,4 +114,6 @@
 
 #define SO_DETACH_REUSEPORT_BPF 68
 
+#define SO_PREFER_BUSY_POLL	69
+
 #endif /* __ASM_GENERIC_SOCKET_H */
