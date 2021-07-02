@@ -65,7 +65,7 @@ struct xdp_rxq_info {
 	 * whitelist. However, it is embedded in struct netdev_rx_queue
 	 * which is referenced from struct net_device::_rx as an array.
 	 * Therefore, we need to protect the size of struct xdp_rxq_info. */
-	RH_KABI_RESERVE(1)
+	RH_KABI_USE(1, unsigned int napi_id)
 	RH_KABI_RESERVE(2)
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
@@ -244,9 +244,9 @@ static inline void xdp_release_frame(struct xdp_frame *xdpf)
 /* RHEL: increase the version of xdp_rxq_info_reg kABI whenever XDP is
  * changed in a kABI incompatible way. That includes changes to ndo_xdp* and
  * ndo_bpf ops, inline function changes and XDP struct changes. */
-RH_KABI_FORCE_CHANGE(2)
+RH_KABI_FORCE_CHANGE(3)
 int xdp_rxq_info_reg(struct xdp_rxq_info *xdp_rxq,
-		     struct net_device *dev, u32 queue_index);
+		     struct net_device *dev, u32 queue_index, unsigned int napi_id);
 void xdp_rxq_info_unreg(struct xdp_rxq_info *xdp_rxq);
 void xdp_rxq_info_unused(struct xdp_rxq_info *xdp_rxq);
 bool xdp_rxq_info_is_reg(struct xdp_rxq_info *xdp_rxq);
