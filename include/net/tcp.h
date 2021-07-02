@@ -423,8 +423,10 @@ void tcp_update_recv_tstamps(struct sk_buff *skb,
 void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
 			struct scm_timestamping *tss);
 void tcp_data_ready(struct sock *sk);
+#ifdef CONFIG_MMU
 int tcp_mmap(struct file *file, struct socket *sock,
 	     struct vm_area_struct *vma);
+#endif
 void tcp_parse_options(const struct net *net, const struct sk_buff *skb,
 		       struct tcp_options_received *opt_rx,
 		       int estab, struct tcp_fastopen_cookie *foc);
