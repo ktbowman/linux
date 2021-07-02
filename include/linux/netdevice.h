@@ -345,7 +345,7 @@ struct napi_struct {
 	unsigned int		napi_id;
 
 	RH_KABI_USE(1, 2, struct list_head	gro_list)
-	RH_KABI_RESERVE(3)
+	RH_KABI_USE(3, int			defer_hard_irqs_count)
 	RH_KABI_RESERVE(4)
 	RH_KABI_RESERVE(5)
 	RH_KABI_RESERVE(6)
@@ -2237,7 +2237,7 @@ struct net_device {
 	/* protected by rtnl_lock */
 	RH_KABI_USE(7, struct bpf_xdp_entity	*xdp_state)
 
-	RH_KABI_RESERVE(8)
+	RH_KABI_USE(8, int			napi_defer_hard_irqs)
 	RH_KABI_RESERVE(9)
 	RH_KABI_RESERVE(10)
 	RH_KABI_RESERVE(11)
