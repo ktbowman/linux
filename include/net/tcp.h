@@ -418,6 +418,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 int tcp_set_rcvlowat(struct sock *sk, int val);
 
 struct scm_timestamping;
+int tcp_set_window_clamp(struct sock *sk, int val);
 void tcp_update_recv_tstamps(struct sk_buff *skb,
 			     struct scm_timestamping *tss);
 void tcp_recv_timestamp(struct msghdr *msg, const struct sock *sk,
