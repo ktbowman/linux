@@ -7,7 +7,6 @@ FEATURE-DUMP.libbpf
 fixdep
 test_dev_cgroup
 /test_progs*
-test_tcpbpf_user
 test_verifier_log
 feature
 test_sock
@@ -35,3 +34,5 @@ test_cpp
 /tools
 /runqslower
 /bench
+*.ko
+xdpxceiver
