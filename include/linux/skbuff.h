@@ -4159,6 +4159,16 @@ static inline void nf_conntrack_get(struct nf_conntrack *nfct)
 }
 #endif
 
+static inline unsigned long skb_get_nfct(const struct sk_buff *skb)
+{
+#if IS_ENABLED(CONFIG_NF_CONNTRACK)
+	return skb->_nfct;
+#else
+	return 0UL;
+#endif
+}
+
+
 /* RHEL: Helper function that needs to be called when skb_ext_put() and
  * skb_ext_reset() are called. This helper takes care of skb->sp
  * (and maybe about skb->nf_bridge in future) that cannot be converted
