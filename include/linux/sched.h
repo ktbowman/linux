@@ -703,6 +703,9 @@ struct task_struct_rh {
 	 */
 	u32				pkru;
 #endif
+#if IS_ENABLED(CONFIG_KUNIT)
+	struct kunit			*kunit_test;
+#endif
 };
 
 struct task_struct {
