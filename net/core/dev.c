@@ -5510,7 +5510,7 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 				       maclen);
 
 		diffs |= skb_get_nfct(p) ^ skb_get_nfct(skb);
-
+#if IS_ENABLED(CONFIG_SKB_EXTENSIONS) && IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
 		if (!diffs) {
 			struct tc_skb_ext *skb_ext = skb_ext_find(skb, TC_SKB_EXT);
 			struct tc_skb_ext *p_ext = skb_ext_find(p, TC_SKB_EXT);
@@ -5519,6 +5519,7 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 			if (!diffs && unlikely(skb_ext))
 				diffs |= p_ext->chain ^ skb_ext->chain;
 		}
+#endif
 
 		NAPI_GRO_CB(p)->same_flow = !diffs;
 	}
