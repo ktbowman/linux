@@ -702,18 +702,15 @@ struct phy_driver {
 	/* Determines the negotiated speed and duplex */
 	int (*read_status)(struct phy_device *phydev);
 
-	/* Clears any pending interrupts */
-	int (*ack_interrupt)(struct phy_device *phydev);
+	RH_KABI_DEPRECATE_FN(int, ack_interrupt, struct phy_device *phydev)
 
-	/* Enables or disables interrupts */
+	/** @config_intr: Enables or disables interrupts.
+	 * It should also clear any pending interrupts prior to enabling the
+	 * IRQs and after disabling them.
+	 */
 	int (*config_intr)(struct phy_device *phydev);
 
-	/*
-	 * Checks if the PHY generated an interrupt.
-	 * For multi-PHY devices with shared PHY interrupt pin
-	 * Set interrupt bits have to be cleared.
-	 */
-	int (*did_interrupt)(struct phy_device *phydev);
+	RH_KABI_DEPRECATE_FN(int, did_interrupt, struct phy_device *phydev)
 
 	/* Clears up any memory if needed */
 	void (*remove)(struct phy_device *phydev);
@@ -1444,10 +1441,6 @@ static inline int genphy_config_aneg(struct phy_device *phydev)
 	return __genphy_config_aneg(phydev, false);
 }
 
-static inline int genphy_no_ack_interrupt(struct phy_device *phydev)
-{
-	return 0;
-}
 static inline int genphy_no_config_intr(struct phy_device *phydev)
 {
 	return 0;
