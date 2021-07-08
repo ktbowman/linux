@@ -2209,6 +2209,10 @@ static int vsc85xx_config_intr(struct phy_device *phydev)
 	int rc;
 
 	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		rc = vsc85xx_ack_interrupt(phydev);
+		if (rc)
+			return rc;
+
 		rc = phy_write(phydev, MII_VSC85XX_INT_MASK,
 			       MII_VSC85XX_INT_MASK_MASK);
 	} else {
@@ -2216,6 +2220,10 @@ static int vsc85xx_config_intr(struct phy_device *phydev)
 		if (rc < 0)
 			return rc;
 		rc = phy_read(phydev, MII_VSC85XX_INT_STATUS);
+		if (rc < 0)
+			return rc;
+
+		rc = vsc85xx_ack_interrupt(phydev);
 	}
 
 	return rc;
@@ -2574,7 +2582,6 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2625,7 +2632,6 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
@@ -2649,7 +2655,6 @@ static struct phy_driver vsc85xx_driver[] = {
 	.aneg_done	= &genphy_aneg_done,
 	.read_status	= &vsc85xx_read_status,
 	.handle_interrupt = &vsc8584_handle_interrupt,
-	.ack_interrupt  = &vsc85xx_ack_interrupt,
 	.config_intr    = &vsc85xx_config_intr,
 	.suspend	= &genphy_suspend,
 	.resume		= &genphy_resume,
