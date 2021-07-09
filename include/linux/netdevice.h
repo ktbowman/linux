@@ -1013,6 +1013,12 @@ struct net_device_ops_extended_rh {
 struct devlink;
 
 
+struct netdev_name_node {
+	struct hlist_node hlist;
+	struct net_device *dev;
+	const char *name;
+};
+
 /*
  * This structure defines the management hooks for network devices.
  * The following hooks can be defined; unless noted otherwise, they are
@@ -1727,7 +1733,7 @@ struct net_device_extended_rh {
  *		(i.e. as seen by users in the "Space.c" file).  It is the name
  *		of the interface.
  *
- *	@name_hlist: 	Device name hash chain, please keep it close to name[]
+ *	@name_node:	Name hashlist node
  *	@ifalias:	SNMP alias
  *	@mem_end:	Shared memory end
  *	@mem_start:	Shared memory start
@@ -1948,7 +1954,8 @@ struct net_device_extended_rh {
 
 struct net_device {
 	char			name[IFNAMSIZ];
-	struct hlist_node	name_hlist;
+	RH_KABI_REPLACE(struct hlist_node name_hlist,
+			struct netdev_name_node *name_node)
 	struct dev_ifalias	__rcu *ifalias;
 	/*
 	 *	I/O specific fields
