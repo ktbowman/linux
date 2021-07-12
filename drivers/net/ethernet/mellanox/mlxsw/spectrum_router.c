@@ -3942,12 +3942,6 @@ static void mlxsw_sp_nexthop_type_fini(struct mlxsw_sp *mlxsw_sp,
 	}
 }
 
-static void mlxsw_sp_nexthop4_type_fini(struct mlxsw_sp *mlxsw_sp,
-					struct mlxsw_sp_nexthop *nh)
-{
-	mlxsw_sp_nexthop_type_fini(mlxsw_sp, nh);
-}
-
 static int mlxsw_sp_nexthop4_init(struct mlxsw_sp *mlxsw_sp,
 				  struct mlxsw_sp_nexthop_group *nh_grp,
 				  struct mlxsw_sp_nexthop *nh,
@@ -3999,7 +3993,7 @@ err_nexthop_neigh_init:
 static void mlxsw_sp_nexthop4_fini(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_nexthop *nh)
 {
-	mlxsw_sp_nexthop4_type_fini(mlxsw_sp, nh);
+	mlxsw_sp_nexthop_type_fini(mlxsw_sp, nh);
 	list_del(&nh->router_list_node);
 	mlxsw_sp_nexthop_counter_free(mlxsw_sp, nh);
 	mlxsw_sp_nexthop_remove(mlxsw_sp, nh);
@@ -4024,7 +4018,7 @@ static void mlxsw_sp_nexthop4_event(struct mlxsw_sp *mlxsw_sp,
 		mlxsw_sp_nexthop_type_init(mlxsw_sp, nh, fib_nh->nh_dev);
 		break;
 	case FIB_EVENT_NH_DEL:
-		mlxsw_sp_nexthop4_type_fini(mlxsw_sp, nh);
+		mlxsw_sp_nexthop_type_fini(mlxsw_sp, nh);
 		break;
 	}
 
@@ -5347,12 +5341,6 @@ static bool mlxsw_sp_nexthop6_ipip_type(const struct mlxsw_sp *mlxsw_sp,
 	       mlxsw_sp_netdev_ipip_type(mlxsw_sp, rt->fib6_nh.nh_dev, ret);
 }
 
-static void mlxsw_sp_nexthop6_type_fini(struct mlxsw_sp *mlxsw_sp,
-					struct mlxsw_sp_nexthop *nh)
-{
-	mlxsw_sp_nexthop_type_fini(mlxsw_sp, nh);
-}
-
 static int mlxsw_sp_nexthop6_init(struct mlxsw_sp *mlxsw_sp,
 				  struct mlxsw_sp_nexthop_group *nh_grp,
 				  struct mlxsw_sp_nexthop *nh,
@@ -5380,7 +5368,7 @@ static int mlxsw_sp_nexthop6_init(struct mlxsw_sp *mlxsw_sp,
 static void mlxsw_sp_nexthop6_fini(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_nexthop *nh)
 {
-	mlxsw_sp_nexthop6_type_fini(mlxsw_sp, nh);
+	mlxsw_sp_nexthop_type_fini(mlxsw_sp, nh);
 	list_del(&nh->router_list_node);
 	mlxsw_sp_nexthop_counter_free(mlxsw_sp, nh);
 }
