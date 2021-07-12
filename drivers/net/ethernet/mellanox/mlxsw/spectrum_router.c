@@ -430,6 +430,7 @@ struct mlxsw_sp_fib_entry {
 
 struct mlxsw_sp_fib4_entry {
 	struct mlxsw_sp_fib_entry common;
+	struct fib_info *fi;
 	u32 tb_id;
 	u32 prio;
 	u8 tos;
@@ -4236,7 +4237,6 @@ static void
 mlxsw_sp_fib4_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 				 struct mlxsw_sp_fib_entry *fib_entry)
 {
-	struct fib_info *fi = mlxsw_sp_nexthop4_group_fi(fib_entry->nh_group);
 	u32 *p_dst = (u32 *) fib_entry->fib_node->key.addr;
 	int dst_len = fib_entry->fib_node->key.prefix_len;
 	struct mlxsw_sp_fib4_entry *fib4_entry;
@@ -4246,7 +4246,7 @@ mlxsw_sp_fib4_entry_hw_flags_set(struct mlxsw_sp *mlxsw_sp,
 	should_offload = mlxsw_sp_fib_entry_should_offload(fib_entry);
 	fib4_entry = container_of(fib_entry, struct mlxsw_sp_fib4_entry,
 				  common);
-	fri.fi = fi;
+	fri.fi = fib4_entry->fi;
 	fri.tb_id = fib4_entry->tb_id;
 	fri.dst = cpu_to_be32(*p_dst);
 	fri.dst_len = dst_len;
@@ -4261,7 +4261,6 @@ static void
 mlxsw_sp_fib4_entry_hw_flags_clear(struct mlxsw_sp *mlxsw_sp,
 				   struct mlxsw_sp_fib_entry *fib_entry)
 {
-	struct fib_info *fi = mlxsw_sp_nexthop4_group_fi(fib_entry->nh_group);
 	u32 *p_dst = (u32 *) fib_entry->fib_node->key.addr;
 	int dst_len = fib_entry->fib_node->key.prefix_len;
 	struct mlxsw_sp_fib4_entry *fib4_entry;
@@ -4269,7 +4268,7 @@ mlxsw_sp_fib4_entry_hw_flags_clear(struct mlxsw_sp *mlxsw_sp,
 
 	fib4_entry = container_of(fib_entry, struct mlxsw_sp_fib4_entry,
 				  common);
-	fri.fi = fi;
+	fri.fi = fib4_entry->fi;
 	fri.tb_id = fib4_entry->tb_id;
 	fri.dst = cpu_to_be32(*p_dst);
 	fri.dst_len = dst_len;
@@ -4827,6 +4826,8 @@ mlxsw_sp_fib4_entry_create(struct mlxsw_sp *mlxsw_sp,
 	if (err)
 		goto err_nexthop4_group_get;
 
+	fib4_entry->fi = fen_info->fi;
+	fib_info_hold(fib4_entry->fi);
 	fib4_entry->prio = fen_info->fi->fib_priority;
 	fib4_entry->tb_id = fen_info->tb_id;
 	fib4_entry->type = fen_info->type;
@@ -4848,6 +4849,7 @@ err_fib_entry_priv_create:
 static void mlxsw_sp_fib4_entry_destroy(struct mlxsw_sp *mlxsw_sp,
 					struct mlxsw_sp_fib4_entry *fib4_entry)
 {
+	fib_info_put(fib4_entry->fi);
 	mlxsw_sp_nexthop4_group_put(mlxsw_sp, &fib4_entry->common);
 	mlxsw_sp_fib4_entry_type_unset(mlxsw_sp, &fib4_entry->common);
 	mlxsw_sp_fib_entry_priv_put(fib4_entry->common.priv);
@@ -4879,8 +4881,7 @@ mlxsw_sp_fib4_entry_lookup(struct mlxsw_sp *mlxsw_sp,
 	if (fib4_entry->tb_id == fen_info->tb_id &&
 	    fib4_entry->tos == fen_info->tos &&
 	    fib4_entry->type == fen_info->type &&
-	    mlxsw_sp_nexthop4_group_fi(fib4_entry->common.nh_group) ==
-	    fen_info->fi)
+	    fib4_entry->fi == fen_info->fi)
 		return fib4_entry;
 
 	return NULL;
