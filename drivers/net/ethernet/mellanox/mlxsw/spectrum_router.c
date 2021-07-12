@@ -3908,10 +3908,9 @@ static void mlxsw_sp_nexthop_type_fini(struct mlxsw_sp *mlxsw_sp,
 
 static int mlxsw_sp_nexthop4_type_init(struct mlxsw_sp *mlxsw_sp,
 				       struct mlxsw_sp_nexthop *nh,
-				       struct fib_nh *fib_nh)
+				       const struct net_device *dev)
 {
 	const struct mlxsw_sp_ipip_ops *ipip_ops;
-	struct net_device *dev = fib_nh->nh_dev;
 	struct mlxsw_sp_ipip_entry *ipip_entry;
 	struct mlxsw_sp_rif *rif;
 	int err;
@@ -3986,7 +3985,7 @@ static int mlxsw_sp_nexthop4_init(struct mlxsw_sp *mlxsw_sp,
 	}
 	rcu_read_unlock();
 
-	err = mlxsw_sp_nexthop4_type_init(mlxsw_sp, nh, fib_nh);
+	err = mlxsw_sp_nexthop4_type_init(mlxsw_sp, nh, dev);
 	if (err)
 		goto err_nexthop_neigh_init;
 
@@ -4022,7 +4021,7 @@ static void mlxsw_sp_nexthop4_event(struct mlxsw_sp *mlxsw_sp,
 
 	switch (event) {
 	case FIB_EVENT_NH_ADD:
-		mlxsw_sp_nexthop4_type_init(mlxsw_sp, nh, fib_nh);
+		mlxsw_sp_nexthop4_type_init(mlxsw_sp, nh, fib_nh->nh_dev);
 		break;
 	case FIB_EVENT_NH_DEL:
 		mlxsw_sp_nexthop4_type_fini(mlxsw_sp, nh);
