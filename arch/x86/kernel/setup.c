@@ -730,12 +730,6 @@ static void __init trim_snb_memory(void)
 
 	printk(KERN_DEBUG "reserving inaccessible SNB gfx pages\n");
 
-	/*
-	 * Reserve all memory below the 1 MB mark that has not
-	 * already been reserved.
-	 */
-	memblock_reserve(0, 1<<20);
-	
 	for (i = 0; i < ARRAY_SIZE(bad_pages); i++) {
 		if (memblock_reserve(bad_pages[i], PAGE_SIZE))
 			printk(KERN_WARNING "failed to reserve 0x%08lx\n",
@@ -825,7 +819,7 @@ early_param("reservelow", parse_reservelow);
 
 static void __init trim_low_memory_range(void)
 {
-	memblock_reserve(0, ALIGN(reserve_low, PAGE_SIZE));
+	memblock_reserve(0, SZ_64K);
 }
 
 static void rh_check_supported(void)
@@ -1222,10 +1216,10 @@ void __init setup_arch(char **cmdline_p)
 			(max_pfn_mapped<<PAGE_SHIFT) - 1);
 #endif
 
-	reserve_real_mode();
-
 	trim_platform_memory_ranges();
 	trim_low_memory_range();
+
+	reserve_real_mode();
 
 	init_mem_mapping();
 
