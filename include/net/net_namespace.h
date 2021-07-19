@@ -200,6 +200,8 @@ struct net {
 	RH_KABI_EXTEND(seqcount_spinlock_t	xfrm_state_hash_generation)
 	RH_KABI_EXTEND(unsigned int nf_tcp_net_offload_timeout)
 	RH_KABI_EXTEND(unsigned int nf_tcp_net_offload_pickup)
+	RH_KABI_EXTEND(unsigned int nf_udp_net_offload_timeout)
+	RH_KABI_EXTEND(unsigned int nf_udp_net_offload_pickup)
 } __randomize_layout;
 
 #include <linux/seq_file_net.h>
