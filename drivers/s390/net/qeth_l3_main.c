@@ -1611,9 +1611,8 @@ static int qeth_l3_get_cast_type_rcu(struct sk_buff *skb, struct dst_entry *dst,
 	}
 }
 
-static int qeth_l3_get_cast_type(struct sk_buff *skb)
+static int qeth_l3_get_cast_type(struct sk_buff *skb, __be16 proto)
 {
-	__be16 proto = vlan_get_protocol(skb);
 	struct dst_entry *dst;
 	int cast_type;
 
@@ -1772,7 +1771,7 @@ static netdev_tx_t qeth_l3_hard_start_xmit(struct sk_buff *skb,
 	}
 
 	if (!(dev->flags & IFF_BROADCAST) &&
-	    qeth_l3_get_cast_type(skb) == RTN_BROADCAST)
+	    qeth_l3_get_cast_type(skb, proto) == RTN_BROADCAST)
 		goto tx_drop;
 
 	if (proto == htons(ETH_P_IP) || IS_IQD(card))
@@ -1833,7 +1832,10 @@ static u16 qeth_l3_iqd_select_queue(struct net_device *dev, struct sk_buff *skb,
 				    struct net_device *sb_dev,
 				    select_queue_fallback_t fallback)
 {
-	return qeth_iqd_select_queue(dev, skb, qeth_l3_get_cast_type(skb),
+	__be16 proto = vlan_get_protocol(skb);
+
+	return qeth_iqd_select_queue(dev, skb,
+				     qeth_l3_get_cast_type(skb, proto),
 				     sb_dev, fallback);
 }
 
