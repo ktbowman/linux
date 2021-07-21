@@ -161,6 +161,7 @@ static void create_mkey_callback(int status, struct mlx5_async_work *context)
 	mr->mmkey.type = MLX5_MKEY_MR;
 	mr->mmkey.key |= mlx5_idx_to_mkey(
 		MLX5_GET(create_mkey_out, mr->out, mkey_index));
+	init_waitqueue_head(&mr->mmkey.wait);
 
 	WRITE_ONCE(dev->cache.last_add, jiffies);
 
@@ -592,6 +593,8 @@ struct mlx5_ib_mr *mlx5_mr_cache_alloc(struct mlx5_ib_dev *dev,
 		ent->available_mrs--;
 		queue_adjust_cache_locked(ent);
 		spin_unlock_irq(&ent->lock);
+
+		mlx5_clear_mr(mr);
 	}
 	mr->access_flags = access_flags;
 	return mr;
@@ -617,16 +620,14 @@ static struct mlx5_ib_mr *get_cache_mr(struct mlx5_cache_ent *req_ent)
 			ent->available_mrs--;
 			queue_adjust_cache_locked(ent);
 			spin_unlock_irq(&ent->lock);
-			break;
+			mlx5_clear_mr(mr);
+			return mr;
 		}
 		queue_adjust_cache_locked(ent);
 		spin_unlock_irq(&ent->lock);
 	}
-
-	if (!mr)
-		req_ent->miss++;
-
-	return mr;
+	req_ent->miss++;
+	return NULL;
 }
 
 static void detach_mr_from_cache(struct mlx5_ib_mr *mr)
@@ -766,10 +767,10 @@ int mlx5_mr_cache_init(struct mlx5_ib_dev *dev)
 		ent->xlt = (1 << ent->order) * sizeof(struct mlx5_mtt) /
 			   MLX5_IB_UMR_OCTOWORD;
 		ent->access_mode = MLX5_MKC_ACCESS_MODE_MTT;
-		if ((dev->mdev->profile->mask & MLX5_PROF_MASK_MR_CACHE) &&
+		if ((dev->mdev->profile.mask & MLX5_PROF_MASK_MR_CACHE) &&
 		    !dev->is_rep && mlx5_core_is_pf(dev->mdev) &&
 		    mlx5_ib_can_load_pas_with_umr(dev, 0))
-			ent->limit = dev->mdev->profile->mr_cache[i].limit;
+			ent->limit = dev->mdev->profile.mr_cache[i].limit;
 		else
 			ent->limit = 0;
 		spin_lock_irq(&ent->lock);
@@ -986,8 +987,6 @@ static struct mlx5_ib_mr *alloc_mr_from_cache(struct ib_pd *pd,
 
 	mr->ibmr.pd = pd;
 	mr->umem = umem;
-	mr->access_flags = access_flags;
-	mr->desc_size = sizeof(struct mlx5_mtt);
 	mr->mmkey.iova = iova;
 	mr->mmkey.size = umem->length;
 	mr->mmkey.pd = to_mpd(pd)->pdn;
@@ -1498,11 +1497,7 @@ struct ib_mr *mlx5_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 
 	if (is_odp_mr(mr)) {
 		to_ib_umem_odp(mr->umem)->private = mr;
-		init_waitqueue_head(&mr->q_deferred_work);
-		atomic_set(&mr->num_deferred_work, 0);
-		err = xa_err(xa_store(&dev->odp_mkeys,
-				      mlx5_base_mkey(mr->mmkey.key), &mr->mmkey,
-				      GFP_KERNEL));
+		err = mlx5r_store_odp_mkey(dev, &mr->mmkey);
 		if (err) {
 			dereg_mr(dev, mr);
 			return ERR_PTR(err);
@@ -2103,9 +2098,7 @@ int mlx5_ib_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 	}
 
 	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING)) {
-		err = xa_err(xa_store(&dev->odp_mkeys,
-				      mlx5_base_mkey(mw->mmkey.key), &mw->mmkey,
-				      GFP_KERNEL));
+		err = mlx5r_store_odp_mkey(dev, &mw->mmkey);
 		if (err)
 			goto free_mkey;
 	}
@@ -2125,14 +2118,13 @@ int mlx5_ib_dealloc_mw(struct ib_mw *mw)
 	struct mlx5_ib_dev *dev = to_mdev(mw->device);
 	struct mlx5_ib_mw *mmw = to_mmw(mw);
 
-	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING)) {
-		xa_erase(&dev->odp_mkeys, mlx5_base_mkey(mmw->mmkey.key));
+	if (IS_ENABLED(CONFIG_INFINIBAND_ON_DEMAND_PAGING) &&
+	    xa_erase(&dev->odp_mkeys, mlx5_base_mkey(mmw->mmkey.key)))
 		/*
-		 * pagefault_single_data_segment() may be accessing mmw under
-		 * SRCU if the user bound an ODP MR to this MW.
+		 * pagefault_single_data_segment() may be accessing mmw
+		 * if the user bound an ODP MR to this MW.
 		 */
-		synchronize_srcu(&dev->odp_srcu);
-	}
+		mlx5r_deref_wait_odp_mkey(&mmw->mmkey);
 
 	return mlx5_core_destroy_mkey(dev->mdev, &mmw->mmkey);
 }
