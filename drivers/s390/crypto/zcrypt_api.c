@@ -847,7 +847,7 @@ out:
 	return rc;
 }
 
-static long _zcrypt_send_cprb(struct ap_perms *perms,
+static long _zcrypt_send_cprb(bool userspace, struct ap_perms *perms,
 			      struct zcrypt_track *tr,
 			      struct ica_xcRB *xcRB)
 {
@@ -875,7 +875,7 @@ static long _zcrypt_send_cprb(struct ap_perms *perms,
 	}
 #endif
 
-	rc = get_cprb_fc(xcRB, &ap_msg, &func_code, &domain);
+	rc = get_cprb_fc(userspace, xcRB, &ap_msg, &func_code, &domain);
 	if (rc)
 		goto out;
 
@@ -958,7 +958,7 @@ static long _zcrypt_send_cprb(struct ap_perms *perms,
 	}
 #endif
 
-	rc = pref_zq->ops->send_cprb(pref_zq, xcRB, &ap_msg);
+	rc = pref_zq->ops->send_cprb(userspace, pref_zq, xcRB, &ap_msg);
 
 	spin_lock(&zcrypt_list_lock);
 	zcrypt_drop_queue(pref_zc, pref_zq, mod, wgt);
@@ -977,7 +977,7 @@ out:
 
 long zcrypt_send_cprb(struct ica_xcRB *xcRB)
 {
-	return _zcrypt_send_cprb(&ap_perms, NULL, xcRB);
+	return _zcrypt_send_cprb(false, &ap_perms, NULL, xcRB);
 }
 EXPORT_SYMBOL(zcrypt_send_cprb);
 
@@ -1008,7 +1008,7 @@ static bool is_desired_ep11_queue(unsigned int dev_qid,
 	return false;
 }
 
-static long _zcrypt_send_ep11_cprb(struct ap_perms *perms,
+static long _zcrypt_send_ep11_cprb(bool userspace, struct ap_perms *perms,
 				   struct zcrypt_track *tr,
 				   struct ep11_urb *xcrb)
 {
@@ -1046,7 +1046,7 @@ static long _zcrypt_send_ep11_cprb(struct ap_perms *perms,
 		}
 
 		uptr = (struct ep11_target_dev __force __user *) xcrb->targets;
-		if (copy_from_user(targets, uptr,
+		if (z_copy_from_user(userspace, targets, uptr,
 				   target_num * sizeof(*targets))) {
 			func_code = 0;
 			rc = -EFAULT;
@@ -1054,7 +1054,7 @@ static long _zcrypt_send_ep11_cprb(struct ap_perms *perms,
 		}
 	}
 
-	rc = get_ep11cprb_fc(xcrb, &ap_msg, &func_code);
+	rc = get_ep11cprb_fc(userspace, xcrb, &ap_msg, &func_code);
 	if (rc)
 		goto out_free;
 
@@ -1115,7 +1115,7 @@ static long _zcrypt_send_ep11_cprb(struct ap_perms *perms,
 	}
 
 	qid = pref_zq->queue->qid;
-	rc = pref_zq->ops->send_ep11_cprb(pref_zq, xcrb, &ap_msg);
+	rc = pref_zq->ops->send_ep11_cprb(userspace, pref_zq, xcrb, &ap_msg);
 
 	spin_lock(&zcrypt_list_lock);
 	zcrypt_drop_queue(pref_zc, pref_zq, mod, wgt);
@@ -1136,7 +1136,7 @@ out:
 
 long zcrypt_send_ep11_cprb(struct ep11_urb *xcrb)
 {
-	return _zcrypt_send_ep11_cprb(&ap_perms, NULL, xcrb);
+	return _zcrypt_send_ep11_cprb(false, &ap_perms, NULL, xcrb);
 }
 EXPORT_SYMBOL(zcrypt_send_ep11_cprb);
 
@@ -1510,7 +1510,7 @@ static int zsecsendcprb_ioctl(struct ap_perms *perms, unsigned long arg)
 #endif
 
 	do {
-		rc = _zcrypt_send_cprb(perms, &tr, &xcRB);
+		rc = _zcrypt_send_cprb(true, perms, &tr, &xcRB);
 		if (rc == -EAGAIN)
 			tr.again_counter++;
 #ifdef CONFIG_ZCRYPT_DEBUG
@@ -1521,7 +1521,7 @@ static int zsecsendcprb_ioctl(struct ap_perms *perms, unsigned long arg)
 	/* on failure: retry once again after a requested rescan */
 	if ((rc == -ENODEV) && (zcrypt_process_rescan()))
 		do {
-			rc = _zcrypt_send_cprb(perms, &tr, &xcRB);
+			rc = _zcrypt_send_cprb(true, perms, &tr, &xcRB);
 			if (rc == -EAGAIN)
 				tr.again_counter++;
 		} while (rc == -EAGAIN && tr.again_counter < TRACK_AGAIN_MAX);
@@ -1554,7 +1554,7 @@ static int zsendep11cprb_ioctl(struct ap_perms *perms, unsigned long arg)
 #endif
 
 	do {
-		rc = _zcrypt_send_ep11_cprb(perms, &tr, &xcrb);
+		rc = _zcrypt_send_ep11_cprb(true, perms, &tr, &xcrb);
 		if (rc == -EAGAIN)
 			tr.again_counter++;
 #ifdef CONFIG_ZCRYPT_DEBUG
@@ -1565,7 +1565,7 @@ static int zsendep11cprb_ioctl(struct ap_perms *perms, unsigned long arg)
 	/* on failure: retry once again after a requested rescan */
 	if ((rc == -ENODEV) && (zcrypt_process_rescan()))
 		do {
-			rc = _zcrypt_send_ep11_cprb(perms, &tr, &xcrb);
+			rc = _zcrypt_send_ep11_cprb(true, perms, &tr, &xcrb);
 			if (rc == -EAGAIN)
 				tr.again_counter++;
 		} while (rc == -EAGAIN && tr.again_counter < TRACK_AGAIN_MAX);
@@ -1855,14 +1855,14 @@ static long trans_xcRB32(struct ap_perms *perms, struct file *filp,
 	xcRB64.priority_window = xcRB32.priority_window;
 	xcRB64.status = xcRB32.status;
 	do {
-		rc = _zcrypt_send_cprb(perms, &tr, &xcRB64);
+		rc = _zcrypt_send_cprb(true, perms, &tr, &xcRB64);
 		if (rc == -EAGAIN)
 			tr.again_counter++;
 	} while (rc == -EAGAIN && tr.again_counter < TRACK_AGAIN_MAX);
 	/* on failure: retry once again after a requested rescan */
 	if ((rc == -ENODEV) && (zcrypt_process_rescan()))
 		do {
-			rc = _zcrypt_send_cprb(perms, &tr, &xcRB64);
+			rc = _zcrypt_send_cprb(true, perms, &tr, &xcRB64);
 			if (rc == -EAGAIN)
 				tr.again_counter++;
 		} while (rc == -EAGAIN && tr.again_counter < TRACK_AGAIN_MAX);
