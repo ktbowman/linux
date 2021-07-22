@@ -1256,11 +1256,6 @@ int arch_update_cpu_topology(void)
 	return numa_update_cpu_topology(true);
 }
 
-int prrn_is_enabled(void)
-{
-	return 0;
-}
-
 int cpu_to_coregroup_id(int cpu)
 {
 	__be32 associativity[VPHN_ASSOC_BUFSIZE] = {0};
