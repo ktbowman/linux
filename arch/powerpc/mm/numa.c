@@ -1453,17 +1453,6 @@ int arch_update_cpu_topology(void)
 	return numa_update_cpu_topology(true);
 }
 
-static void topology_work_fn(struct work_struct *work)
-{
-	rebuild_sched_domains();
-}
-static DECLARE_WORK(topology_work, topology_work_fn);
-
-static void topology_schedule_update(void)
-{
-	schedule_work(&topology_work);
-}
-
 /*
  * Start polling for associativity changes.
  */
@@ -1513,9 +1502,6 @@ out:
 static int topology_update_init(void)
 {
 	start_topology_update();
-
-	if (vphn_enabled)
-		topology_schedule_update();
 
 	topology_inited = 1;
 	return 0;
