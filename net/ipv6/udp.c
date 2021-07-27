@@ -1274,7 +1274,7 @@ int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	ipc6.hlimit = -1;
 	ipc6.tclass = -1;
 	ipc6.dontfrag = -1;
-	ipc6.gso_size = up->gso_size;
+	ipc6.gso_size = READ_ONCE(up->gso_size);
 	sockc.tsflags = sk->sk_tsflags;
 	sockc.transmit_time = 0;
 
