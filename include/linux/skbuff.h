@@ -688,6 +688,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@csum_not_inet: use CRC32c to resolve CHECKSUM_PARTIAL
  *	@dst_pending_confirm: need to confirm neighbour
  *	@decrypted: Decrypted SKB
+ *	@slow_gro: state present at GRO time, slower prepare step required
  *	@napi_id: id of the NAPI struct this skb came from
  *	@secmark: security marking
  *	@mark: Generic packet mark
@@ -861,8 +862,9 @@ struct sk_buff {
 	 * 'tc_index') is 2 bytes hole so we can put new fields here.
 	 */
 	RH_KABI_FILL_HOLE(__u8	decrypted:1)
+	RH_KABI_FILL_HOLE(__u8	slow_gro:1)
 
-	/* 15 bits remain - update after adding new field here */
+	/* 14 bits remain - update after adding new field here */
 
 	union {
 		__wsum		csum;
@@ -4381,6 +4383,7 @@ static inline void nf_copy(struct sk_buff *dst, const struct sk_buff *src)
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	nf_bridge_put(dst->nf_bridge);
 #endif
+	dst->slow_gro = src->slow_gro;
 	__nf_copy(dst, src, true);
 }
 
