@@ -5499,7 +5499,6 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 		diffs |= skb_vlan_tag_present(p) ^ skb_vlan_tag_present(skb);
 		if (skb_vlan_tag_present(p))
 			diffs |= p->vlan_tci ^ skb->vlan_tci;
-		diffs |= skb_metadata_dst_cmp(p, skb);
 		diffs |= skb_metadata_differs(p, skb);
 		if (maclen == ETH_HLEN)
 			diffs |= compare_ether_header(skb_mac_header(p),
@@ -5509,17 +5508,29 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 				       skb_mac_header(skb),
 				       maclen);
 
-		diffs |= skb_get_nfct(p) ^ skb_get_nfct(skb);
+		/* in most common scenarions _state is 0
+		 * otherwise we are already on some slower paths
+		 * either skip all the infrequent tests altogether or
+		 * avoid trying too hard to skip each of them individually
+		 */
+		if (!diffs && unlikely(skb->slow_gro | p->slow_gro)) {
 #if IS_ENABLED(CONFIG_SKB_EXTENSIONS) && IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
-		if (!diffs) {
-			struct tc_skb_ext *skb_ext = skb_ext_find(skb, TC_SKB_EXT);
-			struct tc_skb_ext *p_ext = skb_ext_find(p, TC_SKB_EXT);
+			struct tc_skb_ext *skb_ext;
+			struct tc_skb_ext *p_ext;
+#endif
+
+			diffs |= skb_metadata_dst_cmp(p, skb);
+			diffs |= skb_get_nfct(p) ^ skb_get_nfct(skb);
+
+#if IS_ENABLED(CONFIG_SKB_EXTENSIONS) && IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
+			skb_ext = skb_ext_find(skb, TC_SKB_EXT);
+			p_ext = skb_ext_find(p, TC_SKB_EXT);
 
 			diffs |= (!!p_ext) ^ (!!skb_ext);
 			if (!diffs && unlikely(skb_ext))
 				diffs |= p_ext->chain ^ skb_ext->chain;
-		}
 #endif
+		}
 
 		NAPI_GRO_CB(p)->same_flow = !diffs;
 	}
@@ -5704,9 +5715,12 @@ EXPORT_SYMBOL(gro_find_complete_by_type);
 
 static void napi_skb_free_stolen_head(struct sk_buff *skb)
 {
-	nf_reset(skb);
-	skb_dst_drop(skb);
-	skb_ext_put(skb);
+	if (unlikely(skb->slow_gro)) {
+		nf_reset(skb);
+		skb_dst_drop(skb);
+		skb_ext_put(skb);
+		skb->slow_gro = 0;
+	}
 	kmem_cache_free(skbuff_head_cache, skb);
 }
 
@@ -5768,8 +5782,11 @@ static void napi_reuse_skb(struct napi_struct *napi, struct sk_buff *skb)
 	skb->encapsulation = 0;
 	skb_shinfo(skb)->gso_type = 0;
 	skb->truesize = SKB_TRUESIZE(skb_end_offset(skb));
-	skb_ext_reset(skb);
-	nf_reset(skb);
+	if (unlikely(skb->slow_gro)) {
+		skb_ext_reset(skb);
+		nf_reset(skb);
+		skb->slow_gro = 0;
+	}
 
 	napi->skb = skb;
 }
