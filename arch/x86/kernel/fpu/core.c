@@ -42,18 +42,6 @@ static DEFINE_PER_CPU(bool, in_kernel_fpu);
  */
 DEFINE_PER_CPU(struct fpu *, fpu_fpregs_owner_ctx);
 
-static void kernel_fpu_disable(void)
-{
-	WARN_ON_FPU(this_cpu_read(in_kernel_fpu));
-	this_cpu_write(in_kernel_fpu, true);
-}
-
-static void kernel_fpu_enable(void)
-{
-	WARN_ON_FPU(!this_cpu_read(in_kernel_fpu));
-	this_cpu_write(in_kernel_fpu, false);
-}
-
 static bool kernel_fpu_disabled(void)
 {
 	return this_cpu_read(in_kernel_fpu);
@@ -93,50 +81,40 @@ bool irq_fpu_usable(void)
 }
 EXPORT_SYMBOL(irq_fpu_usable);
 
-void __kernel_fpu_begin(void)
+void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 {
-	struct fpu *fpu = &current->thread.fpu;
+	preempt_disable();
 
 	WARN_ON_FPU(!irq_fpu_usable());
+	WARN_ON_FPU(this_cpu_read(in_kernel_fpu));
 
-	kernel_fpu_disable();
+	this_cpu_write(in_kernel_fpu, true);
 
-	if (current->mm) {
-		if (!test_thread_flag(TIF_NEED_FPU_LOAD)) {
-			set_thread_flag(TIF_NEED_FPU_LOAD);
-			/*
-			 * Ignore return value -- we don't care if reg state
-			 * is clobbered.
-			 */
-			copy_fpregs_to_fpstate(fpu);
-		}
+	if (!(current->flags & PF_KTHREAD) &&
+	    !test_thread_flag(TIF_NEED_FPU_LOAD)) {
+		set_thread_flag(TIF_NEED_FPU_LOAD);
+		/*
+		 * Ignore return value -- we don't care if reg state
+		 * is clobbered.
+		 */
+		copy_fpregs_to_fpstate(&current->thread.fpu);
 	}
 	__cpu_invalidate_fpregs_state();
 
-	if (boot_cpu_has(X86_FEATURE_XMM))
+	/* Put sane initial values into the control registers. */
+	if (likely(kfpu_mask & KFPU_MXCSR) && boot_cpu_has(X86_FEATURE_XMM))
 		ldmxcsr(MXCSR_DEFAULT);
 
-	if (boot_cpu_has(X86_FEATURE_FPU))
+	if (unlikely(kfpu_mask & KFPU_387) && boot_cpu_has(X86_FEATURE_FPU))
 		asm volatile ("fninit");
 }
-EXPORT_SYMBOL(__kernel_fpu_begin);
-
-void __kernel_fpu_end(void)
-{
-	kernel_fpu_enable();
-}
-EXPORT_SYMBOL(__kernel_fpu_end);
-
-void kernel_fpu_begin(void)
-{
-	preempt_disable();
-	__kernel_fpu_begin();
-}
-EXPORT_SYMBOL_GPL(kernel_fpu_begin);
+EXPORT_SYMBOL_GPL(kernel_fpu_begin_mask);
 
 void kernel_fpu_end(void)
 {
-	__kernel_fpu_end();
+	WARN_ON_FPU(!this_cpu_read(in_kernel_fpu));
+
+	this_cpu_write(in_kernel_fpu, false);
 	preempt_enable();
 }
 EXPORT_SYMBOL_GPL(kernel_fpu_end);
