@@ -1143,7 +1143,7 @@ static bool __blk_mq_get_driver_tag(struct request *rq)
 	return true;
 }
 
-static bool blk_mq_get_driver_tag(struct request *rq)
+bool blk_mq_get_driver_tag(struct request *rq)
 {
 	struct blk_mq_hw_ctx *hctx = rq->mq_hctx;
 
@@ -1262,9 +1262,6 @@ static bool blk_mq_mark_tag_wait(struct blk_mq_hw_ctx *hctx,
 static void blk_mq_update_dispatch_busy(struct blk_mq_hw_ctx *hctx, bool busy)
 {
 	unsigned int ewma;
-
-	if (hctx->queue->elevator)
-		return;
 
 	ewma = hctx->dispatch_busy;
 
