@@ -311,6 +311,7 @@ bool kvm_make_all_cpus_request(struct kvm *kvm, unsigned int req)
 {
 	return kvm_make_all_cpus_request_except(kvm, req, NULL);
 }
+EXPORT_SYMBOL_GPL(kvm_make_all_cpus_request);
 
 #ifndef CONFIG_HAVE_KVM_ARCH_TLB_FLUSH_ALL
 void kvm_flush_remote_tlbs(struct kvm *kvm)
@@ -510,7 +511,7 @@ static void kvm_mmu_notifier_invalidate_range_start(struct mmu_notifier *mn,
 		kvm->mmu_notifier_range_end =
 			max(kvm->mmu_notifier_range_end, end);
 	}
-	need_tlb_flush = kvm_unmap_hva_range(kvm, start, end);
+	need_tlb_flush = kvm_unmap_hva_range(kvm, start, end, 0);
 	/* we've to flush the tlb before the pages can be freed */
 	if (need_tlb_flush || kvm->tlbs_dirty)
 		kvm_flush_remote_tlbs(kvm);
@@ -2766,8 +2767,8 @@ static void grow_halt_poll_ns(struct kvm_vcpu *vcpu)
 	if (val < grow_start)
 		val = grow_start;
 
-	if (val > halt_poll_ns)
-		val = halt_poll_ns;
+	if (val > vcpu->kvm->max_halt_poll_ns)
+		val = vcpu->kvm->max_halt_poll_ns;
 
 	vcpu->halt_poll_ns = val;
 out:
@@ -2801,6 +2802,8 @@ static int kvm_vcpu_check_block(struct kvm_vcpu *vcpu)
 	if (kvm_cpu_has_pending_timer(vcpu))
 		goto out;
 	if (signal_pending(current))
+		goto out;
+	if (kvm_check_request(KVM_REQ_UNBLOCK, vcpu))
 		goto out;
 
 	ret = 0;
@@ -2846,7 +2849,7 @@ void kvm_vcpu_block(struct kvm_vcpu *vcpu)
 				goto out;
 			}
 			poll_end = cur = ktime_get();
-		} while (single_task_running() && ktime_before(cur, stop));
+		} while (kvm_vcpu_can_poll(cur, stop));
 	}
 
 	prepare_to_rcuwait(&vcpu->wait);
@@ -4075,6 +4078,12 @@ static struct file_operations kvm_vm_fops = {
 	.llseek		= noop_llseek,
 	KVM_COMPAT(kvm_vm_compat_ioctl),
 };
+
+bool file_is_kvm(struct file *file)
+{
+	return file && file->f_op == &kvm_vm_fops;
+}
+EXPORT_SYMBOL_GPL(file_is_kvm);
 
 static int kvm_dev_ioctl_create_vm(unsigned long type)
 {

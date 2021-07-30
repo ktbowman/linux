@@ -430,6 +430,13 @@ static void __handle_changed_spte(struct kvm *kvm, int as_id, gfn_t gfn,
 
 	trace_kvm_tdp_mmu_spte_changed(as_id, gfn, level, old_spte, new_spte);
 
+	if (is_large_pte(old_spte) != is_large_pte(new_spte)) {
+		if (is_large_pte(old_spte))
+			atomic64_sub(1, (atomic64_t*)&kvm->stat.lpages);
+		else
+			atomic64_add(1, (atomic64_t*)&kvm->stat.lpages);
+	}
+
 	/*
 	 * The only times a SPTE should be changed from a non-present to
 	 * non-present state is when an MMIO entry is installed/modified/
@@ -853,6 +860,14 @@ int kvm_tdp_mmu_map(struct kvm_vcpu *vcpu, gpa_t gpa, u32 error_code,
 		}
 
 		if (!is_shadow_present_pte(iter.old_spte)) {
+			/*
+			 * If SPTE has been forzen by another thread, just
+			 * give up and retry, avoiding unnecessary page table
+			 * allocation and free.
+			 */
+			if (is_removed_spte(iter.old_spte))
+				break;
+
 			sp = alloc_tdp_mmu_page(vcpu, iter.gfn, iter.level);
 			child_pt = sp->spt;
 
@@ -991,8 +1006,6 @@ static int age_gfn_range(struct kvm *kvm, struct kvm_memory_slot *slot,
 
 		tdp_mmu_set_spte_no_acc_track(kvm, &iter, new_spte);
 		young = 1;
-
-		trace_kvm_age_page(iter.gfn, iter.level, slot, young);
 	}
 
 	rcu_read_unlock();
@@ -1088,9 +1101,9 @@ int kvm_tdp_mmu_set_spte_hva(struct kvm *kvm, unsigned long address,
 }
 
 /*
- * Remove write access from all the SPTEs mapping GFNs [start, end). If
- * skip_4k is set, SPTEs that map 4k pages, will not be write-protected.
- * Returns true if an SPTE has been changed and the TLBs need to be flushed.
+ * Remove write access from all SPTEs at or above min_level that map GFNs
+ * [start, end). Returns true if an SPTE has been changed and the TLBs need to
+ * be flushed.
  */
 static bool wrprot_gfn_range(struct kvm *kvm, struct kvm_mmu_page *root,
 			     gfn_t start, gfn_t end, int min_level)
