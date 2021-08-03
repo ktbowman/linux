@@ -198,9 +198,8 @@ static netdev_tx_t vrf_process_v6_outbound(struct sk_buff *skb,
 
 	skb_dst_drop(skb);
 
-	/* if dst.dev is loopback or the VRF device again this is locally
-	 * originated traffic destined to a local address. Short circuit
-	 * to Rx path
+	/* if dst.dev is the VRF device again this is locally originated traffic
+	 * destined to a local address. Short circuit to Rx path.
 	 */
 	if (dst->dev == dev)
 		return vrf_local_xmit(skb, dev, dst);
@@ -274,9 +273,8 @@ static netdev_tx_t vrf_process_v4_outbound(struct sk_buff *skb,
 
 	skb_dst_drop(skb);
 
-	/* if dst.dev is loopback or the VRF device again this is locally
-	 * originated traffic destined to a local address. Short circuit
-	 * to Rx path
+	/* if dst.dev is the VRF device again this is locally originated traffic
+	 * destined to a local address. Short circuit to Rx path.
 	 */
 	if (rt->dst.dev == vrf_dev)
 		return vrf_local_xmit(skb, vrf_dev, &rt->dst);
@@ -868,9 +866,6 @@ static int vrf_dev_init(struct net_device *dev)
 
 	dev->flags = IFF_MASTER | IFF_NOARP;
 
-	/* MTU is irrelevant for VRF device; set to 64k similar to lo */
-	dev->mtu = 64 * 1024;
-
 	/* similarly, oper state is irrelevant; set to up to avoid confusion */
 	dev->operstate = IF_OPER_UP;
 	netdev_lockdep_set_classes(dev);
@@ -889,6 +884,7 @@ static const struct net_device_ops vrf_netdev_ops = {
 	.ndo_init		= vrf_dev_init,
 	.ndo_uninit		= vrf_dev_uninit,
 	.ndo_start_xmit		= vrf_xmit,
+	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_get_stats64	= vrf_get_stats64,
 	.ndo_add_slave		= vrf_add_slave,
 	.ndo_del_slave		= vrf_del_slave,
@@ -1282,6 +1278,16 @@ static void vrf_setup(struct net_device *dev)
 
 	/* default to no qdisc; user can add if desired */
 	dev->priv_flags |= IFF_NO_QUEUE;
+	dev->priv_flags |= IFF_NO_RX_HANDLER;
+	dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
+
+	/* VRF devices do not care about MTU, but if the MTU is set
+	 * too low then the ipv4 and ipv6 protocols are disabled
+	 * which breaks networking.
+	 */
+	dev->min_mtu = IPV6_MIN_MTU;
+	dev->max_mtu = IP6_MAX_MTU;
+	dev->mtu = dev->max_mtu;
 }
 
 static int vrf_validate(struct nlattr *tb[], struct nlattr *data[],
