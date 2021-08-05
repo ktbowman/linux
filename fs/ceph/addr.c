@@ -232,7 +232,7 @@ static int ceph_do_readpage(struct file *filp, struct page *page)
 	if (!err)
 		err = ceph_osdc_wait_request(osdc, req);
 
-	ceph_update_read_latency(&fsc->mdsc->metric, req->r_start_latency,
+	ceph_update_read_metrics(&fsc->mdsc->metric, req->r_start_latency,
 				 req->r_end_latency, err);
 
 	ceph_osdc_put_request(req);
@@ -314,7 +314,7 @@ unlock:
 		bytes -= PAGE_SIZE;
 	}
 
-	ceph_update_read_latency(&fsc->mdsc->metric, req->r_start_latency,
+	ceph_update_read_metrics(&fsc->mdsc->metric, req->r_start_latency,
 				 req->r_end_latency, rc);
 
 	kfree(osd_data->pages);
@@ -668,7 +668,7 @@ static int writepage_nounlock(struct page *page, struct writeback_control *wbc)
 	if (!err)
 		err = ceph_osdc_wait_request(osdc, req);
 
-	ceph_update_write_latency(&fsc->mdsc->metric, req->r_start_latency,
+	ceph_update_write_metrics(&fsc->mdsc->metric, req->r_start_latency,
 				  req->r_end_latency, err);
 
 	ceph_osdc_put_request(req);
@@ -756,7 +756,7 @@ static void writepages_finish(struct ceph_osd_request *req)
 		ceph_clear_error_write(ci);
 	}
 
-	ceph_update_write_latency(&fsc->mdsc->metric, req->r_start_latency,
+	ceph_update_write_metrics(&fsc->mdsc->metric, req->r_start_latency,
 				  req->r_end_latency, rc);
 
 	/*
@@ -1861,7 +1861,7 @@ int ceph_uninline_data(struct file *filp, struct page *locked_page)
 	if (!err)
 		err = ceph_osdc_wait_request(&fsc->client->osdc, req);
 
-	ceph_update_write_latency(&fsc->mdsc->metric, req->r_start_latency,
+	ceph_update_write_metrics(&fsc->mdsc->metric, req->r_start_latency,
 				  req->r_end_latency, err);
 
 out_put:
