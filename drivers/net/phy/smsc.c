@@ -12,6 +12,7 @@
  *
  */
 
+#include <linux/clk.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mii.h>
@@ -44,41 +45,84 @@ static struct smsc_hw_stat smsc_hw_stats[] = {
 
 struct smsc_phy_priv {
 	bool energy_enable;
+	struct clk *refclk;
 };
 
-static int smsc_phy_config_intr(struct phy_device *phydev)
+static int smsc_phy_ack_interrupt(struct phy_device *phydev)
 {
-	int rc = phy_write (phydev, MII_LAN83C185_IM,
-			((PHY_INTERRUPT_ENABLED == phydev->interrupts)
-			? MII_LAN83C185_ISF_INT_PHYLIB_EVENTS
-			: 0));
+	int rc = phy_read(phydev, MII_LAN83C185_ISF);
 
 	return rc < 0 ? rc : 0;
 }
 
-static int smsc_phy_ack_interrupt(struct phy_device *phydev)
+static int smsc_phy_config_intr(struct phy_device *phydev)
 {
-	int rc = phy_read (phydev, MII_LAN83C185_ISF);
+	struct smsc_phy_priv *priv = phydev->priv;
+	u16 intmask = 0;
+	int rc;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED) {
+		rc = smsc_phy_ack_interrupt(phydev);
+		if (rc)
+			return rc;
+
+		intmask = MII_LAN83C185_ISF_INT4 | MII_LAN83C185_ISF_INT6;
+		if (priv->energy_enable)
+			intmask |= MII_LAN83C185_ISF_INT7;
+		rc = phy_write(phydev, MII_LAN83C185_IM, intmask);
+	} else {
+		rc = phy_write(phydev, MII_LAN83C185_IM, intmask);
+		if (rc)
+			return rc;
+
+		rc = smsc_phy_ack_interrupt(phydev);
+	}
 
 	return rc < 0 ? rc : 0;
+}
+
+static irqreturn_t smsc_phy_handle_interrupt(struct phy_device *phydev)
+{
+	int irq_status, irq_enabled;
+
+	irq_enabled = phy_read(phydev, MII_LAN83C185_IM);
+	if (irq_enabled < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	irq_status = phy_read(phydev, MII_LAN83C185_ISF);
+	if (irq_status < 0) {
+		phy_error(phydev);
+		return IRQ_NONE;
+	}
+
+	if (!(irq_status & irq_enabled))
+		return IRQ_NONE;
+
+	phy_trigger_machine(phydev);
+
+	return IRQ_HANDLED;
 }
 
 static int smsc_phy_config_init(struct phy_device *phydev)
 {
 	struct smsc_phy_priv *priv = phydev->priv;
+	int rc;
 
-	int rc = phy_read(phydev, MII_LAN83C185_CTRL_STATUS);
+	if (!priv->energy_enable)
+		return 0;
+
+	rc = phy_read(phydev, MII_LAN83C185_CTRL_STATUS);
 
 	if (rc < 0)
 		return rc;
 
-	if (priv->energy_enable) {
-		/* Enable energy detect mode for this SMSC Transceivers */
-		rc = phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
-			       rc | MII_LAN83C185_EDPWRDOWN);
-		if (rc < 0)
-			return rc;
-	}
+	/* Enable energy detect mode for this SMSC Transceivers */
+	rc = phy_write(phydev, MII_LAN83C185_CTRL_STATUS,
+		       rc | MII_LAN83C185_EDPWRDOWN);
+	if (rc < 0)
+		return rc;
 
 	return smsc_phy_ack_interrupt(phydev);
 }
@@ -244,11 +288,20 @@ static void smsc_get_stats(struct phy_device *phydev,
 		data[i] = smsc_get_stat(phydev, i);
 }
 
+static void smsc_phy_remove(struct phy_device *phydev)
+{
+	struct smsc_phy_priv *priv = phydev->priv;
+
+	clk_disable_unprepare(priv->refclk);
+	clk_put(priv->refclk);
+}
+
 static int smsc_phy_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
 	struct device_node *of_node = dev->of_node;
 	struct smsc_phy_priv *priv;
+	int ret;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -260,6 +313,22 @@ static int smsc_phy_probe(struct phy_device *phydev)
 		priv->energy_enable = false;
 
 	phydev->priv = priv;
+
+	/* Make clk optional to keep DTB backward compatibility. */
+	priv->refclk = clk_get_optional(dev, NULL);
+	if (IS_ERR(priv->refclk))
+		return dev_err_probe(dev, PTR_ERR(priv->refclk),
+				     "Failed to request clock\n");
+
+	ret = clk_prepare_enable(priv->refclk);
+	if (ret)
+		return ret;
+
+	ret = clk_set_rate(priv->refclk, 50 * 1000 * 1000);
+	if (ret) {
+		clk_disable_unprepare(priv->refclk);
+		return ret;
+	}
 
 	return 0;
 }
@@ -279,8 +348,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.soft_reset	= smsc_phy_reset,
 
 	/* IRQ related */
-	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
+	.handle_interrupt = smsc_phy_handle_interrupt,
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
@@ -298,8 +367,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.soft_reset	= smsc_phy_reset,
 
 	/* IRQ related */
-	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
+	.handle_interrupt = smsc_phy_handle_interrupt,
 
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
@@ -327,8 +396,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.config_aneg	= lan87xx_config_aneg,
 
 	/* IRQ related */
-	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
+	.handle_interrupt = smsc_phy_handle_interrupt,
 
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
@@ -350,8 +419,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.config_init	= lan911x_config_init,
 
 	/* IRQ related */
-	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
+	.handle_interrupt = smsc_phy_handle_interrupt,
 
 	.suspend	= genphy_suspend,
 	.resume		= genphy_resume,
@@ -367,6 +436,7 @@ static struct phy_driver smsc_phy_driver[] = {
 	.flags		= PHY_RST_AFTER_CLK_EN,
 
 	.probe		= smsc_phy_probe,
+	.remove		= smsc_phy_remove,
 
 	/* basic functions */
 	.read_status	= lan87xx_read_status,
@@ -375,8 +445,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.config_aneg	= lan87xx_config_aneg_ext,
 
 	/* IRQ related */
-	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
+	.handle_interrupt = smsc_phy_handle_interrupt,
 
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
@@ -401,8 +471,8 @@ static struct phy_driver smsc_phy_driver[] = {
 	.soft_reset	= smsc_phy_reset,
 
 	/* IRQ related */
-	.ack_interrupt	= smsc_phy_ack_interrupt,
 	.config_intr	= smsc_phy_config_intr,
+	.handle_interrupt = smsc_phy_handle_interrupt,
 
 	/* Statistics */
 	.get_sset_count = smsc_get_sset_count,
