@@ -146,7 +146,7 @@ enum perf_event_sample_format {
 #ifndef __GENKSYMS__
 	PERF_SAMPLE_DATA_PAGE_SIZE		= 1U << 22,
 	PERF_SAMPLE_CODE_PAGE_SIZE		= 1U << 23,
-	PERF_SAMPLE_WEIGHT_STRUCT		= 1U << 22,
+	PERF_SAMPLE_WEIGHT_STRUCT		= 1U << 24,
 
 	PERF_SAMPLE_MAX = 1U << 25,		/* non-ABI */
 #else
