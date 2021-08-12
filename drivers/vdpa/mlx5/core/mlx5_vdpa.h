@@ -4,8 +4,12 @@
 #ifndef __MLX5_VDPA_H__
 #define __MLX5_VDPA_H__
 
+#include <linux/etherdevice.h>
+#include <linux/if_vlan.h>
 #include <linux/vdpa.h>
 #include <linux/mlx5/driver.h>
+
+#define MLX5V_ETH_HARD_MTU (ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN)
 
 struct mlx5_vdpa_direct_mr {
 	u64 start;
@@ -15,6 +19,7 @@ struct mlx5_vdpa_direct_mr {
 	struct sg_table sg_head;
 	int log_size;
 	int nsg;
+	int nent;
 	struct list_head list;
 	u64 offset;
 };
@@ -30,12 +35,14 @@ struct mlx5_vdpa_mr {
 
 	/* serialize mkey creation and destruction */
 	struct mutex mkey_mtx;
+	bool user_mr;
 };
 
 struct mlx5_vdpa_resources {
 	u32 pdn;
 	struct mlx5_uars_page *uar;
 	void __iomem *kick_addr;
+	u64 phys_kick_addr;
 	u16 uid;
 	u32 null_mkey;
 	bool valid;
