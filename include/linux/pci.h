@@ -519,7 +519,7 @@ struct pci_dev {
 #endif
 	RH_KABI_USE(5, u16  acs_cap)
 #ifdef CONFIG_PCIEASPM
-	RH_KABI_USE(6, int  l1ss)	/* L1SS Capability pointer */
+	RH_KABI_USE(6, u16  l1ss)	/* L1SS Capability pointer */
 #endif
 #ifdef CONFIG_PCIEPORTBUS
 	RH_KABI_USE(7, struct rcec_ea  *rcec_ea) /* RCEC cached endpoint association */
@@ -1126,8 +1126,8 @@ u8 pci_find_capability(struct pci_dev *dev, int cap);
 u8 pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap);
 u8 pci_find_ht_capability(struct pci_dev *dev, int ht_cap);
 u8 pci_find_next_ht_capability(struct pci_dev *dev, u8 pos, int ht_cap);
-int pci_find_ext_capability(struct pci_dev *dev, int cap);
-int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
+u16 pci_find_ext_capability(struct pci_dev *dev, int cap);
+u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 pos, int cap);
 struct pci_bus *pci_find_next_bus(const struct pci_bus *from);
 
 u64 pci_get_dsn(struct pci_dev *dev);
