@@ -287,12 +287,6 @@ static struct ctl_table udp_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_jiffies,
 	},
-	{
-		.procname	= "nf_flowtable_udp_pickup",
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0644,
-		.proc_handler	= proc_dointvec_jiffies,
-	},
 #endif
 	{ }
 };
@@ -317,7 +311,6 @@ static int udp_kmemdup_sysctl_table(struct nf_proto_net *pn,
 	pn->ctl_table[1].data = &un->timeouts[UDP_CT_REPLIED];
 #if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
 	pn->ctl_table[2].data = &net->nf_udp_net_offload_timeout;
-	pn->ctl_table[3].data = &net->nf_udp_net_offload_pickup;
 #endif
 #endif
 	return 0;
@@ -336,7 +329,6 @@ static int udp_init_net(struct net *net)
 
 #if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
 		net->nf_udp_net_offload_timeout = 30 * HZ;
-		net->nf_udp_net_offload_pickup = 30 * HZ;
 #endif
 	}
 
