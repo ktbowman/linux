@@ -2703,6 +2703,7 @@
 					       l1tf=off [X86]
 					       mds=off [X86]
 					       tsx_async_abort=off [X86]
+					       no_entry_flush [PPC]
 					       kvm.nx_huge_pages=off [X86]
 
 				Exceptions:
@@ -3026,6 +3027,8 @@
 	nodsp		[SH] Disable hardware DSP at boot time.
 
 	noefi		Disable EFI runtime services support.
+
+	no_entry_flush  [PPC] Don't flush the L1-D cache when entering the kernel.
 
 	noexec		[IA-64]
 
