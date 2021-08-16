@@ -302,7 +302,7 @@ static void deferred_unmap_destructor(struct sk_buff *skb)
 
 /**
  *	free_tx_desc - reclaims Tx descriptors and their buffers
- *	@adapter: the adapter
+ *	@adap: the adapter
  *	@q: the Tx queue to reclaim descriptors from
  *	@n: the number of descriptors to reclaim
  *	@unmap: whether the buffers should be unmapped for DMA
@@ -722,6 +722,7 @@ static inline unsigned int flits_to_desc(unsigned int n)
 /**
  *	is_eth_imm - can an Ethernet packet be sent as immediate data?
  *	@skb: the packet
+ *	@chip_ver: chip version
  *
  *	Returns whether an Ethernet packet is small enough to fit as
  *	immediate data. Return value corresponds to headroom required.
@@ -749,6 +750,7 @@ static inline int is_eth_imm(const struct sk_buff *skb, unsigned int chip_ver)
 /**
  *	calc_tx_flits - calculate the number of flits for a packet Tx WR
  *	@skb: the packet
+ *	@chip_ver: chip version
  *
  *	Returns the number of flits needed for a Tx WR for the given Ethernet
  *	packet, including the needed WR and CPL headers.
@@ -804,6 +806,7 @@ static inline unsigned int calc_tx_flits(const struct sk_buff *skb,
 /**
  *	calc_tx_descs - calculate the number of Tx descriptors for a packet
  *	@skb: the packet
+ *	@chip_ver: chip version
  *
  *	Returns the number of Tx descriptors needed for the given Ethernet
  *	packet, including the needed WR and CPL headers.
@@ -1425,12 +1428,10 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	qidx = skb_get_queue_mapping(skb);
 	if (ptp_enabled) {
-		spin_lock(&adap->ptp_lock);
 		if (!(adap->ptp_tx_skb)) {
 			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 			adap->ptp_tx_skb = skb_get(skb);
 		} else {
-			spin_unlock(&adap->ptp_lock);
 			goto out_free;
 		}
 		q = &adap->sge.ptptxq;
@@ -1444,11 +1445,8 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 
 #ifdef CONFIG_CHELSIO_T4_FCOE
 	ret = cxgb_fcoe_offload(skb, adap, pi, &cntrl);
-	if (unlikely(ret == -ENOTSUPP)) {
-		if (ptp_enabled)
-			spin_unlock(&adap->ptp_lock);
+	if (unlikely(ret == -EOPNOTSUPP))
 		goto out_free;
-	}
 #endif /* CONFIG_CHELSIO_T4_FCOE */
 
 	chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
@@ -1461,8 +1459,6 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev_err(adap->pdev_dev,
 			"%s: Tx ring %u full while queue awake!\n",
 			dev->name, qidx);
-		if (ptp_enabled)
-			spin_unlock(&adap->ptp_lock);
 		return NETDEV_TX_BUSY;
 	}
 
@@ -1481,8 +1477,6 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 	    unlikely(cxgb4_map_skb(adap->pdev_dev, skb, sgl_sdesc->addr) < 0)) {
 		memset(sgl_sdesc->addr, 0, sizeof(sgl_sdesc->addr));
 		q->mapping_err++;
-		if (ptp_enabled)
-			spin_unlock(&adap->ptp_lock);
 		goto out_free;
 	}
 
@@ -1497,7 +1491,8 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 		 * has opened up.
 		 */
 		eth_txq_stop(q);
-		wr_mid |= FW_WR_EQUEQ_F | FW_WR_EQUIQ_F;
+		if (chip_ver > CHELSIO_T5)
+			wr_mid |= FW_WR_EQUEQ_F | FW_WR_EQUIQ_F;
 	}
 
 	wr = (void *)&q->q.desc[q->q.pidx];
@@ -1533,8 +1528,7 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 			if (iph->version == 4) {
 				iph->check = 0;
 				iph->tot_len = 0;
-				iph->check = (u16)(~ip_fast_csum((u8 *)iph,
-								 iph->ihl));
+				iph->check = ~ip_fast_csum((u8 *)iph, iph->ihl);
 			}
 			if (skb->ip_summed == CHECKSUM_PARTIAL)
 				cntrl = hwcsum(adap->params.chip, skb);
@@ -1630,8 +1624,6 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 	txq_advance(&q->q, ndesc);
 
 	cxgb4_ring_tx_db(adap, &q->q, ndesc);
-	if (ptp_enabled)
-		spin_unlock(&adap->ptp_lock);
 	return NETDEV_TX_OK;
 
 out_free:
@@ -1732,6 +1724,7 @@ static netdev_tx_t cxgb4_vf_eth_xmit(struct sk_buff *skb,
 	struct adapter *adapter;
 	int qidx, credits, ret;
 	size_t fw_hdr_copy_len;
+	unsigned int chip_ver;
 	u64 cntrl, *end;
 	u32 wr_mid;
 
@@ -1796,6 +1789,7 @@ static netdev_tx_t cxgb4_vf_eth_xmit(struct sk_buff *skb,
 		goto out_free;
 	}
 
+	chip_ver = CHELSIO_CHIP_VERSION(adapter->params.chip);
 	wr_mid = FW_WR_LEN16_V(DIV_ROUND_UP(flits, 2));
 	if (unlikely(credits < ETHTXQ_STOP_THRES)) {
 		/* After we're done injecting the Work Request for this
@@ -1807,7 +1801,8 @@ static netdev_tx_t cxgb4_vf_eth_xmit(struct sk_buff *skb,
 		 * has opened up.
 		 */
 		eth_txq_stop(txq);
-		wr_mid |= FW_WR_EQUEQ_F | FW_WR_EQUIQ_F;
+		if (chip_ver > CHELSIO_T5)
+			wr_mid |= FW_WR_EQUEQ_F | FW_WR_EQUIQ_F;
 	}
 
 	/* Start filling in our Work Request.  Note that we do _not_ handle
@@ -1860,7 +1855,7 @@ static netdev_tx_t cxgb4_vf_eth_xmit(struct sk_buff *skb,
 		 */
 		cpl = (void *)(lso + 1);
 
-		if (CHELSIO_CHIP_VERSION(adapter->params.chip) <= CHELSIO_T5)
+		if (chip_ver <= CHELSIO_T5)
 			cntrl = TXPKT_ETHHDR_LEN_V(eth_xtra_len);
 		else
 			cntrl = T6_TXPKT_ETHHDR_LEN_V(eth_xtra_len);
@@ -2377,6 +2372,16 @@ netdev_tx_t t4_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (unlikely(qid >= pi->nqsets))
 		return cxgb4_ethofld_xmit(skb, dev);
 
+	if (is_ptp_enabled(skb, dev)) {
+		struct adapter *adap = netdev2adap(dev);
+		netdev_tx_t ret;
+
+		spin_lock(&adap->ptp_lock);
+		ret = cxgb4_eth_xmit(skb, dev);
+		spin_unlock(&adap->ptp_lock);
+		return ret;
+	}
+
 	return cxgb4_eth_xmit(skb, dev);
 }
 
@@ -2410,9 +2415,9 @@ static void eosw_txq_flush_pending_skbs(struct sge_eosw_txq *eosw_txq)
 
 /**
  * cxgb4_ethofld_send_flowc - Send ETHOFLD flowc request to bind eotid to tc.
- * @dev - netdevice
- * @eotid - ETHOFLD tid to bind/unbind
- * @tc - traffic class. If set to FW_SCHED_CLS_NONE, then unbinds the @eotid
+ * @dev: netdevice
+ * @eotid: ETHOFLD tid to bind/unbind
+ * @tc: traffic class. If set to FW_SCHED_CLS_NONE, then unbinds the @eotid
  *
  * Send a FLOWC work request to bind an ETHOFLD TID to a traffic class.
  * If @tc is set to FW_SCHED_CLS_NONE, then the @eotid is unbound from
@@ -2431,7 +2436,7 @@ int cxgb4_ethofld_send_flowc(struct net_device *dev, u32 eotid, u32 tc)
 	struct sk_buff *skb;
 	int ret = 0;
 
-	len = sizeof(*flowc) + sizeof(struct fw_flowc_mnemval) * nparams;
+	len = struct_size(flowc, mnemval, nparams);
 	len16 = DIV_ROUND_UP(len, 16);
 
 	entry = cxgb4_lookup_eotid(&adap->tids, eotid);
@@ -2534,6 +2539,84 @@ static void ctrlq_check_stop(struct sge_ctrl_txq *q, struct fw_wr_hdr *wr)
 		q->q.stops++;
 		q->full = 1;
 	}
+}
+
+#define CXGB4_SELFTEST_LB_STR "CHELSIO_SELFTEST"
+
+int cxgb4_selftest_lb_pkt(struct net_device *netdev)
+{
+	struct port_info *pi = netdev_priv(netdev);
+	struct adapter *adap = pi->adapter;
+	struct cxgb4_ethtool_lb_test *lb;
+	int ret, i = 0, pkt_len, credits;
+	struct fw_eth_tx_pkt_wr *wr;
+	struct cpl_tx_pkt_core *cpl;
+	u32 ctrl0, ndesc, flits;
+	struct sge_eth_txq *q;
+	u8 *sgl;
+
+	pkt_len = ETH_HLEN + sizeof(CXGB4_SELFTEST_LB_STR);
+
+	flits = DIV_ROUND_UP(pkt_len + sizeof(*cpl) + sizeof(*wr),
+			     sizeof(__be64));
+	ndesc = flits_to_desc(flits);
+
+	lb = &pi->ethtool_lb;
+	lb->loopback = 1;
+
+	q = &adap->sge.ethtxq[pi->first_qset];
+	__netif_tx_lock(q->txq, smp_processor_id());
+
+	reclaim_completed_tx(adap, &q->q, -1, true);
+	credits = txq_avail(&q->q) - ndesc;
+	if (unlikely(credits < 0)) {
+		__netif_tx_unlock(q->txq);
+		return -ENOMEM;
+	}
+
+	wr = (void *)&q->q.desc[q->q.pidx];
+	memset(wr, 0, sizeof(struct tx_desc));
+
+	wr->op_immdlen = htonl(FW_WR_OP_V(FW_ETH_TX_PKT_WR) |
+			       FW_WR_IMMDLEN_V(pkt_len +
+			       sizeof(*cpl)));
+	wr->equiq_to_len16 = htonl(FW_WR_LEN16_V(DIV_ROUND_UP(flits, 2)));
+	wr->r3 = cpu_to_be64(0);
+
+	cpl = (void *)(wr + 1);
+	sgl = (u8 *)(cpl + 1);
+
+	ctrl0 = TXPKT_OPCODE_V(CPL_TX_PKT_XT) | TXPKT_PF_V(adap->pf) |
+		TXPKT_INTF_V(pi->tx_chan + 4);
+
+	cpl->ctrl0 = htonl(ctrl0);
+	cpl->pack = htons(0);
+	cpl->len = htons(pkt_len);
+	cpl->ctrl1 = cpu_to_be64(TXPKT_L4CSUM_DIS_F | TXPKT_IPCSUM_DIS_F);
+
+	eth_broadcast_addr(sgl);
+	i += ETH_ALEN;
+	ether_addr_copy(&sgl[i], netdev->dev_addr);
+	i += ETH_ALEN;
+
+	snprintf(&sgl[i], sizeof(CXGB4_SELFTEST_LB_STR), "%s",
+		 CXGB4_SELFTEST_LB_STR);
+
+	init_completion(&lb->completion);
+	txq_advance(&q->q, ndesc);
+	cxgb4_ring_tx_db(adap, &q->q, ndesc);
+	__netif_tx_unlock(q->txq);
+
+	/* wait for the pkt to return */
+	ret = wait_for_completion_timeout(&lb->completion, 10 * HZ);
+	if (!ret)
+		ret = -ETIMEDOUT;
+	else
+		ret = lb->result;
+
+	lb->loopback = 0;
+
+	return ret;
 }
 
 /**
@@ -2691,7 +2774,6 @@ static inline unsigned int calc_tx_flits_ofld(const struct sk_buff *skb)
 
 /**
  *	txq_stop_maperr - stop a Tx queue due to I/O MMU exhaustion
- *	@adap: the adapter
  *	@q: the queue to stop
  *
  *	Mark a Tx queue stopped due to I/O MMU exhaustion and resulting
@@ -2937,6 +3019,7 @@ static inline int uld_send(struct adapter *adap, struct sk_buff *skb,
 	txq_info = adap->sge.uld_txq_info[tx_uld_type];
 	if (unlikely(!txq_info)) {
 		WARN_ON(true);
+		kfree_skb(skb);
 		return NET_XMIT_DROP;
 	}
 
@@ -3285,7 +3368,7 @@ enum {
 
 /**
  *     t4_systim_to_hwstamp - read hardware time stamp
- *     @adap: the adapter
+ *     @adapter: the adapter
  *     @skb: the packet
  *
  *     Read Time Stamp from MPS packet and insert in skb which
@@ -3312,15 +3395,16 @@ static noinline int t4_systim_to_hwstamp(struct adapter *adapter,
 
 	hwtstamps = skb_hwtstamps(skb);
 	memset(hwtstamps, 0, sizeof(*hwtstamps));
-	hwtstamps->hwtstamp = ns_to_ktime(be64_to_cpu(*((u64 *)data)));
+	hwtstamps->hwtstamp = ns_to_ktime(get_unaligned_be64(data));
 
 	return RX_PTP_PKT_SUC;
 }
 
 /**
  *     t4_rx_hststamp - Recv PTP Event Message
- *     @adap: the adapter
+ *     @adapter: the adapter
  *     @rsp: the response queue descriptor holding the RX_PKT message
+ *     @rxq: the response queue holding the RX_PKT message
  *     @skb: the packet
  *
  *     PTP enabled and MPS packet, read HW timestamp
@@ -3344,7 +3428,7 @@ static int t4_rx_hststamp(struct adapter *adapter, const __be64 *rsp,
 
 /**
  *      t4_tx_hststamp - Loopback PTP Transmit Event Message
- *      @adap: the adapter
+ *      @adapter: the adapter
  *      @skb: the packet
  *      @dev: the ingress net device
  *
@@ -3408,7 +3492,51 @@ static void t4_tx_completion_handler(struct sge_rspq *rspq,
 	}
 
 	txq = &s->ethtxq[pi->first_qset + rspq->idx];
+
+	/* We've got the Hardware Consumer Index Update in the Egress Update
+	 * message. These Egress Update messages will be our sole CIDX Updates
+	 * we get since we don't want to chew up PCIe bandwidth for both Ingress
+	 * Messages and Status Page writes.  However, The code which manages
+	 * reclaiming successfully DMA'ed TX Work Requests uses the CIDX value
+	 * stored in the Status Page at the end of the TX Queue.  It's easiest
+	 * to simply copy the CIDX Update value from the Egress Update message
+	 * to the Status Page.  Also note that no Endian issues need to be
+	 * considered here since both are Big Endian and we're just copying
+	 * bytes consistently ...
+	 */
+	if (CHELSIO_CHIP_VERSION(adapter->params.chip) <= CHELSIO_T5) {
+		struct cpl_sge_egr_update *egr;
+
+		egr = (struct cpl_sge_egr_update *)rsp;
+		WRITE_ONCE(txq->q.stat->cidx, egr->cidx);
+	}
+
 	t4_sge_eth_txq_egress_update(adapter, txq, -1);
+}
+
+static int cxgb4_validate_lb_pkt(struct port_info *pi, const struct pkt_gl *si)
+{
+	struct adapter *adap = pi->adapter;
+	struct cxgb4_ethtool_lb_test *lb;
+	struct sge *s = &adap->sge;
+	struct net_device *netdev;
+	u8 *data;
+	int i;
+
+	netdev = adap->port[pi->port_id];
+	lb = &pi->ethtool_lb;
+	data = si->va + s->pktshift;
+
+	i = ETH_ALEN;
+	if (!ether_addr_equal(data + i, netdev->dev_addr))
+		return -1;
+
+	i += ETH_ALEN;
+	if (strcmp(&data[i], CXGB4_SELFTEST_LB_STR))
+		lb->result = -EIO;
+
+	complete(&lb->completion);
+	return 0;
 }
 
 /**
@@ -3434,6 +3562,7 @@ int t4_ethrx_handler(struct sge_rspq *q, const __be64 *rsp,
 	struct port_info *pi;
 	int ret = 0;
 
+	pi = netdev_priv(q->netdev);
 	/* If we're looking at TX Queue CIDX Update, handle that separately
 	 * and return.
 	 */
@@ -3461,6 +3590,12 @@ int t4_ethrx_handler(struct sge_rspq *q, const __be64 *rsp,
 	if (err_vec)
 		rxq->stats.bad_rx_pkts++;
 
+	if (unlikely(pi->ethtool_lb.loopback && pkt->iff >= NCHAN)) {
+		ret = cxgb4_validate_lb_pkt(pi, si);
+		if (!ret)
+			return 0;
+	}
+
 	if (((pkt->l2info & htonl(RXF_TCP_F)) ||
 	     tnl_hdr_len) &&
 	    (q->netdev->features & NETIF_F_GRO) && csum_ok && !pkt->ip_frag) {
@@ -3474,7 +3609,6 @@ int t4_ethrx_handler(struct sge_rspq *q, const __be64 *rsp,
 		rxq->stats.rx_drops++;
 		return 0;
 	}
-	pi = netdev_priv(q->netdev);
 
 	/* Handle PTP Event Rx packet */
 	if (unlikely(pi->ptp_enable)) {
@@ -4361,11 +4495,15 @@ int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 	 * write the CIDX Updates into the Status Page at the end of the
 	 * TX Queue.
 	 */
-	c.autoequiqe_to_viid = htonl(FW_EQ_ETH_CMD_AUTOEQUEQE_F |
+	c.autoequiqe_to_viid = htonl(((chip_ver <= CHELSIO_T5) ?
+				      FW_EQ_ETH_CMD_AUTOEQUIQE_F :
+				      FW_EQ_ETH_CMD_AUTOEQUEQE_F) |
 				     FW_EQ_ETH_CMD_VIID_V(pi->viid));
 
 	c.fetchszm_to_iqid =
-		htonl(FW_EQ_ETH_CMD_HOSTFCMODE_V(HOSTFCMODE_STATUS_PAGE_X) |
+		htonl(FW_EQ_ETH_CMD_HOSTFCMODE_V((chip_ver <= CHELSIO_T5) ?
+						 HOSTFCMODE_INGRESS_QUEUE_X :
+						 HOSTFCMODE_STATUS_PAGE_X) |
 		      FW_EQ_ETH_CMD_PCIECHN_V(pi->tx_chan) |
 		      FW_EQ_ETH_CMD_FETCHRO_F | FW_EQ_ETH_CMD_IQID_V(iqid));
 
@@ -4376,6 +4514,7 @@ int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 					    : FETCHBURSTMIN_64B_T6_X) |
 		      FW_EQ_ETH_CMD_FBMAX_V(FETCHBURSTMAX_512B_X) |
 		      FW_EQ_ETH_CMD_CIDXFTHRESH_V(CIDXFLUSHTHRESH_32_X) |
+		      FW_EQ_ETH_CMD_CIDXFTHRESHO_V(chip_ver == CHELSIO_T5) |
 		      FW_EQ_ETH_CMD_EQSIZE_V(nentries));
 
 	c.eqaddr = cpu_to_be64(txq->q.phys_addr);
@@ -4759,9 +4898,6 @@ void t4_sge_stop(struct adapter *adap)
 {
 	int i;
 	struct sge *s = &adap->sge;
-
-	if (in_interrupt())  /* actions below require waiting */
-		return;
 
 	if (s->rx_timer.function)
 		del_timer_sync(&s->rx_timer);
