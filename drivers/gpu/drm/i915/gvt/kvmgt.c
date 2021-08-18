@@ -144,15 +144,19 @@ static inline bool handle_valid(unsigned long handle)
 	return !!(handle & ~0xff);
 }
 
-static ssize_t available_instances_show(struct mdev_type *mtype,
-					struct mdev_type_attribute *attr,
+static ssize_t available_instances_show(struct kobject *kobj,
+					struct device *dev,
 					char *buf)
 {
-	struct intel_vgpu_type *type;
 	unsigned int num = 0;
-	struct intel_gvt *gvt = kdev_to_i915(mtype_get_parent_dev(mtype))->gvt;
+	struct intel_vgpu_type *type;
+	struct intel_gvt *gvt = kdev_to_i915(dev)->gvt;
+	int id = mdev_type_kobj_to_group_id(kobj);
 
-	type = &gvt->types[mtype_get_type_group_id(mtype)];
+	if (id < 0 || id >= NR_MAX_INTEL_VGPU_TYPES)
+		return 0;
+
+	type = &gvt->types[id];
 	if (!type)
 		num = 0;
 	else
@@ -161,19 +165,25 @@ static ssize_t available_instances_show(struct mdev_type *mtype,
 	return sprintf(buf, "%u\n", num);
 }
 
-static ssize_t device_api_show(struct mdev_type *mtype,
-			       struct mdev_type_attribute *attr, char *buf)
+static ssize_t device_api_show(struct kobject *kobj,
+			       struct device *dev,
+			       char *buf)
 {
 	return sprintf(buf, "%s\n", VFIO_DEVICE_API_PCI_STRING);
 }
 
-static ssize_t description_show(struct mdev_type *mtype,
-				struct mdev_type_attribute *attr, char *buf)
+static ssize_t description_show(struct kobject *kobj,
+				struct device *dev,
+				char *buf)
 {
 	struct intel_vgpu_type *type;
-	struct intel_gvt *gvt = kdev_to_i915(mtype_get_parent_dev(mtype))->gvt;
+	struct intel_gvt *gvt = kdev_to_i915(dev)->gvt;
+	int id = mdev_type_kobj_to_group_id(kobj);
 
-	type = &gvt->types[mtype_get_type_group_id(mtype)];
+	if (id < 0 || id >= NR_MAX_INTEL_VGPU_TYPES)
+		return 0;
+
+	type = &gvt->types[id];
 	if (!type)
 		return 0;
 
@@ -787,18 +797,24 @@ static void kvmgt_put_vfio_device(void *vgpu)
 	vfio_device_put(vdev->vfio_device);
 }
 
-static int intel_vgpu_create(struct mdev_device *mdev)
+static int intel_vgpu_create(struct kobject *kobj, struct mdev_device *mdev)
 {
 	struct intel_vgpu *vgpu = NULL;
 	struct intel_vgpu_type *type;
 	struct device *pdev;
 	struct intel_gvt *gvt;
-	int ret;
+	int ret, id;
 
 	pdev = mdev_parent_dev(mdev);
 	gvt = kdev_to_i915(pdev)->gvt;
 
-	type = &gvt->types[mdev_get_type_group_id(mdev)];
+	id = mdev_type_kobj_to_group_id(kobj);
+	if (id < 0 || id >= NR_MAX_INTEL_VGPU_TYPES) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	type = &gvt->types[id];
 	if (!type) {
 		ret = -EINVAL;
 		goto out;
