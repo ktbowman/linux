@@ -317,7 +317,7 @@ static int
 aldebaran_mode2_restore_hwcontext(struct amdgpu_reset_control *reset_ctl,
 				  struct amdgpu_reset_context *reset_context)
 {
-	int r;
+	int r = 0;
 	struct amdgpu_device *tmp_adev = NULL;
 
 	if (reset_context->hive == NULL) {

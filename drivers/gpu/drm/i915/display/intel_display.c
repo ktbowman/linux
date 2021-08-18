@@ -1028,7 +1028,7 @@ intel_pin_and_fence_fb_obj(struct drm_framebuffer *fb,
 	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
 	intel_wakeref_t wakeref;
 	struct i915_gem_ww_ctx ww;
-	struct i915_vma *vma;
+	struct i915_vma *vma = NULL;
 	unsigned int pinctl;
 	u32 alignment;
 	int ret;

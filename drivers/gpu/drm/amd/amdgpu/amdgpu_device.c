@@ -4723,7 +4723,7 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 	int i, r = 0;
 	bool need_emergency_restart = false;
 	bool audio_suspended = false;
-	int tmp_vram_lost_counter;
+	int tmp_vram_lost_counter = 0;
 	struct amdgpu_reset_context reset_context;
 
 	memset(&reset_context, 0, sizeof(reset_context));
