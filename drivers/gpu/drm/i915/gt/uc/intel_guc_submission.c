@@ -237,10 +237,9 @@ done:
 	execlists->active = execlists->inflight;
 }
 
-static void guc_submission_tasklet(struct tasklet_struct *t)
+static void guc_submission_tasklet(unsigned long data)
 {
-	struct intel_engine_cs * const engine =
-		from_tasklet(engine, t, execlists.tasklet);
+	struct intel_engine_cs * const engine = (void *)data;
 	struct intel_engine_execlists * const execlists = &engine->execlists;
 	struct i915_request **port, *rq;
 	unsigned long flags;
@@ -609,7 +608,7 @@ static void guc_set_default_submission(struct intel_engine_cs *engine)
 {
 	engine->submit_request = guc_submit_request;
 	engine->schedule = i915_schedule;
-	engine->execlists.tasklet.callback = guc_submission_tasklet;
+	engine->execlists.tasklet.func = guc_submission_tasklet;
 
 	engine->reset.prepare = guc_reset_prepare;
 	engine->reset.rewind = guc_reset_rewind;
@@ -701,7 +700,8 @@ int intel_guc_submission_setup(struct intel_engine_cs *engine)
 	 */
 	GEM_BUG_ON(INTEL_GEN(i915) < 11);
 
-	tasklet_setup(&engine->execlists.tasklet, guc_submission_tasklet);
+	tasklet_init(&engine->execlists.tasklet, guc_submission_tasklet,
+		     (unsigned long)engine);
 
 	guc_default_vfuncs(engine);
 	guc_default_irqs(engine);
