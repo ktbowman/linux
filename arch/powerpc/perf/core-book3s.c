@@ -1978,6 +1978,17 @@ static int power_pmu_event_init(struct perf_event *event)
 		return -ENOENT;
 	}
 
+	/*
+	 * PMU config registers have fields that are
+	 * reserved and some specific values for bit fields are reserved.
+	 * For ex., MMCRA[61:62] is Randome Sampling Mode (SM)
+	 * and value of 0b11 to this field is reserved.
+	 * Check for invalid values in attr.config.
+	 */
+	if (ppmu->check_attr_config &&
+	    ppmu->check_attr_config(event))
+		return -EINVAL;
+
 	event->hw.config_base = ev;
 	event->hw.idx = 0;
 
@@ -2128,6 +2139,9 @@ static struct pmu power_pmu = {
 	.sched_task	= power_pmu_sched_task,
 };
 
+#define PERF_SAMPLE_ADDR_TYPE  (PERF_SAMPLE_ADDR |		\
+				PERF_SAMPLE_PHYS_ADDR |		\
+				PERF_SAMPLE_DATA_PAGE_SIZE)
 /*
  * A counter has overflowed; update its count and record
  * things if requested.  Note that interrupts are hard-disabled
@@ -2204,8 +2218,7 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 
 		perf_sample_data_init(&data, ~0ULL, event->hw.last_period);
 
-		if (event->attr.sample_type &
-		    (PERF_SAMPLE_ADDR | PERF_SAMPLE_PHYS_ADDR))
+		if (event->attr.sample_type & PERF_SAMPLE_ADDR_TYPE)
 			perf_get_data_addr(event, regs, &data.addr);
 
 		if (event->attr.sample_type & PERF_SAMPLE_BRANCH_STACK) {
@@ -2219,9 +2232,9 @@ static void record_and_restart(struct perf_event *event, unsigned long val,
 						ppmu->get_mem_data_src)
 			ppmu->get_mem_data_src(&data.data_src, ppmu->flags, regs);
 
-		if (event->attr.sample_type & PERF_SAMPLE_WEIGHT &&
+		if (event->attr.sample_type & PERF_SAMPLE_WEIGHT_TYPE &&
 						ppmu->get_mem_weight)
-			ppmu->get_mem_weight(&data.weight.full);
+			ppmu->get_mem_weight(&data.weight.full, event->attr.sample_type);
 
 		if (perf_event_overflow(event, &data, regs))
 			power_pmu_stop(event, 0);
