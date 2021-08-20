@@ -204,6 +204,7 @@ struct net {
 #if IS_ENABLED(CONFIG_SMC)
 	RH_KABI_EXTEND(struct netns_smc		smc)
 #endif
+	RH_KABI_EXTEND(seqcount_spinlock_t	xfrm_policy_hash_generation)
 } __randomize_layout;
 
 #include <linux/seq_file_net.h>
