@@ -1189,6 +1189,12 @@ static void ext4_destroy_inode(struct inode *inode)
 		dump_stack();
 	}
 	call_rcu(&inode->i_rcu, ext4_i_callback);
+
+	if (EXT4_I(inode)->i_reserved_data_blocks)
+		ext4_msg(inode->i_sb, KERN_ERR,
+			 "Inode %lu (%p): i_reserved_data_blocks (%u) not cleared!",
+			 inode->i_ino, EXT4_I(inode),
+			 EXT4_I(inode)->i_reserved_data_blocks);
 }
 
 static void init_once(void *foo)
