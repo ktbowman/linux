@@ -95,7 +95,7 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 	}
 
 	irq_entry = &idxd->irq_entries[0];
-	rc = request_threaded_irq(irq_entry->vector, idxd_irq_handler, idxd_misc_thread,
+	rc = request_threaded_irq(irq_entry->vector, NULL, idxd_misc_thread,
 				  0, "idxd-misc", irq_entry);
 	if (rc < 0) {
 		dev_err(dev, "Failed to allocate misc interrupt.\n");
@@ -112,7 +112,7 @@ static int idxd_setup_interrupts(struct idxd_device *idxd)
 
 		init_llist_head(&idxd->irq_entries[i].pending_llist);
 		INIT_LIST_HEAD(&idxd->irq_entries[i].work_list);
-		rc = request_threaded_irq(irq_entry->vector, idxd_irq_handler,
+		rc = request_threaded_irq(irq_entry->vector, NULL,
 					  idxd_wq_thread, 0, "idxd-portal", irq_entry);
 		if (rc < 0) {
 			dev_err(dev, "Failed to allocate irq %d.\n", irq_entry->vector);
@@ -212,6 +212,7 @@ static int idxd_setup_engines(struct idxd_device *idxd)
 		engine->idxd = idxd;
 		device_initialize(&engine->conf_dev);
 		engine->conf_dev.parent = &idxd->conf_dev;
+		engine->conf_dev.bus = &dsa_bus_type;
 		engine->conf_dev.type = &idxd_engine_device_type;
 		rc = dev_set_name(&engine->conf_dev, "engine%d.%d", idxd->id, engine->id);
 		if (rc < 0) {
@@ -470,11 +471,18 @@ static int idxd_probe(struct idxd_device *idxd)
 	dev_dbg(dev, "IDXD reset complete\n");
 
 	if (IS_ENABLED(CONFIG_INTEL_IDXD_SVM) && sva) {
-		rc = idxd_enable_system_pasid(idxd);
-		if (rc < 0)
-			dev_warn(dev, "Failed to enable PASID. No SVA support: %d\n", rc);
-		else
-			set_bit(IDXD_FLAG_PASID_ENABLED, &idxd->flags);
+		rc = iommu_dev_enable_feature(dev, IOMMU_DEV_FEAT_SVA);
+		if (rc == 0) {
+			rc = idxd_enable_system_pasid(idxd);
+			if (rc < 0) {
+				iommu_dev_disable_feature(dev, IOMMU_DEV_FEAT_SVA);
+				dev_warn(dev, "Failed to enable PASID. No SVA support: %d\n", rc);
+			} else {
+				set_bit(IDXD_FLAG_PASID_ENABLED, &idxd->flags);
+			}
+		} else {
+			dev_warn(dev, "Unable to turn on SVA feature.\n");
+		}
 	} else if (!sva) {
 		dev_warn(dev, "User forced SVA off via module param.\n");
 	}
@@ -500,6 +508,7 @@ static int idxd_probe(struct idxd_device *idxd)
  err:
 	if (device_pasid_enabled(idxd))
 		idxd_disable_system_pasid(idxd);
+	iommu_dev_disable_feature(dev, IOMMU_DEV_FEAT_SVA);
 	return rc;
 }
 
@@ -651,6 +660,7 @@ static void idxd_remove(struct pci_dev *pdev)
 	if (device_pasid_enabled(idxd))
 		idxd_disable_system_pasid(idxd);
 	idxd_unregister_devices(idxd);
+	iommu_dev_disable_feature(&pdev->dev, IOMMU_DEV_FEAT_SVA);
 }
 
 static struct pci_driver idxd_pci_driver = {
@@ -669,12 +679,12 @@ static int __init idxd_init_module(void)
 	 * If the CPU does not support MOVDIR64B or ENQCMDS, there's no point in
 	 * enumerating the device. We can not utilize it.
 	 */
-	if (!boot_cpu_has(X86_FEATURE_MOVDIR64B)) {
+	if (!cpu_feature_enabled(X86_FEATURE_MOVDIR64B)) {
 		pr_warn("idxd driver failed to load without MOVDIR64B.\n");
 		return -ENODEV;
 	}
 
-	if (!boot_cpu_has(X86_FEATURE_ENQCMD))
+	if (!cpu_feature_enabled(X86_FEATURE_ENQCMD))
 		pr_warn("Platform does not have ENQCMD(S) support.\n");
 	else
 		support_enqcmd = true;
@@ -709,6 +719,7 @@ module_init(idxd_init_module);
 
 static void __exit idxd_exit_module(void)
 {
+	idxd_unregister_driver();
 	pci_unregister_driver(&idxd_pci_driver);
 	idxd_cdev_remove();
 	idxd_unregister_bus_type();
