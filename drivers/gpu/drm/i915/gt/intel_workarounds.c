@@ -651,6 +651,18 @@ static void tgl_ctx_workarounds_init(struct intel_engine_cs *engine,
 	       FF_MODE2_GS_TIMER_MASK | FF_MODE2_TDS_TIMER_MASK,
 	       FF_MODE2_GS_TIMER_224  | FF_MODE2_TDS_TIMER_128,
 	       0);
+
+	/* RH note: Limit this workaround to ADL-S as this came too late in the release cycle to
+	 * justify retesting other gens
+	 */
+	if (IS_ALDERLAKE_S(engine->i915)) {
+		/*
+		 * Wa_14012131227:dg1
+		 * Wa_1508744258:tgl,rkl,dg1,adl-s,adl-p
+		 */
+		wa_masked_en(wal, GEN7_COMMON_SLICE_CHICKEN1,
+			     GEN9_RHWO_OPTIMIZATION_DISABLE);
+	}
 }
 
 static void dg1_ctx_workarounds_init(struct intel_engine_cs *engine,
@@ -1080,11 +1092,42 @@ icl_gt_workarounds_init(struct drm_i915_private *i915, struct i915_wa_list *wal)
 	}
 }
 
+/*
+ * Though there are per-engine instances of these registers,
+ * they retain their value through engine resets and should
+ * only be provided on the GT workaround list rather than
+ * the engine-specific workaround list.
+ */
+static void
+wa_14011060649(struct drm_i915_private *i915, struct i915_wa_list *wal)
+{
+	struct intel_engine_cs *engine;
+	struct intel_gt *gt = &i915->gt;
+	int id;
+
+	for_each_engine(engine, gt, id) {
+		if (engine->class != VIDEO_DECODE_CLASS ||
+		    (engine->instance % 2))
+			continue;
+
+		wa_write_or(wal, VDBOX_CGCTL3F10(engine->mmio_base),
+			    IECPUNIT_CLKGATE_DIS);
+	}
+}
+
 static void
 gen12_gt_workarounds_init(struct drm_i915_private *i915,
 			  struct i915_wa_list *wal)
 {
 	wa_init_mcr(i915, wal);
+
+	/* RH note: this workaround came in quite late, so limit it to ADL-S to avoid potential
+	 * regressions
+	 */
+	if (IS_ALDERLAKE_S(i915)) {
+		/* Wa_14011060649:tgl,rkl,dg1,adls */
+		wa_14011060649(i915, wal);
+	}
 }
 
 static void
@@ -1658,8 +1701,9 @@ rcs_engine_wa_init(struct intel_engine_cs *engine, struct i915_wa_list *wal)
 			     GEN8_RC_SEMA_IDLE_MSG_DISABLE);
 	}
 
-	if (IS_DG1(i915) || IS_ROCKETLAKE(i915) || IS_TIGERLAKE(i915)) {
-		/* Wa_1406941453:tgl,rkl,dg1 */
+	if (IS_DG1(i915) || IS_ROCKETLAKE(i915) || IS_TIGERLAKE(i915) ||
+	    IS_ALDERLAKE_S(i915)) {
+		/* Wa_1406941453:tgl,rkl,dg1,adl-s */
 		wa_masked_en(wal,
 			     GEN10_SAMPLER_MODE,
 			     ENABLE_SMALLPL);
