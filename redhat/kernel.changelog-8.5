@@ -1,3 +1,18 @@
+* Thu Aug 26 2021 Bruno Meneguele <bmeneg@redhat.com> [4.18.0-338.el8]
+- KVM: nSVM: avoid picking up unsupported bits from L2 in int_ctl (CVE-2021-3653) (Jon Maloy) [1985413] {CVE-2021-3653}
+- KVM: nSVM: always intercept VMLOAD/VMSAVE when nested (CVE-2021-3656) (Jon Maloy) [1985430] {CVE-2021-3656}
+- drm/i915/rkl: Remove require_force_probe protection (Lyude Paul) [1985159]
+- drm/i915/display: support ddr5 mem types (Lyude Paul) [1992233]
+- drm/i915/adl_s: Update ddi buf translation tables (Lyude Paul) [1992233]
+- drm/i915/adl_s: Wa_14011765242 is also needed on A1 display stepping (Lyude Paul) [1992233]
+- drm/i915/adl_s: Extend Wa_1406941453 (Lyude Paul) [1992233]
+- drm/i915: Implement Wa_1508744258 (Lyude Paul) [1992233]
+- drm/i915/adl_s: Fix dma_mask_size to 39 bit (Lyude Paul) [1992233]
+- drm/i915: Add the missing adls vswing tables (Lyude Paul) [1992233]
+- drm/i915: Add Wa_14011060649 (Lyude Paul) [1992233]
+- drm/i915/adl_s: Add Interrupt Support (Lyude Paul) [1992233]
+- drm/amdgpu: add another Renoir DID (Lyude Paul) [1980900]
+
 * Wed Aug 25 2021 Bruno Meneguele <bmeneg@redhat.com> [4.18.0-337.el8]
 - net/mlx5: Fix flow table chaining (Amir Tzin) [1987139]
 - openvswitch: fix sparse warning incorrect type (Mark Gray) [1992773]
