@@ -240,6 +240,26 @@ struct pkru_state {
 } __packed;
 
 /*
+ * State component 15: Architectural LBR configuration state.
+ * The size of Arch LBR state depends on the number of LBRs (lbr_depth).
+ */
+
+struct lbr_entry {
+	u64 from;
+	u64 to;
+	u64 info;
+};
+
+struct arch_lbr_state {
+	u64 lbr_ctl;
+	u64 lbr_depth;
+	u64 ler_from;
+	u64 ler_to;
+	u64 ler_info;
+	struct lbr_entry		entries[];
+} __packed;
+
+/*
  * State component 10 is supervisor state used for context-switching the
  * PASID state.
  */
