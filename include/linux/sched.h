@@ -868,7 +868,7 @@ struct task_struct {
 #else
 	long				rh_reserved5;
 #endif
-	long				rh_reserved6;
+	RH_KABI_USE(6, void		*migration_pending)
 	struct pid			*rh_sid;
 #endif
 	struct list_head		thread_group;
