@@ -1016,16 +1016,13 @@ struct rq {
 	struct cpuidle_state	*idle_state;
 #endif
 
-#if defined(CONFIG_PREEMPT_RT) && defined(CONFIG_SMP)
-	unsigned int		nr_pinned;
-#endif
-
 #if defined(CONFIG_SCHED_HRTICK) && defined(CONFIG_SMP)
 	RH_KABI_USE(1, ktime_t hrtick_time)
 #else
 	RH_KABI_RESERVE(1)
 #endif
-	RH_KABI_USE(2, unsigned int push_busy)
+	RH_KABI_USE_SPLIT(2, unsigned int push_busy,
+			     unsigned int nr_pinned)
 #ifdef CONFIG_NUMA_BALANCING
 	RH_KABI_EXTEND(unsigned int numa_migrate_on)
 #endif
@@ -1072,7 +1069,7 @@ static inline int cpu_of(struct rq *rq)
 
 static inline bool is_migration_disabled(struct task_struct *p)
 {
-#if defined(CONFIG_SMP) && defined(CONFIG_PREEMPT_RT)
+#ifdef CONFIG_SMP
 	return p->migration_disabled;
 #else
 	return false;
