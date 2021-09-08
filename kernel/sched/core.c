@@ -6691,7 +6691,7 @@ void normalize_rt_tasks(void)
 		.sched_policy = SCHED_NORMAL,
 	};
 
-	read_lock(&tasklist_lock);
+	qread_lock(&tasklist_lock);
 	for_each_process_thread(g, p) {
 		/*
 		 * Only normalize user tasks:
@@ -6716,7 +6716,7 @@ void normalize_rt_tasks(void)
 
 		__sched_setscheduler(p, &attr, false, false);
 	}
-	read_unlock(&tasklist_lock);
+	qread_unlock(&tasklist_lock);
 }
 
 #endif /* CONFIG_MAGIC_SYSRQ */

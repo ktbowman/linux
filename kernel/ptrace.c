@@ -30,6 +30,8 @@
 #include <linux/cn_proc.h>
 #include <linux/compat.h>
 
+#include <linux/rh_tasklist_lock.h>
+
 /*
  * Access another process' address space via ptrace.
  * Source/target buffer must be kernel space,

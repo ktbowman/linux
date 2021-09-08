@@ -96,6 +96,8 @@
 #include <asm/processor.h>
 #include "internal.h"
 
+#include <linux/rh_tasklist_lock.h>
+
 void proc_task_name(struct seq_file *m, struct task_struct *p, bool escape)
 {
 	char *buf;

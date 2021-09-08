@@ -104,6 +104,8 @@
 #include "audit.h"
 #include "avc_ss.h"
 
+#include <linux/rh_tasklist_lock.h>
+
 struct selinux_state selinux_state;
 
 /* SECMARK reference count */
