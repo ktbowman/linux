@@ -679,8 +679,9 @@ struct task_struct {
 	unsigned int			policy;
 	int				nr_cpus_allowed;
 #if defined(CONFIG_SMP) && defined(CONFIG_PREEMPT_RT)
-	RH_KABI_FILL_HOLE(int		migration_disabled)
+	RH_KABI_FILL_HOLE(unsigned short migration_disabled)
 #endif
+	RH_KABI_FILL_HOLE(unsigned short migration_flags)
 	RH_KABI_RENAME(cpumask_t cpus_allowed, cpumask_t cpus_mask);
 
 #ifdef CONFIG_PREEMPT_RCU

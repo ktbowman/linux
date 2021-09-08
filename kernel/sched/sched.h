@@ -1025,7 +1025,7 @@ struct rq {
 #else
 	RH_KABI_RESERVE(1)
 #endif
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE(2, unsigned int push_busy)
 #ifdef CONFIG_NUMA_BALANCING
 	RH_KABI_EXTEND(unsigned int numa_migrate_on)
 #endif
@@ -1040,6 +1040,7 @@ struct rq {
 	RH_KABI_EXTEND(u64 clock_task ____cacheline_aligned)
 	RH_KABI_EXTEND(u64 clock_pelt)
 	RH_KABI_EXTEND(unsigned long lost_idle_time)
+	RH_KABI_EXTEND(struct cpu_stop_work push_work)
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -1067,6 +1068,16 @@ static inline int cpu_of(struct rq *rq)
 #endif
 }
 
+#define MDF_PUSH	0x01
+
+static inline bool is_migration_disabled(struct task_struct *p)
+{
+#if defined(CONFIG_SMP) && defined(CONFIG_PREEMPT_RT)
+	return p->migration_disabled;
+#else
+	return false;
+#endif
+}
 
 #ifdef CONFIG_SCHED_SMT
 extern void __update_idle_core(struct rq *rq);
@@ -1832,7 +1843,7 @@ struct sched_class {
 #endif
 
 	RH_KABI_USE(1, int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf))
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE(2, struct rq *(*find_lock_rq)(struct task_struct *p, struct rq *rq))
 
 };
 
@@ -1900,6 +1911,24 @@ extern void update_group_capacity(struct sched_domain *sd, int cpu);
 extern void trigger_load_balance(struct rq *rq);
 
 extern void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask, u32 flags);
+
+static inline struct task_struct *get_push_task(struct rq *rq)
+{
+	struct task_struct *p = rq->curr;
+
+	lockdep_assert_held(&rq->lock);
+
+	if (rq->push_busy)
+		return NULL;
+
+	if (p->nr_cpus_allowed == 1)
+		return NULL;
+
+	rq->push_busy = true;
+	return get_task_struct(p);
+}
+
+extern int push_cpu_stop(void *arg);
 
 #endif
 
