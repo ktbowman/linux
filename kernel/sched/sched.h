@@ -1016,6 +1016,10 @@ struct rq {
 	struct cpuidle_state	*idle_state;
 #endif
 
+#if defined(CONFIG_PREEMPT_RT) && defined(CONFIG_SMP)
+	unsigned int		nr_pinned;
+#endif
+
 #if defined(CONFIG_SCHED_HRTICK) && defined(CONFIG_SMP)
 	RH_KABI_USE(1, ktime_t hrtick_time)
 #else
