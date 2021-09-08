@@ -1010,6 +1010,7 @@ struct device_dma_parameters {
 	 */
 	unsigned int max_segment_size;
 	unsigned long segment_boundary_mask;
+	RH_KABI_EXTEND(unsigned int min_align_mask)
 };
 
 typedef void *(*devcon_match_fn_t)(struct fwnode_handle *fwnode, const char *id,
