@@ -953,7 +953,8 @@ struct rq {
 
 	struct list_head cfs_tasks;
 
-	RH_KABI_DEPRECATE(u64, rt_avg)
+	RH_KABI_REPLACE(u64	rt_avg,
+			struct rcuwait	hotplug_wait)
 	RH_KABI_DEPRECATE(u64, age_stamp)
 	u64			idle_stamp;
 	u64			avg_idle;
