@@ -238,20 +238,6 @@ static inline void sev_es_wr_ghcb_msr(u64 val)
 	native_wrmsr(MSR_AMD64_SEV_ES_GHCB, low, high);
 }
 
-static long copy_from_kernel_nofault(void *dst, const void *src, size_t size)
-{
-	pagefault_disable();
-	while (size) {
-		unsafe_get_user(*(u8 *)dst++, (u8 *)src++, Efault);
-		--size;
-	}
-	pagefault_enable();
-	return 0;
-Efault:
-	pagefault_enable();
-	return -EFAULT;
-}
-
 static int vc_fetch_insn_kernel(struct es_em_ctxt *ctxt,
 				unsigned char *buffer)
 {
