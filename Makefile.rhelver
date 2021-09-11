@@ -1,5 +1,5 @@
 RHEL_MAJOR = 8
-RHEL_MINOR = 5
+RHEL_MINOR = 6
 
 #
 # RHEL_RELEASE
@@ -35,9 +35,9 @@ RHEL_RELEASE = 340
 #
 # Use this spot to avoid future merge conflicts.
 # Do not trim this comment.
-EARLY_YSTREAM ?= no
+EARLY_YSTREAM ?= yes
 EARLY_YBUILD:=
-EARLY_YRELEASE:=
+EARLY_YRELEASE:=0
 ifneq ("$(ZSTREAM)", "yes")
   ifeq ("$(EARLY_YSTREAM)","yes")
     RHEL_RELEASE:=$(RHEL_RELEASE).$(EARLY_YRELEASE)
