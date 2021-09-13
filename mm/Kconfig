@@ -770,3 +770,6 @@ config MAPPING_DIRTY_HELPERS
 #
 config ARCH_HAS_HUGEPD
 	bool
+
+config KMAP_LOCAL
+	bool
