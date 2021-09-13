@@ -4,3 +4,4 @@
 #
 
 obj-$(CONFIG_COUNTER) += counter.o
+obj-$(CONFIG_INTEL_QEP)		+= intel-qep.o
