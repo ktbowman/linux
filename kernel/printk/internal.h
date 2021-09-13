@@ -22,8 +22,6 @@
 #define PRINTK_NMI_DIRECT_CONTEXT_MASK	 0x40000000
 #define PRINTK_NMI_CONTEXT_MASK		 0x80000000
 
-extern raw_spinlock_t logbuf_lock;
-
 __printf(4, 0)
 int vprintk_store(int facility, int level,
 		  const struct dev_printk_info *dev_info,
@@ -69,7 +67,7 @@ void defer_console_output(void);
 __printf(1, 0) int vprintk_func(const char *fmt, va_list args) { return 0; }
 
 /*
- * In !PRINTK builds we still export logbuf_lock spin_lock, console_sem
+ * In !PRINTK builds we still export console_sem
  * semaphore and some of console functions (console_unlock()/etc.), so
  * printk-safe must preserve the existing local IRQ guarantees.
  */
