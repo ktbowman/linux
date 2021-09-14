@@ -1611,7 +1611,7 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
  *
  * This may be called multiple times for binary chains (scripts for example).
  */
-int prepare_binprm(struct linux_binprm *bprm)
+static int prepare_binprm(struct linux_binprm *bprm)
 {
 	loff_t pos = 0;
 
@@ -1631,8 +1631,6 @@ int prepare_binprm(struct linux_binprm *bprm)
 	memset(bprm->buf, 0, BINPRM_BUF_SIZE);
 	return kernel_read(bprm->file, bprm->buf, BINPRM_BUF_SIZE, &pos);
 }
-
-EXPORT_SYMBOL(prepare_binprm);
 
 /*
  * Arguments are '\0' separated strings found at the location bprm->p
@@ -1688,6 +1686,10 @@ int search_binary_handler(struct linux_binprm *bprm)
 	/* This allows 4 levels of binfmt rewrites before failing hard. */
 	if (bprm->recursion_depth > 5)
 		return -ELOOP;
+
+	retval = prepare_binprm(bprm);
+	if (retval < 0)
+		return retval;
 
 	retval = security_bprm_check(bprm);
 	if (retval)
@@ -1851,10 +1853,6 @@ static int do_execveat_common(int fd, struct filename *filename,
 	/* Set the unchanging part of bprm->cred */
 	retval = security_bprm_creds_for_exec(bprm);
 	if (retval)
-		goto out;
-
-	retval = prepare_binprm(bprm);
-	if (retval < 0)
 		goto out;
 
 	retval = copy_strings_kernel(1, &bprm->filename, bprm);
