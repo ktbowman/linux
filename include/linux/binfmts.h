@@ -42,7 +42,7 @@ struct linux_binprm {
 		 * True if most recent call to cap_bprm_set_creds
 		 * resulted in elevated privileges.
 		 */
-		cap_elevated:1,
+		RH_KABI_RENAME(cap_elevated, active_secureexec):1,
 		/*
 		 * Set by bprm_creds_for_exec hook to indicate a
 		 * privilege-gaining exec has happened. Used to set
@@ -55,6 +55,8 @@ struct linux_binprm {
 		 */
 		RH_KABI_FILL_HOLE(unsigned int called_exec_mmap:1)
 		RH_KABI_FILL_HOLE(unsigned int point_of_no_return:1)
+		/* It is safe to use the creds of a script (see binfmt_misc) */
+		RH_KABI_FILL_HOLE(unsigned int preserve_creds:1)
 #ifdef __alpha__
 	unsigned int taso:1;
 #endif
