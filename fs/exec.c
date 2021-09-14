@@ -1195,11 +1195,6 @@ no_thread_group:
 	/* we have changed execution domain */
 	tsk->exit_signal = SIGCHLD;
 
-#ifdef CONFIG_POSIX_TIMERS
-	exit_itimers(sig);
-	flush_itimer_signals();
-#endif
-
 	BUG_ON(!thread_group_leader(tsk));
 	return 0;
 
@@ -1282,6 +1277,11 @@ int flush_old_exec(struct linux_binprm * bprm)
 	retval = de_thread(me);
 	if (retval)
 		goto out;
+
+#ifdef CONFIG_POSIX_TIMERS
+	exit_itimers(me->signal);
+	flush_itimer_signals();
+#endif
 
 	/*
 	 * Make the signal table private.
