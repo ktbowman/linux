@@ -1066,7 +1066,7 @@ struct task_struct {
 #ifdef CONFIG_CPUSETS
 	/* Protected by ->alloc_lock: */
 	nodemask_t			mems_allowed;
-	/* Seqence number to catch updates: */
+	/* Sequence number to catch updates: */
 	RH_KABI_REPLACE(seqcount_t	mems_allowed_seq,
 		seqcount_spinlock_t	mems_allowed_seq)
 	int				cpuset_mem_spread_rotor;
