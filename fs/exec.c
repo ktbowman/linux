@@ -1278,18 +1278,6 @@ int flush_old_exec(struct linux_binprm * bprm)
 	if (retval)
 		goto out;
 
-#ifdef CONFIG_POSIX_TIMERS
-	exit_itimers(me->signal);
-	flush_itimer_signals();
-#endif
-
-	/*
-	 * Make the signal table private.
-	 */
-	retval = unshare_sighand(me);
-	if (retval)
-		goto out;
-
 	/*
 	 * Must be called _before_ exec_mmap() as bprm->mm is
 	 * not visibile until then. This also enables the update
@@ -1312,6 +1300,18 @@ int flush_old_exec(struct linux_binprm * bprm)
 	 * in search_binary_handler() will SEGV current.
 	 */
 	bprm->mm = NULL;
+
+#ifdef CONFIG_POSIX_TIMERS
+	exit_itimers(me->signal);
+	flush_itimer_signals();
+#endif
+
+	/*
+	 * Make the signal table private.
+	 */
+	retval = unshare_sighand(me);
+	if (retval)
+		goto out;
 
 	set_fs(USER_DS);
 	me->flags &= ~(PF_RANDOMIZE | PF_FORKNOEXEC | PF_KTHREAD |
