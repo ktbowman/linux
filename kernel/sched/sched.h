@@ -939,6 +939,7 @@ struct rq {
 	struct callback_head	*balance_callback;
 
 	unsigned char		idle_balance;
+	RH_KABI_FILL_HOLE(unsigned char	balance_push)
 
 	/* For active balancing */
 	int			active_balance;
@@ -951,7 +952,8 @@ struct rq {
 
 	struct list_head cfs_tasks;
 
-	RH_KABI_DEPRECATE(u64, rt_avg)
+	RH_KABI_REPLACE(u64	rt_avg,
+			struct rcuwait	hotplug_wait)
 	RH_KABI_DEPRECATE(u64, age_stamp)
 	u64			idle_stamp;
 	u64			avg_idle;
@@ -1018,7 +1020,8 @@ struct rq {
 #else
 	RH_KABI_RESERVE(1)
 #endif
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE_SPLIT(2, unsigned int push_busy,
+			     unsigned int nr_pinned)
 #ifdef CONFIG_NUMA_BALANCING
 	RH_KABI_EXTEND(unsigned int numa_migrate_on)
 #endif
@@ -1033,6 +1036,7 @@ struct rq {
 	RH_KABI_EXTEND(u64 clock_task ____cacheline_aligned)
 	RH_KABI_EXTEND(u64 clock_pelt)
 	RH_KABI_EXTEND(unsigned long lost_idle_time)
+	RH_KABI_EXTEND(struct cpu_stop_work push_work)
 };
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -1060,6 +1064,16 @@ static inline int cpu_of(struct rq *rq)
 #endif
 }
 
+#define MDF_PUSH	0x01
+
+static inline bool is_migration_disabled(struct task_struct *p)
+{
+#ifdef CONFIG_SMP
+	return p->migration_disabled;
+#else
+	return false;
+#endif
+}
 
 #ifdef CONFIG_SCHED_SMT
 extern void __update_idle_core(struct rq *rq);
@@ -1170,6 +1184,8 @@ struct rq_flags {
 #endif
 };
 
+extern struct callback_head balance_push_callback;
+
 /*
  * Lockdep annotation that avoids accidental unlocks; it's like a
  * sticky/continuous lockdep_assert_held().
@@ -1187,6 +1203,9 @@ static inline void rq_pin_lock(struct rq *rq, struct rq_flags *rf)
 #ifdef CONFIG_SCHED_DEBUG
 	rq->clock_update_flags &= (RQCF_REQ_SKIP|RQCF_ACT_SKIP);
 	rf->clock_update_flags = 0;
+#ifdef CONFIG_SMP
+	SCHED_WARN_ON(rq->balance_callback && rq->balance_callback != &balance_push_callback);
+#endif
 #endif
 }
 
@@ -1354,7 +1373,7 @@ queue_balance_callback(struct rq *rq,
 {
 	lockdep_assert_held(&rq->lock);
 
-	if (unlikely(head->next))
+	if (unlikely(head->next || rq->balance_callback == &balance_push_callback))
 		return;
 
 	head->func = (void (*)(struct callback_head *))func;
@@ -1781,8 +1800,9 @@ struct sched_class {
 
 	void (*task_woken)(struct rq *this_rq, struct task_struct *task);
 
-	void (*set_cpus_allowed)(struct task_struct *p,
-				 const struct cpumask *newmask);
+	RH_KABI_REPLACE(void (*set_cpus_allowed)(struct task_struct *p, const struct cpumask *newmask),
+			void (*set_cpus_allowed)(struct task_struct *p, const struct cpumask *newmask,
+						 u32 flags))
 
 	void (*rq_online)(struct rq *rq);
 	void (*rq_offline)(struct rq *rq);
@@ -1817,7 +1837,7 @@ struct sched_class {
 #endif
 
 	RH_KABI_USE(1, int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf))
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE(2, struct rq *(*find_lock_rq)(struct task_struct *p, struct rq *rq))
 
 };
 
@@ -1874,13 +1894,38 @@ static inline bool sched_fair_runnable(struct rq *rq)
 extern struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 extern struct task_struct *pick_next_task_idle(struct rq *rq);
 
+#define SCA_CHECK		0x01
+#define SCA_MIGRATE_DISABLE	0x02
+#define SCA_MIGRATE_ENABLE	0x04
+
 #ifdef CONFIG_SMP
 
 extern void update_group_capacity(struct sched_domain *sd, int cpu);
 
 extern void trigger_load_balance(struct rq *rq);
 
-extern void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask);
+extern void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask, u32 flags);
+
+static inline struct task_struct *get_push_task(struct rq *rq)
+{
+	struct task_struct *p = rq->curr;
+
+	lockdep_assert_held(&rq->lock);
+
+	if (rq->push_busy)
+		return NULL;
+
+	if (p->nr_cpus_allowed == 1)
+		return NULL;
+
+	if (p->migration_disabled)
+		return NULL;
+
+	rq->push_busy = true;
+	return get_task_struct(p);
+}
+
+extern int push_cpu_stop(void *arg);
 
 #endif
 

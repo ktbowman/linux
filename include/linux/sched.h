@@ -678,6 +678,10 @@ struct task_struct {
 
 	unsigned int			policy;
 	int				nr_cpus_allowed;
+#ifdef CONFIG_SMP
+	RH_KABI_FILL_HOLE(unsigned short migration_disabled)
+#endif
+	RH_KABI_FILL_HOLE(unsigned short migration_flags)
 	RH_KABI_RENAME(cpumask_t cpus_allowed, cpumask_t cpus_mask);
 
 #ifdef CONFIG_PREEMPT_RCU
@@ -767,7 +771,6 @@ struct task_struct {
 	unsigned			no_cgroup_migration:1;
 #endif
 #ifdef CONFIG_BLK_CGROUP
-	/* to be used once the psi infrastructure lands upstream. */
 	unsigned			use_memdelay:1;
 #endif
 #ifdef CONFIG_CGROUPS
@@ -788,6 +791,10 @@ struct task_struct {
 	 * ->sched_remote_wakeup gets used, so it can be in this word.
 	 */
 	RH_KABI_FILL_HOLE(unsigned	sched_remote_wakeup:1)
+#ifdef CONFIG_PSI
+	/* Stalled due to lack of memory */
+	RH_KABI_FILL_HOLE(unsigned	in_memstall:1)
+#endif
 
 	unsigned long			atomic_flags; /* Flags requiring atomic access. */
 
@@ -862,7 +869,7 @@ struct task_struct {
 #else
 	long				rh_reserved5;
 #endif
-	long				rh_reserved6;
+	RH_KABI_USE(6, void		*migration_pending)
 	struct pid			*rh_sid;
 #endif
 	struct list_head		thread_group;
@@ -997,6 +1004,10 @@ struct task_struct {
 #ifdef CONFIG_DEBUG_MUTEXES
 	/* Mutex deadlock detection: */
 	struct mutex_waiter		*blocked_on;
+#endif
+
+#ifdef CONFIG_DEBUG_ATOMIC_SLEEP
+	int				non_block_count;
 #endif
 
 #ifdef CONFIG_TRACE_IRQFLAGS
@@ -1501,7 +1512,6 @@ extern struct pid *cad_pid;
 #define PF_KTHREAD		0x00200000	/* I am a kernel thread */
 #define PF_RANDOMIZE		0x00400000	/* Randomize virtual address space */
 #define PF_SWAPWRITE		0x00800000	/* Allowed to write to swap */
-#define PF_MEMSTALL		0x01000000	/* Stalled due to lack of memory */
 #define PF_NO_SETAFFINITY	0x04000000	/* Userland is not allowed to meddle with cpus_mask */
 #define PF_MCE_EARLY		0x08000000      /* Early kill for mce process policy */
 #define PF_MEMALLOC_NOCMA	0x10000000	/* All allocation request will have _GFP_MOVABLE cleared */
@@ -1621,10 +1631,6 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p, const struct cpuma
 		return -EINVAL;
 	return 0;
 }
-#endif
-
-#ifndef cpu_relax_yield
-#define cpu_relax_yield() cpu_relax()
 #endif
 
 extern int yield_to(struct task_struct *p, bool preempt);
