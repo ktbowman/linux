@@ -930,7 +930,7 @@ const void *get_xsave_field_ptr(int xfeature_nr)
 	 * fpu__save() takes the CPU's xstate registers
 	 * and saves them off to the 'fpu memory buffer.
 	 */
-	fpu__save(fpu);
+	fpu_sync_fpstate(fpu);
 
 	return get_xsave_addr(&fpu->state.xsave, xfeature_nr);
 }
