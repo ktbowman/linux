@@ -95,7 +95,7 @@ EXPORT_SYMBOL(irq_fpu_usable);
 int copy_fpregs_to_fpstate(struct fpu *fpu)
 {
 	if (likely(use_xsave())) {
-		copy_xregs_to_kernel(&fpu->state.xsave);
+		os_xsave(&fpu->state.xsave);
 		return 1;
 	}
 
@@ -307,7 +307,7 @@ void fpu__drop(struct fpu *fpu)
 static inline void copy_init_fpstate_to_fpregs(u64 features_mask)
 {
 	if (use_xsave())
-		copy_kernel_to_xregs(&init_fpstate.xsave, features_mask);
+		os_xrstor(&init_fpstate.xsave, features_mask);
 	else if (static_cpu_has(X86_FEATURE_FXSR))
 		copy_kernel_to_fxregs(&init_fpstate.fxsave);
 	else
@@ -338,8 +338,7 @@ static void fpu__clear(struct fpu *fpu, bool user_only)
 	if (user_only) {
 		if (!fpregs_state_valid(fpu, smp_processor_id()) &&
 		    xfeatures_mask_supervisor())
-			copy_kernel_to_xregs(&fpu->state.xsave,
-					     xfeatures_mask_supervisor());
+			os_xrstor(&fpu->state.xsave, xfeatures_mask_supervisor());
 		copy_init_fpstate_to_fpregs(xfeatures_mask_user());
 	} else {
 		copy_init_fpstate_to_fpregs(xfeatures_mask_all);
