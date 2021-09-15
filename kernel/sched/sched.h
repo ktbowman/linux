@@ -922,7 +922,8 @@ struct rq {
 
 	unsigned int		clock_update_flags;
 	u64			clock;
-	RH_KABI_DEPRECATE(u64, clock_task)
+	RH_KABI_REPLACE(u64     clock_task,
+			struct rcuwait  hotplug_wait)
 
 	atomic_t		nr_iowait;
 
@@ -953,9 +954,8 @@ struct rq {
 
 	struct list_head cfs_tasks;
 
-	RH_KABI_REPLACE(u64	rt_avg,
-			struct rcuwait	hotplug_wait)
-	RH_KABI_DEPRECATE(u64, age_stamp)
+	RH_KABI_REPLACE(u64	rt_avg,    unsigned long wake_stamp)
+	RH_KABI_REPLACE(u64     age_stamp, u64 wake_avg_idle)
 	u64			idle_stamp;
 	u64			avg_idle;
 
