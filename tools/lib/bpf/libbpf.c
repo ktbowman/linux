@@ -8470,7 +8470,7 @@ int bpf_program__nth_fd(const struct bpf_program *prog, int n)
 	return fd;
 }
 
-enum bpf_prog_type bpf_program__get_type_v0_0_4(struct bpf_program *prog)
+enum bpf_prog_type bpf_program__get_type_v0_0_4(const struct bpf_program *prog)
 {
 	return prog->type;
 }
@@ -8515,7 +8515,7 @@ BPF_PROG_TYPE_FNS(extension, BPF_PROG_TYPE_EXT);
 BPF_PROG_TYPE_FNS(sk_lookup, BPF_PROG_TYPE_SK_LOOKUP);
 
 enum bpf_attach_type
-bpf_program__get_expected_attach_type_v0_0_4(struct bpf_program *prog)
+bpf_program__get_expected_attach_type_v0_0_4(const struct bpf_program *prog)
 {
 	return prog->expected_attach_type;
 }
@@ -11297,11 +11297,11 @@ bpf_object__open_mem_v0_0_6(const void *obj_buf, size_t obj_buf_sz,
 			    const struct bpf_object_open_opts *opts)
 	__attribute__((alias("bpf_object__open_mem_v0_0_4")));
 extern enum bpf_attach_type
-bpf_program__get_expected_attach_type_v0_0_6(struct bpf_program *prog)
+bpf_program__get_expected_attach_type_v0_0_6(const struct bpf_program *prog)
 	__attribute__((alias("bpf_program__get_expected_attach_type_v0_0_4")));
 
 extern enum bpf_prog_type
-bpf_program__get_type_v0_0_6(struct bpf_program *prog)
+bpf_program__get_type_v0_0_6(const struct bpf_program *prog)
 	__attribute__((alias("bpf_program__get_type_v0_0_4")));
 
 extern size_t bpf_program__size_v0_0_6(const struct bpf_program *prog)
