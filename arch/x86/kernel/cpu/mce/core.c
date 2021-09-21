@@ -44,6 +44,7 @@
 #include <linux/jump_label.h>
 #include <linux/set_memory.h>
 #include <linux/sync_core.h>
+#include <linux/task_work.h>
 #include <linux/hardirq.h>
 
 #include <asm/intel-family.h>
@@ -1090,24 +1091,6 @@ static void mce_clear_state(unsigned long *toclear)
 	}
 }
 
-static int do_memory_failure(struct mce *m)
-{
-	int flags = MF_ACTION_REQUIRED;
-	int ret;
-
-	pr_err("Uncorrected hardware memory error in user-access at %llx", m->addr);
-
-	if (!current->task_struct_rh->mce_ripv)
-		flags |= MF_MUST_KILL;
-	ret = memory_failure(m->addr >> PAGE_SHIFT, flags);
-	if (ret)
-		pr_err("Memory error not recovered");
-	else
-		set_mce_nospec(m->addr >> PAGE_SHIFT, current->task_struct_rh->mce_whole_page);
-	return ret;
-}
-
-
 /*
  * Cases where we avoid rendezvous handler timeout:
  * 1) If this CPU is offline.
@@ -1203,6 +1186,30 @@ static void __mc_scan_banks(struct mce *m, struct mce *final,
 	*m = *final;
 }
 
+static void kill_me_now(struct callback_head *ch)
+{
+	force_sig(SIGBUS, current);
+}
+
+static void kill_me_maybe(struct callback_head *cb)
+{
+	struct task_struct_rh *p = container_of(cb, struct task_struct_rh, mce_kill_me);
+	int flags = MF_ACTION_REQUIRED;
+
+	pr_err("Uncorrected hardware memory error in user-access at %llx", p->mce_addr);
+
+	if (!p->mce_ripv)
+		flags |= MF_MUST_KILL;
+
+	if (!memory_failure(p->mce_addr >> PAGE_SHIFT, flags)) {
+		set_mce_nospec(p->mce_addr >> PAGE_SHIFT, p->mce_whole_page);
+		return;
+	}
+
+	pr_err("Memory error not recovered");
+	kill_me_now(cb);
+}
+
 /*
  * The actual machine check handler. This only handles real
  * exceptions when something got corrupted coming in through int 18.
@@ -1215,7 +1222,7 @@ static void __mc_scan_banks(struct mce *m, struct mce *final,
  * MCE broadcast. However some CPUs might be broken beyond repair,
  * so be always careful when synchronizing with others.
  */
-void do_machine_check(struct pt_regs *regs, long error_code)
+void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 {
 	DECLARE_BITMAP(valid_banks, MAX_NR_BANKS);
 	DECLARE_BITMAP(toclear, MAX_NR_BANKS);
@@ -1345,16 +1352,14 @@ void do_machine_check(struct pt_regs *regs, long error_code)
 	if ((m.cs & 3) == 3) {
 		/* If this triggers there is no way to recover. Die hard. */
 		BUG_ON(!on_thread_stack() || !user_mode(regs));
-		local_irq_enable();
-		preempt_enable();
 
+		current->task_struct_rh->mce_addr = m.addr;
 		current->task_struct_rh->mce_ripv = !!(m.mcgstatus & MCG_STATUS_RIPV);
 		current->task_struct_rh->mce_whole_page = whole_page(&m);
-
-		if (kill_it || do_memory_failure(&m))
-			force_sig(SIGBUS, current);
-		preempt_disable();
-		local_irq_disable();
+		current->task_struct_rh->mce_kill_me.func = kill_me_maybe;
+		if (kill_it)
+			current->task_struct_rh->mce_kill_me.func = kill_me_now;
+		task_work_add(current, &current->task_struct_rh->mce_kill_me, true);
 	} else {
 		if (!fixup_exception(regs, X86_TRAP_MC))
 			mce_panic("Failed kernel mode recovery", &m, NULL);
