@@ -32,6 +32,16 @@ workflow: !reference [.workflow]
     name: kernel-rt-rhel8
     merge_branch: 8.5-rt
 
+# Full RT pipeline for -rt branch
+.realtime_full:
+  trigger:
+    branch: rhel8
+  variables:
+    builder_image: quay.io/cki/builder-rhel8
+    name: kernel-rt-rhel8
+    kpet_tree_family: rhel8-rt
+    RUN_ONLY_FOR_RT: 'true'
+
 # regular pipelines
 
 merge_request_regular:
@@ -46,6 +56,16 @@ baseline_regular:
   extends: [.internal, .baseline, .with_notifications, .rhel_common,
             .trigger]
 
+# realtime branch pipelines
+
+merge_request_realtime:
+  extends: [.internal, .merge_request, .with_notifications, .realtime_pipeline_common,
+            .realtime_full]
+
+baseline_realtime:
+  extends: [.internal, .baseline, .with_notifications, .realtime_pipeline_common,
+            .realtime_full]
+
 # private pipelines
 
 merge_request_private:
@@ -55,5 +75,9 @@ merge_request_private:
 realtime_check_private:
   extends: [.scratch, .merge_request, .realtime_check_common,
             .realtime_check]
+
+merge_request_realtime_private:
+  extends: [.scratch, .merge_request, .realtime_pipeline_common,
+            .realtime_full]
 
 # no private baselines as repos are mirrored
