@@ -3,6 +3,8 @@
 # Makefile for linux/drivers/platform/x86
 # x86 Platform-Specific Drivers
 #
+obj-$(CONFIG_X86_PLATFORM_DRIVERS_INTEL)		+= intel/
+
 obj-$(CONFIG_ASUS_LAPTOP)	+= asus-laptop.o
 obj-$(CONFIG_ASUS_WMI)		+= asus-wmi.o
 obj-$(CONFIG_ASUS_NB_WMI)	+= asus-nb-wmi.o
