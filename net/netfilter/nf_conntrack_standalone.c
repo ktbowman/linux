@@ -667,7 +667,7 @@ static int nf_conntrack_pernet_init(struct net *net)
 	return 0;
 
 out_hooks:
-	nf_conntrack_fini_net(net);
+	nf_conntrack_standalone_fini_sysctl(net);
 out_sysctl:
 	nf_conntrack_standalone_fini_proc(net);
 out_proc:
