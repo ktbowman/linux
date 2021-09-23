@@ -1211,14 +1211,14 @@ static void kill_me_maybe(struct callback_head *cb)
 	kill_me_now(cb);
 }
 
-static void queue_task_work(struct mce *m, int kill_it)
+static void queue_task_work(struct mce *m, int kill_current_task)
 {
 	struct task_struct_rh *current_rh = current->task_struct_rh;
 	current_rh->mce_addr = m->addr;
 	current_rh->mce_ripv = !!(m->mcgstatus & MCG_STATUS_RIPV);
 	current_rh->mce_whole_page = whole_page(m);
 
-	if (kill_it)
+	if (kill_current_task)
 		current_rh->mce_kill_me.func = kill_me_now;
 	else
 		current_rh->mce_kill_me.func = kill_me_maybe;
@@ -1261,10 +1261,10 @@ void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 	int no_way_out = 0;
 
 	/*
-	 * If kill_it gets set, there might be a way to recover from this
+	 * If kill_current_task is not set, there might be a way to recover from this
 	 * error.
 	 */
-	int kill_it = 0;
+	int kill_current_task = 0;
 
 	/*
 	 * MCEs are always local on AMD. Same is determined by MCG_STATUS_LMCES
@@ -1296,7 +1296,7 @@ void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 	 * severity is MCE_AR_SEVERITY we have other options.
 	 */
 	if (!(m.mcgstatus & MCG_STATUS_RIPV))
-		kill_it = 1;
+		kill_current_task = 1;
 
 	/*
 	 * Check if this MCE is signaled to only this logical processor,
@@ -1351,14 +1351,14 @@ void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 	 * processes and continue even when there is no way out.
 	 */
 	if (cfg->tolerant == 3)
-		kill_it = 0;
+		kill_current_task = 0;
 	else if (no_way_out)
 		mce_panic("Fatal machine check on current CPU", &m, msg);
 
 	if (worst > 0)
 		mce_report_event(regs);
 
-	if (worst != MCE_AR_SEVERITY && !kill_it)
+	if (worst != MCE_AR_SEVERITY && !kill_current_task)
 		goto out;
 
 	/* Fault was in user mode and we need to take some action */
@@ -1366,7 +1366,7 @@ void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 		/* If this triggers there is no way to recover. Die hard. */
 		BUG_ON(!on_thread_stack() || !user_mode(regs));
 
-		queue_task_work(&m, kill_it);
+		queue_task_work(&m, kill_current_task);
 
 	} else {
 		if (!fixup_exception(regs, X86_TRAP_MC))
