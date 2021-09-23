@@ -1211,6 +1211,21 @@ static void kill_me_maybe(struct callback_head *cb)
 	kill_me_now(cb);
 }
 
+static void queue_task_work(struct mce *m, int kill_it)
+{
+	struct task_struct_rh *current_rh = current->task_struct_rh;
+	current_rh->mce_addr = m->addr;
+	current_rh->mce_ripv = !!(m->mcgstatus & MCG_STATUS_RIPV);
+	current_rh->mce_whole_page = whole_page(m);
+
+	if (kill_it)
+		current_rh->mce_kill_me.func = kill_me_now;
+	else
+		current_rh->mce_kill_me.func = kill_me_maybe;
+
+	task_work_add(current, &current_rh->mce_kill_me, true);
+}
+
 /*
  * The actual machine check handler. This only handles real
  * exceptions when something got corrupted coming in through int 18.
@@ -1351,13 +1366,8 @@ void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 		/* If this triggers there is no way to recover. Die hard. */
 		BUG_ON(!on_thread_stack() || !user_mode(regs));
 
-		current->task_struct_rh->mce_addr = m.addr;
-		current->task_struct_rh->mce_ripv = !!(m.mcgstatus & MCG_STATUS_RIPV);
-		current->task_struct_rh->mce_whole_page = whole_page(&m);
-		current->task_struct_rh->mce_kill_me.func = kill_me_maybe;
-		if (kill_it)
-			current->task_struct_rh->mce_kill_me.func = kill_me_now;
-		task_work_add(current, &current->task_struct_rh->mce_kill_me, true);
+		queue_task_work(&m, kill_it);
+
 	} else {
 		if (!fixup_exception(regs, X86_TRAP_MC))
 			mce_panic("Failed kernel mode recovery", &m, NULL);
