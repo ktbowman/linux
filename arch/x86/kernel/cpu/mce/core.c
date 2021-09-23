@@ -1188,6 +1188,9 @@ static void __mc_scan_banks(struct mce *m, struct mce *final,
 
 static void kill_me_now(struct callback_head *ch)
 {
+	struct task_struct_rh *p = container_of(ch, struct task_struct_rh, mce_kill_me);
+
+	p->mce_count = 0;
 	force_sig(SIGBUS, current);
 }
 
@@ -1196,6 +1199,7 @@ static void kill_me_maybe(struct callback_head *cb)
 	struct task_struct_rh *p = container_of(cb, struct task_struct_rh, mce_kill_me);
 	int flags = MF_ACTION_REQUIRED;
 
+	p->mce_count = 0;
 	pr_err("Uncorrected hardware memory error in user-access at %llx", p->mce_addr);
 
 	if (!p->mce_ripv)
@@ -1211,17 +1215,34 @@ static void kill_me_maybe(struct callback_head *cb)
 	kill_me_now(cb);
 }
 
-static void queue_task_work(struct mce *m, int kill_current_task)
+static void queue_task_work(struct mce *m, char *msg, int kill_current_task)
 {
 	struct task_struct_rh *current_rh = current->task_struct_rh;
-	current_rh->mce_addr = m->addr;
-	current_rh->mce_ripv = !!(m->mcgstatus & MCG_STATUS_RIPV);
-	current_rh->mce_whole_page = whole_page(m);
+	int count = ++current_rh->mce_count;
 
-	if (kill_current_task)
-		current_rh->mce_kill_me.func = kill_me_now;
-	else
-		current_rh->mce_kill_me.func = kill_me_maybe;
+	/* First call, save all the details */
+	if (count == 1) {
+		current_rh->mce_addr = m->addr;
+		current_rh->mce_ripv = !!(m->mcgstatus & MCG_STATUS_RIPV);
+		current_rh->mce_whole_page = whole_page(m);
+
+		if (kill_current_task)
+			current_rh->mce_kill_me.func = kill_me_now;
+		else
+			current_rh->mce_kill_me.func = kill_me_maybe;
+	}
+
+	/* Ten is likely overkill. Don't expect more than two faults before task_work() */
+	if (count > 10)
+		mce_panic("Too many consecutive machine checks while accessing user data", m, msg);
+
+	/* Second or later call, make sure page address matches the one from first call */
+	if (count > 1 && (current_rh->mce_addr >> PAGE_SHIFT) != (m->addr >> PAGE_SHIFT))
+		mce_panic("Consecutive machine checks to different user pages", m, msg);
+
+	/* Do not call task_work_add() more than once */
+	if (count > 1)
+		return;
 
 	task_work_add(current, &current_rh->mce_kill_me, true);
 }
@@ -1366,7 +1387,7 @@ void noinstr do_machine_check(struct pt_regs *regs, long error_code)
 		/* If this triggers there is no way to recover. Die hard. */
 		BUG_ON(!on_thread_stack() || !user_mode(regs));
 
-		queue_task_work(&m, kill_current_task);
+		queue_task_work(&m, msg, kill_current_task);
 
 	} else {
 		if (!fixup_exception(regs, X86_TRAP_MC))
