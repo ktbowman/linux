@@ -113,10 +113,11 @@ struct kmem_cache {
 			struct reciprocal_value reciprocal_size)
 	RH_KABI_DEPRECATE(struct memcg_cache_params, memcg_params)
 	RH_KABI_DEPRECATE(unsigned int, max_attr_size)
+#if !defined(CONFIG_SLAB_FREELIST_HARDENED)
 	RH_KABI_DEPRECATE(struct kset *, memcg_kset)
-
-#ifdef CONFIG_SLAB_FREELIST_HARDENED
-	unsigned long random;
+#else
+	RH_KABI_REPLACE(struct kset *memcg_kset,
+			unsigned long random)
 #endif
 
 #ifdef CONFIG_NUMA
