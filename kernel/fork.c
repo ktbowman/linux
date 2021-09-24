@@ -101,6 +101,8 @@
 
 #include <trace/events/sched.h>
 
+#include <linux/rh_tasklist_lock.h>
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
 
@@ -124,7 +126,7 @@ int max_threads;		/* tunable limit on nr_threads */
 
 DEFINE_PER_CPU(unsigned long, process_counts) = 0;
 
-__cacheline_aligned DEFINE_RWLOCK(tasklist_lock);  /* outer */
+__cacheline_aligned DEFINE_QRWLOCK(tasklist_lock);  /* outer */
 
 #ifdef CONFIG_PROVE_RCU
 int lockdep_tasklist_lock_is_held(void)

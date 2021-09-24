@@ -113,6 +113,8 @@
 #include <linux/kmemleak.h>
 #include <linux/memory_hotplug.h>
 
+#include <linux/rh_tasklist_lock.h>
+
 /*
  * Kmemleak configuration and common defines.
  */

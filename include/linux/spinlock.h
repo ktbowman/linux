@@ -493,4 +493,27 @@ int __alloc_bucket_spinlocks(spinlock_t **locks, unsigned int *lock_mask,
 
 void free_bucket_spinlocks(spinlock_t *locks);
 
+/*
+ * RHEL8 qrwlock macros
+ */
+#ifndef qrwlock_t
+#define qrwlock_t	rwlock_t
+#endif
+
+#ifndef qread_lock
+#define qread_lock(l)	read_lock(l)
+#endif
+
+#ifndef qread_unlock
+#define qread_unlock(l)	read_unlock(l)
+#endif
+
+#ifndef qwrite_lock_irq
+#define qwrite_lock_irq(l)	write_lock_irq(l)
+#endif
+
+#ifndef qwrite_unlock_irq
+#define qwrite_unlock_irq(l)	write_unlock_irq(l)
+#endif
+
 #endif /* __LINUX_SPINLOCK_H */

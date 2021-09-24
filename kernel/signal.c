@@ -53,6 +53,8 @@
 #include <asm/cacheflush.h>
 #include "audit.h"	/* audit_signal_info() */
 
+#include <linux/rh_tasklist_lock.h>
+
 /*
  * SLAB caches for signal bits.
  */
