@@ -31,7 +31,7 @@
  */
 #include <linux/module.h>
 #include <linux/device.h>
-#include <linux/pgtable.h>
+#include <asm/pgtable.h>
 #include <linux/sched.h>
 #include <linux/debugfs.h>
 #include <drm/drm_sysfs.h>
