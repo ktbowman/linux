@@ -339,6 +339,10 @@ bool __init early_is_amd_nb(u32 device)
 	const struct pci_device_id *id;
 	u32 vendor = device & 0xffff;
 
+	if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD &&
+	    boot_cpu_data.x86_vendor != X86_VENDOR_HYGON)
+		return false;
+
 	if (boot_cpu_data.x86_vendor == X86_VENDOR_HYGON)
 		misc_ids = hygon_nb_misc_ids;
 
