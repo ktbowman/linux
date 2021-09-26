@@ -1770,7 +1770,7 @@ static inline void pause_for_credit_return(struct hfi1_devdata *dd)
 }
 
 /**
- * sc_to_vlt() reverse lookup sc to vl
+ * sc_to_vlt() - reverse lookup sc to vl
  * @dd - devdata
  * @sc5 - 5 bit sc
  */
