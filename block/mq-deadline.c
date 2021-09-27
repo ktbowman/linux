@@ -138,6 +138,9 @@ static void dd_request_merged(struct request_queue *q, struct request *req,
 	}
 }
 
+/*
+ * Callback function that is invoked after @next has been merged into @req.
+ */
 static void dd_merged_requests(struct request_queue *q, struct request *req,
 			       struct request *next)
 {
@@ -374,6 +377,8 @@ done:
 }
 
 /*
+ * Called from blk_mq_run_hw_queue() -> __blk_mq_sched_dispatch_requests().
+ *
  * One confusing aspect here is that we get called for a specific
  * hardware queue, but we may return a request that is for a
  * different hardware queue. This is because mq-deadline has shared
@@ -447,6 +452,10 @@ static int dd_init_queue(struct request_queue *q, struct elevator_type *e)
 	return 0;
 }
 
+/*
+ * Try to merge @bio into an existing request. If @bio has been merged into
+ * an existing request, store the pointer to that request into *@rq.
+ */
 static int dd_request_merge(struct request_queue *q, struct request **rq,
 			    struct bio *bio)
 {
@@ -472,6 +481,10 @@ static int dd_request_merge(struct request_queue *q, struct request **rq,
 	return ELEVATOR_NO_MERGE;
 }
 
+/*
+ * Attempt to merge a bio into an existing request. This function is called
+ * before @bio is associated with a request.
+ */
 static bool dd_bio_merge(struct blk_mq_hw_ctx *hctx, struct bio *bio)
 {
 	struct request_queue *q = hctx->queue;
@@ -529,6 +542,9 @@ static void dd_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 	}
 }
 
+/*
+ * Called from blk_mq_sched_insert_request() or blk_mq_sched_insert_requests().
+ */
 static void dd_insert_requests(struct blk_mq_hw_ctx *hctx,
 			       struct list_head *list, bool at_head)
 {
@@ -555,6 +571,8 @@ static void dd_prepare_request(struct request *rq, struct bio *bio)
 }
 
 /*
+ * Callback from inside blk_mq_free_request().
+ *
  * For zoned block devices, write unlock the target zone of
  * completed write requests. Do this while holding the zone lock
  * spinlock so that the zone is never unlocked while deadline_fifo_request()
