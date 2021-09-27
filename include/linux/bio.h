@@ -296,7 +296,7 @@ struct bio_integrity_payload {
 
 	struct bvec_iter	bip_iter;
 
-	unsigned short		bip_slab;	/* slab the bip came from */
+	RH_KABI_DEPRECATE(unsigned short,          bip_slab)
 	unsigned short		bip_vcnt;	/* # of integrity bio_vecs */
 	unsigned short		bip_max_vcnt;	/* integrity bio_vec slots */
 	unsigned short		bip_flags;	/* control flags */
