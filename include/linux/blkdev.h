@@ -485,7 +485,7 @@ struct request_queue {
 #ifdef CONFIG_PM
 	struct device		*dev;
 	RH_KABI_REPLACE(int	rpm_status, enum rpm_status rpm_status)
-	unsigned int		nr_pending;
+	RH_KABI_DEPRECATE(unsigned int,		nr_pending)
 #endif
 
 	/*
