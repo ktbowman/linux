@@ -1282,7 +1282,7 @@ static inline bool blk_needs_flush_plug(struct task_struct *tsk)
 
 extern void blk_io_schedule(void);
 
-int blkdev_issue_flush(struct block_device *, gfp_t);
+int blkdev_issue_flush(struct block_device *bdev);
 extern int blkdev_issue_write_same(struct block_device *bdev, sector_t sector,
 		sector_t nr_sects, gfp_t gfp_mask, struct page *page);
 
@@ -1912,7 +1912,7 @@ static inline bool blk_needs_flush_plug(struct task_struct *tsk)
 	return false;
 }
 
-static inline int blkdev_issue_flush(struct block_device *bdev, gfp_t gfp_mask)
+static inline int blkdev_issue_flush(struct block_device *bdev)
 {
 	return 0;
 }
