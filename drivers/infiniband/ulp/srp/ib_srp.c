@@ -2939,6 +2939,7 @@ static ssize_t show_pkey(struct device *dev, struct device_attribute *attr,
 
 	if (target->using_rdma_cm)
 		return -ENOENT;
+
 	return sysfs_emit(buf, "0x%04x\n", be16_to_cpu(target->ib_cm.pkey));
 }
 
@@ -2958,6 +2959,7 @@ static ssize_t show_dgid(struct device *dev, struct device_attribute *attr,
 
 	if (target->using_rdma_cm)
 		return -ENOENT;
+
 	return sysfs_emit(buf, "%pI6\n", ch->ib_cm.path.dgid.raw);
 }
 
@@ -2968,6 +2970,7 @@ static ssize_t show_orig_dgid(struct device *dev,
 
 	if (target->using_rdma_cm)
 		return -ENOENT;
+
 	return sysfs_emit(buf, "%pI6\n", target->ib_cm.orig_dgid.raw);
 }
 
@@ -2982,6 +2985,7 @@ static ssize_t show_req_lim(struct device *dev,
 		ch = &target->ch[i];
 		req_lim = min(req_lim, ch->req_lim);
 	}
+
 	return sysfs_emit(buf, "%d\n", req_lim);
 }
 
