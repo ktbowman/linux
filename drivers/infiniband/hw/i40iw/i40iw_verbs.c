@@ -2550,12 +2550,12 @@ static void i40iw_get_dev_fw_str(struct ib_device *dev, char *str)
 }
 
 /**
- * i40iw_alloc_hw_stats - Allocate a hw stats structure
+ * i40iw_alloc_hw_port_stats - Allocate a hw stats structure
  * @ibdev: device pointer from stack
  * @port_num: port number
  */
-static struct rdma_hw_stats *i40iw_alloc_hw_stats(struct ib_device *ibdev,
-						  u32 port_num)
+static struct rdma_hw_stats *i40iw_alloc_hw_port_stats(struct ib_device *ibdev,
+				   u32 port_num)
 {
 	struct i40iw_device *iwdev = to_iwdev(ibdev);
 	struct i40iw_sc_dev *dev = &iwdev->sc_dev;
@@ -2575,6 +2575,16 @@ static struct rdma_hw_stats *i40iw_alloc_hw_stats(struct ib_device *ibdev,
 		lifespan = 1000;
 	return rdma_alloc_hw_stats_struct(i40iw_hw_stat_names, num_counters,
 					  lifespan);
+}
+
+static struct rdma_hw_stats *
+i40iw_alloc_hw_device_stats(struct ib_device *ibdev)
+{
+       /*
+        * It is probably a bug that i40iw reports its port stats as device
+        * stats
+        */
+       return i40iw_alloc_hw_port_stats(ibdev, 0);
 }
 
 /**
@@ -2630,7 +2640,8 @@ static const struct ib_device_ops i40iw_dev_ops = {
 	/* NOTE: Older kernels wrongly use 0 for the uverbs_abi_ver */
 	.uverbs_abi_ver = I40IW_ABI_VER,
 
-	.alloc_hw_stats = i40iw_alloc_hw_stats,
+	.alloc_hw_device_stats = i40iw_alloc_hw_device_stats,
+	.alloc_hw_port_stats = i40iw_alloc_hw_port_stats,
 	.alloc_mr = i40iw_alloc_mr,
 	.alloc_pd = i40iw_alloc_pd,
 	.alloc_ucontext = i40iw_alloc_ucontext,
