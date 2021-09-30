@@ -3536,6 +3536,9 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 	if (reply_descript_type == MPI2_RPY_DESCRIPT_FLAGS_UNUSED)
 		return IRQ_NONE;
 
+	if (irq_context && !atomic_add_unless(&irq_context->in_used, 1, 1))
+		return 0;
+
 	num_completed = 0;
 
 	while (d_val.u.low != cpu_to_le32(UINT_MAX) &&
@@ -3650,6 +3653,7 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 					irq_context->irq_line_enable = true;
 					irq_poll_sched(&irq_context->irqpoll);
 				}
+				atomic_dec(&irq_context->in_used);
 				return num_completed;
 			}
 		}
@@ -3667,6 +3671,10 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 				instance->reply_post_host_index_addr[0]);
 		megasas_check_and_restore_queue_depth(instance);
 	}
+
+	if (irq_context)
+		atomic_dec(&irq_context->in_used);
+
 	return num_completed;
 }
 
