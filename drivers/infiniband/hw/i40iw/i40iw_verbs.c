@@ -2652,6 +2652,7 @@ static const struct ib_device_ops i40iw_dev_ops = {
 	.dereg_mr = i40iw_dereg_mr,
 	.destroy_cq = i40iw_destroy_cq,
 	.destroy_qp = i40iw_destroy_qp,
+	.device_group = &i40iw_attr_group,
 	.drain_rq = i40iw_drain_rq,
 	.drain_sq = i40iw_drain_sq,
 	.get_dev_fw_str = i40iw_get_dev_fw_str,
@@ -2755,7 +2756,6 @@ int i40iw_register_rdma_device(struct i40iw_device *iwdev)
 	if (!iwdev->iwibdev)
 		return -ENOMEM;
 	iwibdev = iwdev->iwibdev;
-	rdma_set_device_sysfs_group(&iwibdev->ibdev, &i40iw_attr_group);
 	ret = ib_device_set_netdev(&iwibdev->ibdev, iwdev->netdev, 1);
 	if (ret)
 		goto error;
