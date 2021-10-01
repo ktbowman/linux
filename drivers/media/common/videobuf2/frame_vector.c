@@ -65,7 +65,7 @@ int get_vaddr_frames(unsigned long start, unsigned int nr_frames,
 	do {
 		unsigned long *nums = frame_vector_pfns(vec);
 
-		vma = find_vma_intersection(mm, start, start + 1);
+		vma = vma_lookup(mm, start);
 		if (!vma)
 			break;
 
