@@ -238,10 +238,28 @@ static inline void sev_es_wr_ghcb_msr(u64 val)
 	native_wrmsr(MSR_AMD64_SEV_ES_GHCB, low, high);
 }
 
+/*
+ * RHEL-only: copy_from_kernel_nofault() from RHEL8 doesn't work well for early
+ * allocations. Here we just need to copy up to 15 bytes not causing a #PF.
+ */
+static long sev_es_copy_from_kernel_nofault(void *dst, const void *src, size_t size)
+{
+	pagefault_disable();
+	while (size) {
+		unsafe_get_user(*(u8 *)dst++, (u8 *)src++, Efault);
+		--size;
+	}
+	pagefault_enable();
+	return 0;
+Efault:
+	pagefault_enable();
+	return -EFAULT;
+}
+
 static int vc_fetch_insn_kernel(struct es_em_ctxt *ctxt,
 				unsigned char *buffer)
 {
-	return copy_from_kernel_nofault(buffer, (unsigned char *)ctxt->regs->ip, MAX_INSN_SIZE);
+	return sev_es_copy_from_kernel_nofault(buffer, (unsigned char *)ctxt->regs->ip, MAX_INSN_SIZE);
 }
 
 static enum es_result vc_decode_insn(struct es_em_ctxt *ctxt)
