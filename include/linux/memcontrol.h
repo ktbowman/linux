@@ -130,9 +130,9 @@ struct batched_lruvec_stat {
  * Bitmap of shrinker::id corresponding to memcg-aware shrinkers,
  * which have elements charged to this memcg.
  */
-struct memcg_shrinker_map {
+struct shrinker_info {
 	struct rcu_head rcu;
-	unsigned long RH_KABI_RENAME(map[0], map[]);
+	unsigned long map[];
 };
 
 /*
@@ -171,7 +171,7 @@ struct mem_cgroup_per_node {
 	 * RHEL8: The mem_cgroup_per_node is dynamically allocated at
 	 * boot time and so is perfectly fine to be extended in size.
 	 */
-	RH_KABI_EXTEND(struct memcg_shrinker_map __rcu	*shrinker_map)
+	RH_KABI_EXTEND(struct shrinker_info __rcu	*shrinker_info)
 };
 
 struct mem_cgroup_threshold {
@@ -1657,8 +1657,8 @@ static inline bool mem_cgroup_under_socket_pressure(struct mem_cgroup *memcg)
 	return false;
 }
 
-int alloc_shrinker_maps(struct mem_cgroup *memcg);
-void free_shrinker_maps(struct mem_cgroup *memcg);
+int alloc_shrinker_info(struct mem_cgroup *memcg);
+void free_shrinker_info(struct mem_cgroup *memcg);
 void set_shrinker_bit(struct mem_cgroup *memcg, int nid, int shrinker_id);
 #else
 #define mem_cgroup_sockets_enabled 0
