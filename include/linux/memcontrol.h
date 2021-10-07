@@ -94,8 +94,8 @@ enum mem_cgroup_events_target {
 	MEM_CGROUP_NTARGETS,
 };
 
-struct RH_KABI_RENAME(mem_cgroup_stat_cpu, memcg_vmstats_percpu) {
-	long RH_KABI_RENAME(count, stat)[MEMCG_NR_STAT];
+struct memcg_vmstats_percpu {
+	long stat[MEMCG_NR_STAT];
 	unsigned long events[NR_VM_EVENT_ITEMS];
 	unsigned long nr_page_events;
 	unsigned long targets[MEM_CGROUP_NTARGETS];
@@ -266,6 +266,9 @@ struct obj_cgroup {
  *    follows the arrays.
  *  - vm_event_item: NR_VM_EVENT_ITEMS used in vmevents[] of memcg.
  */
+#ifdef __GENKSYMS__
+#include "rh_kabi_memcg.h"
+#else
 struct mem_cgroup {
 	struct cgroup_subsys_state css;
 
@@ -275,13 +278,6 @@ struct mem_cgroup {
 	/* Accounted resources */
 	struct page_counter memory;		/* Both v1 & v2 */
 
-#ifdef __GENKSYMS__
-	struct page_counter swap;
-	struct page_counter memsw;
-	struct page_counter kmem;
-	struct page_counter tcpmem;
-	RH_KABI_DEPRECATE(unsigned long, high)
-#else
 	struct page_counter tcpmem;		/* v1 only */
 	union {
 		struct page_counter swap;	/* v2 only */
@@ -290,7 +286,6 @@ struct mem_cgroup {
 
 	/* Legacy consumer-oriented counters */
 	struct page_counter kmem;		/* v1 only */
-#endif
 
 	/* Range enforcement for interrupt charges */
 	struct work_struct high_work;
@@ -300,17 +295,13 @@ struct mem_cgroup {
 	/* vmpressure notifications */
 	struct vmpressure vmpressure;
 
-	RH_KABI_DEPRECATE(bool, use_hierarchy)
-
-	/* protected by memcg_oom_lock */
-	bool		oom_lock;
-
 	/*
 	 * Should the OOM killer kill all belonging tasks, had it kill one?
 	 */
-	RH_KABI_FILL_HOLE(bool oom_group)
+	bool oom_group;
 
 	/* protected by memcg_oom_lock */
+	bool		oom_lock;
 	int		under_oom;
 
 	int	swappiness;
@@ -319,7 +310,7 @@ struct mem_cgroup {
 
 	/* memory.events and memory.events.local */
 	struct cgroup_file events_file;
-	RH_KABI_BROKEN_INSERT(struct cgroup_file events_local_file)
+	struct cgroup_file events_local_file;
 
 	/* handle for "memory.swap.events" */
 	struct cgroup_file swap_events_file;
@@ -347,25 +338,12 @@ struct mem_cgroup {
 
 	MEMCG_PADDING(_pad1_);
 
-	/*
-	 * set > 0 if pages under this cgroup are moving to other cgroup.
-	 */
-	atomic_t		moving_account;
-	struct task_struct	*move_lock_task;
+	atomic_long_t		vmstats[MEMCG_NR_STAT];
+	atomic_long_t		vmevents[NR_VM_EVENT_ITEMS];
 
-	/* Subtree VM stats and events (batched updates) */
-	struct RH_KABI_RENAME(mem_cgroup_stat_cpu, memcg_vmstats_percpu)
-		__percpu *RH_KABI_RENAME(stat_cpu, vmstats_percpu);
-
-	/* Legacy local VM stats and events */
-	RH_KABI_FILL_HOLE(struct memcg_vmstats_percpu __percpu *vmstats_local)
-
-	MEMCG_PADDING(_pad2_);
-
-	atomic_long_t		RH_KABI_RENAME(stat, vmstats)[MEMCG_NR_STAT];
-	atomic_long_t		RH_KABI_RENAME(events, vmevents)[NR_VM_EVENT_ITEMS];
+	/* memory.events */
 	atomic_long_t		memory_events[MEMCG_NR_MEMORY_EVENTS];
-	RH_KABI_BROKEN_INSERT(atomic_long_t memory_events_local[MEMCG_NR_MEMORY_EVENTS])
+	atomic_long_t		memory_events_local[MEMCG_NR_MEMORY_EVENTS];
 
 	unsigned long		socket_pressure;
 
@@ -376,20 +354,28 @@ struct mem_cgroup {
 #ifdef CONFIG_MEMCG_KMEM
 	int kmemcg_id;
 	enum memcg_kmem_state kmem_state;
-	RH_KABI_DEPRECATE(struct list_head, kmem_caches)
+	struct obj_cgroup __rcu *objcg;
+	struct list_head objcg_list; /* list of inherited objcgs */
 #endif
-	RH_KABI_REPLACE_SPLIT(int		last_scanned_node;
-			      nodemask_t	scan_nodes;
-			      atomic_t		numainfo_events;
-			      atomic_t		numainfo_updating,
 
-			      struct obj_cgroup __rcu *objcg,
-			      /* list of inherited objcgs */
-			      struct list_head	objcg_list)
+	MEMCG_PADDING(_pad2_);
+
+	/*
+	 * set > 0 if pages under this cgroup are moving to other cgroup.
+	 */
+	atomic_t		moving_account;
+	struct task_struct	*move_lock_task;
+
+	/* Legacy local VM stats and events */
+	struct memcg_vmstats_percpu __percpu *vmstats_local;
+
+	/* Subtree VM stats and events (batched updates) */
+	struct memcg_vmstats_percpu __percpu *vmstats_percpu;
+
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct list_head cgwb_list;
 	struct wb_domain cgwb_domain;
-	RH_KABI_BROKEN_INSERT(struct memcg_cgwb_frn cgwb_frn[MEMCG_CGWB_FRN_CNT])
+	struct memcg_cgwb_frn cgwb_frn[MEMCG_CGWB_FRN_CNT];
 #endif
 
 	/* List of events which userspace want to receive */
@@ -397,12 +383,13 @@ struct mem_cgroup {
 	spinlock_t event_list_lock;
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	RH_KABI_BROKEN_INSERT(struct deferred_split deferred_split_queue)
+	struct deferred_split deferred_split_queue;
 #endif
-	RH_KABI_BROKEN_INSERT(MEMCG_PADDING(_pad3_))
+
 	struct mem_cgroup_per_node *nodeinfo[0];
 	/* WARNING: nodeinfo must be the last member here */
 };
+#endif /* __GENKSYMS__ */
 
 /*
  * size of first charge trial. "32" comes from vmscan.c's magic value.
