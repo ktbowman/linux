@@ -993,7 +993,6 @@ extern bool cgroup_memory_noswap;
 #endif
 
 struct mem_cgroup *lock_page_memcg(struct page *page);
-void __unlock_page_memcg(struct mem_cgroup *memcg);
 void unlock_page_memcg(struct page *page);
 
 /*
@@ -1417,10 +1416,6 @@ mem_cgroup_print_oom_meminfo(struct mem_cgroup *memcg)
 static inline struct mem_cgroup *lock_page_memcg(struct page *page)
 {
 	return NULL;
-}
-
-static inline void __unlock_page_memcg(struct mem_cgroup *memcg)
-{
 }
 
 static inline void unlock_page_memcg(struct page *page)
