@@ -2,6 +2,8 @@
 #ifndef _SCSI_SCSI_CMND_H
 #define _SCSI_SCSI_CMND_H
 
+#include <linux/rh_kabi.h>
+
 #include <linux/dma-mapping.h>
 #include <linux/blkdev.h>
 #include <linux/t10-pi.h>
@@ -10,9 +12,8 @@
 #include <linux/timer.h>
 #include <linux/scatterlist.h>
 #include <scsi/scsi_device.h>
+#include RH_KABI_HIDE_INCLUDE(<scsi/scsi_host.h>)
 #include <scsi/scsi_request.h>
-
-#include <linux/rh_kabi.h>
 
 struct Scsi_Host;
 struct scsi_driver;
