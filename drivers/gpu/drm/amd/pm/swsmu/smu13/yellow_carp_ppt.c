@@ -897,7 +897,7 @@ static int yellow_carp_get_dpm_ultimate_freq(struct smu_context *smu,
 {
 	DpmClocks_t *clk_table = smu->smu_table.clocks_table;
 	uint32_t clock_limit;
-	uint32_t max_dpm_level, min_dpm_level;
+	uint32_t max_dpm_level = 0, min_dpm_level = 0;
 	int ret = 0;
 
 	if (!yellow_carp_clk_dpm_is_enabled(smu, clk_type)) {
