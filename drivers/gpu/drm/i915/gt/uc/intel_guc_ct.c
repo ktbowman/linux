@@ -82,7 +82,7 @@ enum { CTB_SEND = 0, CTB_RECV = 1 };
 
 enum { CTB_OWNER_HOST = 0 };
 
-static void ct_receive_tasklet_func(struct tasklet_struct *t);
+static void ct_receive_tasklet_func(unsigned long data);
 static void ct_incoming_request_worker_func(struct work_struct *w);
 
 /**
@@ -97,7 +97,8 @@ void intel_guc_ct_init_early(struct intel_guc_ct *ct)
 	INIT_LIST_HEAD(&ct->requests.pending);
 	INIT_LIST_HEAD(&ct->requests.incoming);
 	INIT_WORK(&ct->requests.worker, ct_incoming_request_worker_func);
-	tasklet_setup(&ct->receive_tasklet, ct_receive_tasklet_func);
+	tasklet_init(&ct->receive_tasklet, ct_receive_tasklet_func,
+		     (unsigned long)ct);
 }
 
 static inline const char *guc_ct_buffer_type_to_str(u32 type)
@@ -938,9 +939,9 @@ static void ct_try_receive_message(struct intel_guc_ct *ct)
 		tasklet_hi_schedule(&ct->receive_tasklet);
 }
 
-static void ct_receive_tasklet_func(struct tasklet_struct *t)
+static void ct_receive_tasklet_func(unsigned long data)
 {
-	struct intel_guc_ct *ct = from_tasklet(ct, t, receive_tasklet);
+	struct intel_guc_ct *ct = (void *)data;
 
 	ct_try_receive_message(ct);
 }
