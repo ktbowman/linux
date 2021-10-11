@@ -30,7 +30,7 @@ workflow: !reference [.workflow]
   variables:
     builder_image: quay.io/cki/builder-rhel8
     name: kernel-rt-rhel8
-    merge_branch: 8.5-rt
+    merge_branch: main-rt
 
 # Full RT pipeline for -rt branch
 .realtime_full:
