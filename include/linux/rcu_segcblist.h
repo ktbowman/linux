@@ -77,6 +77,9 @@ struct rcu_cblist {
 #define RCU_NEXT_TAIL		3
 #define RCU_CBLIST_NSEGS	4
 
+#define SEGCBLIST_ENABLED	BIT(0)
+#define SEGCBLIST_OFFLOADED	BIT(1)
+
 struct rcu_segcblist {
 	struct rcu_head *head;
 	struct rcu_head **tails[RCU_CBLIST_NSEGS];
@@ -86,9 +89,8 @@ struct rcu_segcblist {
 #else
 	long len;
 #endif
-	RH_KABI_REPLACE_SPLIT(long len_lazy,
-			      u8 enabled,
-			      u8 offloaded)
+	RH_KABI_REPLACE(long len_lazy, u8 flags)
+
 	/*
 	 * RHEL8 kABI Note:
 	 * This structure is embedded only in the per-cpu srcu_data which
