@@ -89,6 +89,14 @@ struct rcu_segcblist {
 	RH_KABI_REPLACE_SPLIT(long len_lazy,
 			      u8 enabled,
 			      u8 offloaded)
+	/*
+	 * RHEL8 kABI Note:
+	 * This structure is embedded only in the per-cpu srcu_data which
+	 * is referenced by other data structures as pointer only. So it
+	 * is safe to use RH_KABI_EXTEND() to insert new field here to
+	 * increase size and change offsets.
+	 */
+	RH_KABI_EXTEND(long seglen[RCU_CBLIST_NSEGS])
 };
 
 #define RCU_SEGCBLIST_INITIALIZER(n) \
