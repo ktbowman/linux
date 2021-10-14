@@ -55,6 +55,9 @@
 #define CPUID_PKU		(1ul << 3)
 #define CPUID_LA57		(1ul << 16)
 
+/* CPUID.0x8000_0001.EDX */
+#define CPUID_GBPAGES		(1ul << 26)
+
 /* General Registers in 64-Bit Mode */
 struct gpr64_regs {
 	u64 rax;
