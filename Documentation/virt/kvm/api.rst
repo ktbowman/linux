@@ -5089,6 +5089,7 @@ trailing ``'\0'``, is indicated by the ``name_size`` field in the header.
 The descriptors block is only needed to be read once for the lifetime of the
 file descriptor contains a sequence of ``struct kvm_stats_desc``, each followed
 by a string of size ``name_size``.
+::
 
 	#define KVM_STATS_TYPE_SHIFT		0
 	#define KVM_STATS_TYPE_MASK		(0xF << KVM_STATS_TYPE_SHIFT)
@@ -5122,6 +5123,7 @@ by this descriptor. Its endianness is CPU native.
 The following flags are supported:
 
 Bits 0-3 of ``flags`` encode the type:
+
   * ``KVM_STATS_TYPE_CUMULATIVE``
     The statistics data is cumulative. The value of data can only be increased.
     Most of the counters used in KVM are of this type.
@@ -5140,6 +5142,7 @@ Bits 0-3 of ``flags`` encode the type:
     The corresponding ``size`` field for this type is always 1.
 
 Bits 4-7 of ``flags`` encode the unit:
+
   * ``KVM_STATS_UNIT_NONE``
     There is no unit for the value of statistics data. This usually means that
     the value is a simple counter of an event.
@@ -5154,6 +5157,7 @@ Bits 4-7 of ``flags`` encode the unit:
 
 Bits 8-11 of ``flags``, together with ``exponent``, encode the scale of the
 unit:
+
   * ``KVM_STATS_BASE_POW10``
     The scale is based on power of 10. It is used for measurement of time and
     CPU clock cycles.  For example, an exponent of -9 can be used with
