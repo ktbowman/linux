@@ -4965,7 +4965,7 @@ with the KVM_XEN_VCPU_GET_ATTR ioctl.
 
 
 4.131 KVM_GET_SREGS2
-------------------
+--------------------
 
 :Capability: KVM_CAP_SREGS2
 :Architectures: x86
@@ -4978,17 +4978,17 @@ This ioctl (when supported) replaces the KVM_GET_SREGS.
 
 ::
 
-struct kvm_sregs2 {
-	/* out (KVM_GET_SREGS2) / in (KVM_SET_SREGS2) */
-	struct kvm_segment cs, ds, es, fs, gs, ss;
-	struct kvm_segment tr, ldt;
-	struct kvm_dtable gdt, idt;
-	__u64 cr0, cr2, cr3, cr4, cr8;
-	__u64 efer;
-	__u64 apic_base;
-	__u64 flags;
-	__u64 pdptrs[4];
-};
+        struct kvm_sregs2 {
+                /* out (KVM_GET_SREGS2) / in (KVM_SET_SREGS2) */
+                struct kvm_segment cs, ds, es, fs, gs, ss;
+                struct kvm_segment tr, ldt;
+                struct kvm_dtable gdt, idt;
+                __u64 cr0, cr2, cr3, cr4, cr8;
+                __u64 efer;
+                __u64 apic_base;
+                __u64 flags;
+                __u64 pdptrs[4];
+        };
 
 flags values for ``kvm_sregs2``:
 
@@ -4998,7 +4998,7 @@ flags values for ``kvm_sregs2``:
 
 
 4.132 KVM_SET_SREGS2
-------------------
+--------------------
 
 :Capability: KVM_CAP_SREGS2
 :Architectures: x86
@@ -7014,7 +7014,7 @@ features KVM_XEN_VCPU_ATTR_TYPE_RUNSTATE_ADDR/_CURRENT/_DATA/_ADJUST are
 supported by the KVM_XEN_VCPU_SET_ATTR/KVM_XEN_VCPU_GET_ATTR ioctls.
 
 8.33 KVM_CAP_HYPERV_ENFORCE_CPUID
------------------------------
+---------------------------------
 
 Architectures: x86
 
