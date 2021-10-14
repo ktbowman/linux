@@ -1095,6 +1095,8 @@ struct kvm_arch {
 	u32 user_space_msr_mask;
 	struct kvm_x86_msr_filter __rcu *msr_filter;
 
+	u32 hypercall_exit_enabled;
+
 	struct kvm_pmu_event_filter __rcu *pmu_event_filter;
 	struct task_struct *nx_lpage_recovery_thread;
 
