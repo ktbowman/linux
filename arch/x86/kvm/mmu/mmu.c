@@ -4233,7 +4233,8 @@ static void reset_rsvds_bits_mask(struct kvm_vcpu *vcpu,
 				vcpu->arch.reserved_gpa_bits,
 				context->root_level, context->nx,
 				guest_cpuid_has(vcpu, X86_FEATURE_GBPAGES),
-				is_pse(vcpu), guest_cpuid_is_amd(vcpu));
+				is_cr4_pse(context),
+				guest_cpuid_is_amd(vcpu));
 }
 
 static void
