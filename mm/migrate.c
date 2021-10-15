@@ -512,7 +512,7 @@ int migrate_page_move_mapping(struct address_space *mapping,
 			__mod_lruvec_state(new_lruvec, NR_SWAPCACHE, nr);
 		}
 #endif
-		if (dirty && mapping_can_writeback(mapping)) {
+		if (dirty && mapping_cap_account_dirty(mapping)) {
 			__mod_lruvec_state(old_lruvec, NR_FILE_DIRTY, -nr);
 			__mod_zone_page_state(oldzone, NR_ZONE_WRITE_PENDING, -nr);
 			__mod_lruvec_state(new_lruvec, NR_FILE_DIRTY, nr);

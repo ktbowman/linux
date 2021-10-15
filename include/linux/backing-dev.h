@@ -215,11 +215,6 @@ static inline bool mapping_cap_account_dirty(struct address_space *mapping)
 	return bdi_cap_account_dirty(inode_to_bdi(mapping->host));
 }
 
-static inline bool mapping_can_writeback(struct address_space *mapping)
-{
-	return mapping_cap_account_dirty(mapping);
-}
-
 static inline int bdi_sched_wait(void *word)
 {
 	schedule();
