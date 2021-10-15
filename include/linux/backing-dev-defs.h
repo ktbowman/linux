@@ -141,6 +141,10 @@ struct bdi_writeback {
 	struct list_head b_dirty_time;	/* time stamps are dirty */
 	spinlock_t list_lock;		/* protects the b_* lists */
 
+	/* number of inodes under writeback */
+	/* 4-byte hole after list_lock*/
+	RH_KABI_FILL_HOLE(atomic_t writeback_inodes)
+
 	struct percpu_counter stat[NR_WB_STAT_ITEMS];
 
 	struct bdi_writeback_congested *congested;
