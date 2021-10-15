@@ -194,6 +194,8 @@ struct bdi_writeback {
 	RH_KABI_RESERVE(2)
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
+	/* work item used for bandwidth estimate */
+	RH_KABI_BROKEN_INSERT(struct delayed_work bw_dwork)
 };
 
 struct backing_dev_info {
