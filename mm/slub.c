@@ -4803,8 +4803,6 @@ static int list_locations(struct kmem_cache *s, char *buf,
 			     GFP_KERNEL)) {
 		return sysfs_emit(buf, "Out of memory\n");
 	}
-	/* Push back cpu slabs */
-	flush_all(s);
 
 	for_each_kmem_cache_node(s, node, n) {
 		unsigned long flags;
