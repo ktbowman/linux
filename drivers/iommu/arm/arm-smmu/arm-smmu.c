@@ -1468,7 +1468,7 @@ static void arm_smmu_probe_finalize(struct device *dev)
 	cfg = dev_iommu_priv_get(dev);
 	smmu = cfg->smmu;
 
-	if (smmu->impl->probe_finalize)
+	if (smmu->impl && smmu->impl->probe_finalize)
 		smmu->impl->probe_finalize(smmu, dev);
 }
 
