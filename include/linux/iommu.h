@@ -129,7 +129,7 @@ enum iommu_attr {
 	DOMAIN_ATTR_FSL_PAMU_STASH,
 	DOMAIN_ATTR_FSL_PAMU_ENABLE,
 	DOMAIN_ATTR_FSL_PAMUV1,
-	DOMAIN_ATTR_NESTING,	/* two stages of translation */
+	RH_KABI_BROKEN_REMOVE_ENUM(DOMAIN_ATTR_NESTING)	/* two stages of translation */
 	DOMAIN_ATTR_DMA_USE_FLUSH_QUEUE,
 #ifndef __GENKSYMS__
 	DOMAIN_ATTR_IO_PGTABLE_CFG,
@@ -236,6 +236,7 @@ struct iommu_iotlb_gather {
  * @device_group: find iommu group for a particular device
  * @domain_get_attr: Query domain attributes
  * @domain_set_attr: Change domain attributes
+ * @enable_nesting: Enable nesting
  * @get_resv_regions: Request list of reserved regions for a device
  * @put_resv_regions: Free list of reserved regions for a device
  * @apply_resv_region: Temporary helper call-back for iova reserved ranges
@@ -346,6 +347,8 @@ struct iommu_ops {
 	struct iommu_device *(*probe_device)(struct device *dev);
 	void (*release_device)(struct device *dev);
 	void (*probe_finalize)(struct device *dev);
+
+	int (*enable_nesting)(struct iommu_domain *domain);
 	) /* RH_KABI_BROKEN_INSERT_BLOCK */
 
 	unsigned long pgsize_bitmap;
@@ -558,6 +561,7 @@ extern int iommu_domain_get_attr(struct iommu_domain *domain, enum iommu_attr,
 				 void *data);
 extern int iommu_domain_set_attr(struct iommu_domain *domain, enum iommu_attr,
 				 void *data);
+int iommu_enable_nesting(struct iommu_domain *domain);
 
 /* Window handling function prototypes */
 extern int iommu_domain_window_enable(struct iommu_domain *domain, u32 wnd_nr,
