@@ -19,5 +19,6 @@ Linux Tracing Technologies
    events-msr
    mmiotrace
    hwlat_detector
+   osnoise-tracer
    intel_th
    stm
