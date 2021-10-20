@@ -130,7 +130,7 @@ enum iommu_attr {
 	DOMAIN_ATTR_FSL_PAMU_ENABLE,
 	DOMAIN_ATTR_FSL_PAMUV1,
 	RH_KABI_BROKEN_REMOVE_ENUM(DOMAIN_ATTR_NESTING)	/* two stages of translation */
-	DOMAIN_ATTR_DMA_USE_FLUSH_QUEUE,
+	RH_KABI_BROKEN_REMOVE_ENUM(DOMAIN_ATTR_DMA_USE_FLUSH_QUEUE)
 #ifndef __GENKSYMS__
 	DOMAIN_ATTR_IO_PGTABLE_CFG,
 #endif
@@ -567,6 +567,9 @@ int iommu_enable_nesting(struct iommu_domain *domain);
 extern int iommu_domain_window_enable(struct iommu_domain *domain, u32 wnd_nr,
 				      phys_addr_t offset, u64 size,
 				      int prot);
+
+void iommu_set_dma_strict(bool val);
+bool iommu_get_dma_strict(struct iommu_domain *domain);
 
 extern int report_iommu_fault(struct iommu_domain *domain, struct device *dev,
 			      unsigned long iova, int flags);
