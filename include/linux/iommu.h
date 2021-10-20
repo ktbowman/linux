@@ -601,7 +601,6 @@ extern struct iommu_group *generic_device_group(struct device *dev);
  * @ops: ops for this device's IOMMU
  * @iommu_fwnode: firmware handle for this device's IOMMU
  * @flags: IOMMU_FWSPEC_* flags
- * @num_pasid_bits: number of PASID bits supported by this device
  * @num_ids: number of associated device IDs
  * @ids: IDs which this device may present to the IOMMU
  */
@@ -610,7 +609,6 @@ struct iommu_fwspec {
 	struct fwnode_handle	*iommu_fwnode;
 	RH_KABI_BROKEN_REMOVE(void *iommu_priv)
 	RH_KABI_BROKEN_INSERT(u32 flags)
-	RH_KABI_BROKEN_INSERT(u32 num_pasid_bits)
 	unsigned int		num_ids;
 	RH_KABI_BROKEN_REPLACE(u32 ids[1], u32 ids[])
 };
