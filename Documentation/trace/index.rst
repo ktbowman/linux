@@ -20,5 +20,6 @@ Linux Tracing Technologies
    mmiotrace
    hwlat_detector
    osnoise-tracer
+   timerlat-tracer
    intel_th
    stm
