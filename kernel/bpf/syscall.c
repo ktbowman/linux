@@ -61,7 +61,8 @@ static DEFINE_IDR(link_idr);
 static DEFINE_SPINLOCK(link_idr_lock);
 
 /* RHEL-only: default to 1 */
-int sysctl_unprivileged_bpf_disabled __read_mostly = 1;
+int sysctl_unprivileged_bpf_disabled __read_mostly =
+	IS_BUILTIN(CONFIG_BPF_UNPRIV_DEFAULT_OFF) ? 1 : 0;
 
 static int __init unprivileged_bpf_setup(char *str)
 {
