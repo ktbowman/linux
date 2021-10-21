@@ -1915,4 +1915,22 @@ static inline void tracer_hardirqs_off(unsigned long a0, unsigned long a1) { }
 
 extern struct trace_iterator *tracepoint_print_iter;
 
+/*
+ * This is a generic way to read and write a u64 value from a file in tracefs.
+ *
+ * The value is stored on the variable pointed by *val. The value needs
+ * to be at least *min and at most *max. The write is protected by an
+ * existing *lock.
+ */
+struct trace_min_max_param {
+	struct mutex	*lock;
+	u64		*val;
+	u64		*min;
+	u64		*max;
+};
+
+#define U64_STR_SIZE		24	/* 20 digits max */
+
+extern const struct file_operations trace_min_max_fops;
+
 #endif /* _LINUX_KERNEL_TRACE_H */
