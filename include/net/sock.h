@@ -1245,7 +1245,8 @@ struct proto {
 #endif
 	int			(*diag_destroy)(struct sock *sk, int err);
 
-	RH_KABI_RESERVE(1)
+	RH_KABI_USE(1, bool	(*bpf_bypass_getsockopt)(int level,
+							 int optname))
 	RH_KABI_RESERVE(2)
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
