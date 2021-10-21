@@ -15,3 +15,4 @@ grep -v 'ODEBUG: ' |
 grep -v 'This means that this is a DEBUG kernel and it is' |
 grep -v 'Warning: unable to open an initial console' |
 grep -v 'Warning: Failed to add ttynull console. No stdin, stdout, and stderr.*the init process!' |
+grep -v 'NOHZ tick-stop error: Non-RCU local softirq work is pending, handler'
