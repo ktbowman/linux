@@ -187,6 +187,15 @@ void trace_hwlat_callback(bool enter)
 		kdata->nmi_count++;
 }
 
+/*
+ * hwlat_err - report a hwlat error.
+ */
+#define hwlat_err(msg) ({							\
+	struct trace_array *tr = hwlat_trace;					\
+										\
+	trace_array_printk_buf(tr->array_buffer.buffer, _THIS_IP_, msg);	\
+})
+
 /**
  * get_sample - sample the CPU TSC and look for likely hardware latencies
  *
@@ -227,7 +236,7 @@ static int get_sample(void)
 			diff = time_to_us(time_sub(t1, last_t2));
 			/* This shouldn't happen */
 			if (diff < 0) {
-				pr_err(BANNER "time running backwards\n");
+				hwlat_err(BANNER "time running backwards\n");
 				goto out;
 			}
 			if (diff > outer_sample)
@@ -239,7 +248,7 @@ static int get_sample(void)
 
 		/* Check for possible overflows */
 		if (total < last_total) {
-			pr_err("Time total overflowed\n");
+			hwlat_err("Time total overflowed\n");
 			break;
 		}
 		last_total = total;
@@ -249,7 +258,7 @@ static int get_sample(void)
 
 		/* This shouldn't happen */
 		if (diff < 0) {
-			pr_err(BANNER "time running backwards\n");
+			hwlat_err(BANNER "time running backwards\n");
 			goto out;
 		}
 
