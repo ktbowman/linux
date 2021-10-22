@@ -38,6 +38,9 @@ extern void cpu_die(void);
 extern int cpu_to_chip_id(int cpu);
 extern int *chip_id_lookup_table;
 
+DECLARE_PER_CPU(cpumask_var_t, thread_group_l1_cache_map);
+DECLARE_PER_CPU(cpumask_var_t, thread_group_l2_cache_map);
+
 #ifdef CONFIG_SMP
 
 struct smp_ops_t {
