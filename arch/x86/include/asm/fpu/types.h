@@ -346,7 +346,9 @@ struct fpu {
 	 * Pointer to the active struct fpstate. Initialized to
 	 * point at @__fpstate below.
 	 */
+#ifndef __GENKSYMS__
 	struct fpstate			*fpstate;
+#endif
 
 	/*
 	 * @state:
@@ -357,10 +359,14 @@ struct fpu {
 	 * copy. If the task context-switches away then they get
 	 * saved here and represent the FPU state.
 	 */
+#ifndef __GENKSYMS__
 	union {
 		struct fpstate			__fpstate;
 		union fpregs_state		state;
 	};
+#else
+	union fpregs_state              state;
+#endif
 	/*
 	 * WARNING: 'state' is dynamically-sized.  Do not put
 	 * anything after it here.
