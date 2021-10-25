@@ -32,9 +32,14 @@
 
 #include "lock_events.h"
 
-#ifndef RWSEM_INIT_ONLY
+/*
+ * RHEL8 Note:
+ *
+ * Rename __init_rwsem to ___init_rwsem to avoid breaking kABI.
+ * There is another version of __init_rwsem() in rwsem_init.c with
+ * the right kABI signature.
+ */
 #define __init_rwsem	___init_rwsem
-#endif
 
 /*
  * The least significant 2 bits of the owner value has the following
@@ -329,8 +334,6 @@ void __init_rwsem(struct rw_semaphore *sem, const char *name,
 #endif
 }
 EXPORT_SYMBOL(__init_rwsem);
-
-#ifndef RWSEM_INIT_ONLY
 
 enum rwsem_waiter_type {
 	RWSEM_WAITING_FOR_WRITE,
@@ -1549,4 +1552,3 @@ void up_read_non_owner(struct rw_semaphore *sem)
 EXPORT_SYMBOL(up_read_non_owner);
 
 #endif
-#endif /* RWSEM_INIT_ONLY */
