@@ -7108,7 +7108,6 @@ void __init sched_init(void)
 	unsigned long alloc_size = 0, ptr;
 	int i;
 
-	sched_clock_init();
 	wait_bit_init();
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
