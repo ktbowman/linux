@@ -4606,11 +4606,9 @@ static __be32 set_client(clientid_t *clid,
 	if (STALE_CLIENTID(clid, nn))
 		return nfserr_stale_clientid;
 	/*
-	 * For v4.1+ we get the client in the SEQUENCE op. If we don't have one
-	 * cached already then we know this is for is for v4.0 and "sessions"
-	 * will be false.
+	 * We're in the 4.0 case (otherwise the SEQUENCE op would have
+	 * set cstate->clp), so session = false:
 	 */
-	WARN_ON_ONCE(cstate->session);
 	cstate->clp = lookup_clientid(clid, false, nn);
 	if (!cstate->clp)
 		return nfserr_expired;
