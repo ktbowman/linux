@@ -1102,7 +1102,7 @@ struct dev_links_info {
  * as above for the same reasons.
  *
  * upstream commit fc5a251d0fd7 (driver core: Add sync_state driver/bus
- * callback) * adds yet another entry: defer_hook.  Rinse and repeat.
+ * callback) * adds yet another entry: defer_sync.  Rinse and repeat.
  */
 
 struct device_extended_rh {
@@ -1297,7 +1297,7 @@ struct device {
 	/* NB: See the note for struct dev_links_info: */
 	RH_KABI_USE(3, 4, struct list_head links_needs_suppliers)
 	RH_KABI_USE(5, bool links_need_for_probe)
-	RH_KABI_USE(6, 7, struct list_head links_defer_hook)
+	RH_KABI_USE(6, 7, struct list_head links_defer_sync)
 
 	RH_KABI_RESERVE(8)
 	RH_KABI_RESERVE(9)
