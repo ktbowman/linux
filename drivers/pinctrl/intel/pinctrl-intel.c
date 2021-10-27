@@ -220,7 +220,6 @@ enum {
 };
 
 static int intel_pad_locked(struct intel_pinctrl *pctrl, unsigned int pin)
-
 {
 	struct intel_community *community;
 	const struct intel_padgroup *padgrp;
@@ -1493,8 +1492,13 @@ static int intel_pinctrl_probe(struct platform_device *pdev,
 		if (IS_ERR(regs))
 			return PTR_ERR(regs);
 
-		/* Determine community features based on the revision */
+		/*
+		 * Determine community features based on the revision.
+		 * A value of all ones means the device is not present.
+		 */
 		value = readl(regs + REVID);
+		if (value == ~0u)
+			return -ENODEV;
 		if (((value & REVID_MASK) >> REVID_SHIFT) >= 0x94) {
 			community->features |= PINCTRL_FEATURE_DEBOUNCE;
 			community->features |= PINCTRL_FEATURE_1K_PD;
