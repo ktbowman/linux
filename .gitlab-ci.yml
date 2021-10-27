@@ -56,6 +56,10 @@ baseline_regular:
   extends: [.internal, .baseline, .with_notifications, .rhel_common,
             .trigger]
 
+baseline_regular_coverage_build:
+  extends: [.internal, .baseline, .rhel_common, .only_build_and_publish, .coverage,
+            .trigger]
+
 # realtime branch pipelines
 
 merge_request_realtime:
