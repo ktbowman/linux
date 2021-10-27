@@ -45,21 +45,17 @@ static inline bool switchdev_trans_ph_commit(struct switchdev_trans *trans)
 
 enum switchdev_attr_id {
 	SWITCHDEV_ATTR_ID_UNDEFINED,
-	RH_KABI_RENAME(SWITCHDEV_ATTR_ID_PORT_PARENT_ID,
-		       RH_DEPRECATED_SWITCHDEV_ATTR_ID_PORT_PARENT_ID),
+	RH_KABI_BROKEN_REMOVE_ENUM(SWITCHDEV_ATTR_ID_PORT_PARENT_ID)
 	SWITCHDEV_ATTR_ID_PORT_STP_STATE,
 	SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS,
-	RH_KABI_RENAME(SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS_SUPPORT,
-		       RH_DEPRECATED_SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS_SUPPORT),
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_PORT_PRE_BRIDGE_FLAGS)
+	RH_KABI_BROKEN_REMOVE_ENUM(SWITCHDEV_ATTR_ID_PORT_BRIDGE_FLAGS_SUPPORT)
 	SWITCHDEV_ATTR_ID_PORT_MROUTER,
 	SWITCHDEV_ATTR_ID_BRIDGE_AGEING_TIME,
 	SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING,
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_BRIDGE_VLAN_PROTOCOL)
 	SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED,
 	SWITCHDEV_ATTR_ID_BRIDGE_MROUTER,
-#ifndef __GENKSYMS__
-	SWITCHDEV_ATTR_ID_PORT_PRE_BRIDGE_FLAGS,
-	SWITCHDEV_ATTR_ID_BRIDGE_VLAN_PROTOCOL,
-#endif
 };
 
 struct switchdev_attr {
@@ -69,15 +65,31 @@ struct switchdev_attr {
 	void *complete_priv;
 	void (*complete)(struct net_device *dev, int err, void *priv);
 	union {
-		RH_KABI_DEPRECATE(struct netdev_phys_item_id, ppid)
+		/* RHEL: The following block represents original content of
+		 * the union that needs to be kept for KABI checker although
+		 * Switchdev API is not a part of KABI.
+		 */
+		RH_KABI_BROKEN_REMOVE_BLOCK(
+		struct netdev_phys_item_id ppid;	/* PORT_PARENT_ID */
 		u8 stp_state;				/* PORT_STP_STATE */
 		unsigned long brport_flags;		/* PORT_{PRE}_BRIDGE_FLAGS */
-		RH_KABI_DEPRECATE(unsigned long, brport_flags_support)
+		unsigned long brport_flags_support;	/* PORT_BRIDGE_FLAGS_SUPPORT */
 		bool mrouter;				/* PORT_MROUTER */
 		clock_t ageing_time;			/* BRIDGE_AGEING_TIME */
 		bool vlan_filtering;			/* BRIDGE_VLAN_FILTERING */
-		RH_KABI_EXTEND(u16 vlan_protocol)	/* BRIDGE_VLAN_PROTOCOL */
 		bool mc_disabled;			/* MC_DISABLED */
+		) /* RH_KABI_BROKEN_REMOVE_BLOCK */
+
+		RH_KABI_BROKEN_INSERT_BLOCK(
+		struct netdev_phys_item_id ppid;	/* PORT_PARENT_ID */
+		u8 stp_state;				/* PORT_STP_STATE */
+		unsigned long brport_flags;		/* PORT_{PRE}_BRIDGE_FLAGS */
+		bool mrouter;				/* PORT_MROUTER */
+		clock_t ageing_time;			/* BRIDGE_AGEING_TIME */
+		bool vlan_filtering;			/* BRIDGE_VLAN_FILTERING */
+		u16 vlan_protocol;			/* BRIDGE_VLAN_PROTOCOL */
+		bool mc_disabled;			/* MC_DISABLED */
+		) /* RH_KABI_BROKEN_INSERT_BLOCK */
 	} u;
 };
 
@@ -258,6 +270,7 @@ int switchdev_handle_port_obj_del(struct net_device *dev,
 			int (*del_cb)(struct net_device *dev,
 				      const struct switchdev_obj *obj));
 
+RH_KABI_FORCE_CHANGE(1)
 int switchdev_handle_port_attr_set(struct net_device *dev,
 			struct switchdev_notifier_port_attr_info *port_attr_info,
 			bool (*check_cb)(const struct net_device *dev),
