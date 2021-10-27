@@ -53,6 +53,7 @@ struct iommu_domain;
 struct notifier_block;
 struct iommu_sva;
 struct iommu_fault_event;
+struct iommu_dma_cookie;
 
 /* iommu fault flags */
 #define IOMMU_FAULT_READ	0x0
@@ -99,7 +100,7 @@ struct iommu_domain {
 	iommu_fault_handler_t handler;
 	void *handler_token;
 	struct iommu_domain_geometry geometry;
-	void *iova_cookie;
+	RH_KABI_BROKEN_REPLACE(void *iova_cookie, struct iommu_dma_cookie *iova_cookie)
 };
 
 enum iommu_cap {
