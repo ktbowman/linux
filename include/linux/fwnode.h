@@ -181,7 +181,5 @@ static inline void fwnode_init(struct fwnode_handle *fwnode,
 }
 
 extern u32 fw_devlink_get_flags(void);
-void fw_devlink_pause(void);
-void fw_devlink_resume(void);
 
 #endif
