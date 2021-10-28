@@ -20,6 +20,7 @@ TEST_PROGS += drop_monitor_tests.sh
 TEST_PROGS += bareudp.sh
 TEST_PROGS += udpgro_fwd.sh
 TEST_PROGS += veth.sh
+TEST_PROGS += gro.sh
 TEST_PROGS_EXTENDED := in_netns.sh
 TEST_GEN_FILES =  socket nettest
 TEST_GEN_FILES += psock_fanout psock_tpacket msg_zerocopy reuseport_addr_any
