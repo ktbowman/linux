@@ -1065,4 +1065,7 @@ config ARCH_SUPPORTS_DEBUG_PAGEALLOC
 config HAVE_STATIC_CALL
 	bool
 
+config DYNAMIC_SIGFRAME
+	bool
+
 source "kernel/gcov/Kconfig"
