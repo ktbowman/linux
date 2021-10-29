@@ -12,3 +12,4 @@ x86 architecture specifics
    sgx
    sva
    elf_auxvec
+   xstate
