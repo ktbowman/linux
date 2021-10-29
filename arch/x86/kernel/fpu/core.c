@@ -16,6 +16,7 @@
 
 #include <linux/hardirq.h>
 #include <linux/pkeys.h>
+#include <linux/vmalloc.h>
 
 #include "context.h"
 #include "internal.h"
@@ -191,8 +192,6 @@ void fpu_reset_from_exception_fixup(void)
 }
 
 #if IS_ENABLED(CONFIG_KVM)
-#include <linux/vmalloc.h>
-
 static void __fpstate_reset(struct fpstate *fpstate);
 
 bool fpu_alloc_guest_fpstate(struct fpu_guest *gfpu)
