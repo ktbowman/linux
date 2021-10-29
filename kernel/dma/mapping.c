@@ -167,7 +167,7 @@ dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
 		addr = dma_direct_map_page(dev, page, offset, size, dir, attrs);
 	else
 		addr = ops->map_page(dev, page, offset, size, dir, attrs);
-	debug_dma_map_page(dev, page, offset, size, dir, addr);
+	debug_dma_map_page(dev, page, offset, size, dir, addr, attrs);
 
 	return addr;
 }
@@ -209,7 +209,7 @@ int dma_map_sg_attrs(struct device *dev, struct scatterlist *sg, int nents,
 	else
 		ents = ops->map_sg(dev, sg, nents, dir, attrs);
 	BUG_ON(ents < 0);
-	debug_dma_map_sg(dev, sg, nents, ents, dir);
+	debug_dma_map_sg(dev, sg, nents, ents, dir, attrs);
 
 	return ents;
 }
@@ -251,7 +251,7 @@ dma_addr_t dma_map_resource(struct device *dev, phys_addr_t phys_addr,
 	else if (ops->map_resource)
 		addr = ops->map_resource(dev, phys_addr, size, dir, attrs);
 
-	debug_dma_map_resource(dev, phys_addr, size, dir, addr);
+	debug_dma_map_resource(dev, phys_addr, size, dir, addr, attrs);
 	return addr;
 }
 EXPORT_SYMBOL(dma_map_resource);
@@ -456,7 +456,7 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	else
 		return NULL;
 
-	debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr);
+	debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr, attrs);
 	return cpu_addr;
 }
 EXPORT_SYMBOL(dma_alloc_attrs);
@@ -512,7 +512,7 @@ struct page *dma_alloc_pages(struct device *dev, size_t size,
 	struct page *page = __dma_alloc_pages(dev, size, dma_handle, dir, gfp);
 
 	if (page)
-		debug_dma_map_page(dev, page, 0, size, dir, *dma_handle);
+		debug_dma_map_page(dev, page, 0, size, dir, *dma_handle, 0);
 	return page;
 }
 EXPORT_SYMBOL_GPL(dma_alloc_pages);
@@ -590,7 +590,7 @@ struct sg_table *dma_alloc_noncontiguous(struct device *dev, size_t size,
 
 	if (sgt) {
 		sgt->nents = 1;
-		debug_dma_map_sg(dev, sgt->sgl, sgt->orig_nents, 1, dir);
+		debug_dma_map_sg(dev, sgt->sgl, sgt->orig_nents, 1, dir, attrs);
 	}
 	return sgt;
 }
