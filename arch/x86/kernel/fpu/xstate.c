@@ -936,7 +936,7 @@ const void *get_xsave_field_ptr(int xfeature_nr)
 	 */
 	fpu_sync_fpstate(fpu);
 
-	return get_xsave_addr(&fpu->state.xsave, xfeature_nr);
+	return get_xsave_addr(&fpu->fpstate->regs.xsave, xfeature_nr);
 }
 
 #ifdef CONFIG_ARCH_HAS_PKEYS

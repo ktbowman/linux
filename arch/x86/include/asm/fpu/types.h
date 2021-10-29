@@ -346,29 +346,20 @@ struct fpu {
 	 * Pointer to the active struct fpstate. Initialized to
 	 * point at @__fpstate below.
 	 */
-#ifndef __GENKSYMS__
-	struct fpstate			*fpstate;
-#endif
+	RH_KABI_EXTEND(struct fpstate *fpstate)
 
 	/*
-	 * @state:
+	 * @__fpstate:
 	 *
-	 * In-memory copy of all FPU registers that we save/restore
-	 * over context switches. If the task is using the FPU then
-	 * the registers in the FPU are more recent than this state
-	 * copy. If the task context-switches away then they get
-	 * saved here and represent the FPU state.
+	 * Initial in-memory storage for FPU registers which are saved in
+	 * context switch and when the kernel uses the FPU. The registers
+	 * are restored from this storage on return to user space if they
+	 * are not longer containing the tasks FPU register state.
 	 */
-#ifndef __GENKSYMS__
-	union {
-		struct fpstate			__fpstate;
-		union fpregs_state		state;
-	};
-#else
-	union fpregs_state              state;
-#endif
+	RH_KABI_DEPRECATE(union fpregs_state, state)
+	RH_KABI_EXTEND(struct fpstate __fpstate)
 	/*
-	 * WARNING: 'state' is dynamically-sized.  Do not put
+	 * WARNING: '__fpstate' is dynamically-sized.  Do not put
 	 * anything after it here.
 	 */
 };
