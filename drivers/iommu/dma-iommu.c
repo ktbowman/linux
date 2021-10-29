@@ -24,7 +24,6 @@
 #include <linux/dma-map-ops.h>
 #include <linux/dma-contiguous.h>
 #include <linux/dma-iommu.h>
-#include <linux/dma-noncoherent.h>
 #include <linux/gfp.h>
 #include <linux/huge_mm.h>
 #include <linux/iommu.h>

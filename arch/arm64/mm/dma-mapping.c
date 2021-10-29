@@ -26,7 +26,6 @@
 #include <linux/slab.h>
 #include <linux/genalloc.h>
 #include <linux/dma-direct.h>
-#include <linux/dma-noncoherent.h>
 #include <linux/dma-contiguous.h>
 #include <linux/dma-iommu.h>
 #include <linux/vmalloc.h>

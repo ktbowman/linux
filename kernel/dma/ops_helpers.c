@@ -5,7 +5,6 @@
  */
 #include <linux/dma-contiguous.h>
 #include <linux/dma-map-ops.h>
-#include <linux/dma-noncoherent.h>
 
 /*
  * Create scatter-list for the already allocated DMA buffer.
