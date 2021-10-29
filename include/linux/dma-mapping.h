@@ -6,7 +6,6 @@
 #include <linux/string.h>
 #include <linux/device.h>
 #include <linux/err.h>
-#include <linux/dma-debug.h>
 #include <linux/dma-direction.h>
 #include <linux/scatterlist.h>
 #include <linux/bug.h>
@@ -103,6 +102,21 @@ struct dma_sgt_handle {
 };
 #define sgt_handle(sgt) \
 	container_of((sgt), struct dma_sgt_handle, sgt)
+
+#ifdef CONFIG_DMA_API_DEBUG
+void debug_dma_mapping_error(struct device *dev, dma_addr_t dma_addr);
+void debug_dma_map_single(struct device *dev, const void *addr,
+		unsigned long len);
+#else
+static inline void debug_dma_mapping_error(struct device *dev,
+		dma_addr_t dma_addr)
+{
+}
+static inline void debug_dma_map_single(struct device *dev, const void *addr,
+		unsigned long len)
+{
+}
+#endif /* CONFIG_DMA_API_DEBUG */
 
 #ifdef CONFIG_HAS_DMA
 static inline int dma_mapping_error(struct device *dev, dma_addr_t dma_addr)

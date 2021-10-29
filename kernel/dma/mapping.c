@@ -14,6 +14,7 @@
 #include <linux/of_device.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
+#include "debug.h"
 
 /*
  * Avoid KABI breakage due to struct device opacity change when relocating

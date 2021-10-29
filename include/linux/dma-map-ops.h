@@ -162,6 +162,18 @@ static inline void arch_setup_dma_ops(struct device *dev, u64 dma_base,
 static inline void arch_teardown_dma_ops(struct device *dev) { }
 #endif
 
+#ifdef CONFIG_DMA_API_DEBUG
+void dma_debug_add_bus(struct bus_type *bus);
+void debug_dma_dump_mappings(struct device *dev);
+#else
+static inline void dma_debug_add_bus(struct bus_type *bus)
+{
+}
+static inline void debug_dma_dump_mappings(struct device *dev)
+{
+}
+#endif /* CONFIG_DMA_API_DEBUG */
+
 extern const struct dma_map_ops dma_dummy_ops;
 
 #endif /* _LINUX_DMA_MAP_OPS_H */
