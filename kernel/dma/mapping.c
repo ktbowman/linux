@@ -16,6 +16,8 @@
 #include "debug.h"
 #include "direct.h"
 
+bool dma_default_coherent;
+
 /*
  * Avoid KABI breakage due to struct device opacity change when relocating
  * dma_set_mask/dma_set_coherent_mask/dma_get_required_mask definitions
