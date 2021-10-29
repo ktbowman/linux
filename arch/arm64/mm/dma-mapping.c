@@ -21,6 +21,7 @@
 #include <linux/acpi.h>
 #include <linux/memblock.h>
 #include <linux/cache.h>
+#include <linux/dma-map-ops.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/genalloc.h>

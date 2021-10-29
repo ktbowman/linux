@@ -4487,6 +4487,7 @@ F:	kernel/dma/
 F:	include/asm-generic/dma-mapping.h
 F:	include/linux/dma-direct.h
 F:	include/linux/dma-mapping.h
+F:	include/linux/dma-map-ops.h
 F:	include/linux/dma-noncoherent.h
 
 DME1737 HARDWARE MONITOR DRIVER
