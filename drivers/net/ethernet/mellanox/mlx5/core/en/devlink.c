@@ -68,7 +68,8 @@ void mlx5e_devlink_port_unregister(struct mlx5e_priv *priv)
 	if (!mlx5_core_is_sf(mdev))
 		return; /* RHEL-only: Disable 'devlink port' support for non-switchdev mode*/
 
-	devlink_port_unregister(dl_port);
+	if (dl_port->registered)
+		devlink_port_unregister(dl_port);
 }
 
 struct devlink_port *mlx5e_get_devlink_port(struct net_device *dev)
@@ -76,6 +77,7 @@ struct devlink_port *mlx5e_get_devlink_port(struct net_device *dev)
 	struct mlx5e_priv *priv = netdev_priv(dev);
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
 	struct mlx5_core_dev *mdev = priv->mdev;
+	struct devlink_port *port;
 
 	if (!netif_device_present(dev))
 		return NULL;
@@ -86,5 +88,8 @@ struct devlink_port *mlx5e_get_devlink_port(struct net_device *dev)
 	if (!mlx5_core_is_sf(mdev))
 		return NULL; /* RHEL-only: Disable 'devlink port' support for non-switchdev mode*/
 
-	return mlx5e_devlink_get_dl_port(priv);
+	port = mlx5e_devlink_get_dl_port(priv);
+	if (port->registered)
+		return port;
+	return NULL;
 }
