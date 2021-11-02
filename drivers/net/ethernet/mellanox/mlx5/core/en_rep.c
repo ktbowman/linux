@@ -1075,6 +1075,7 @@ static const struct mlx5e_profile mlx5e_rep_profile = {
 	.rq_groups		= MLX5E_NUM_RQ_GROUPS(REGULAR),
 	.stats_grps		= mlx5e_rep_stats_grps,
 	.stats_grps_num		= mlx5e_rep_stats_grps_num,
+	.rx_ptp_support		= false,
 };
 
 static const struct mlx5e_profile mlx5e_uplink_rep_profile = {
@@ -1095,6 +1096,7 @@ static const struct mlx5e_profile mlx5e_uplink_rep_profile = {
 	.rq_groups		= MLX5E_NUM_RQ_GROUPS(XSK),
 	.stats_grps		= mlx5e_ul_rep_stats_grps,
 	.stats_grps_num		= mlx5e_ul_rep_stats_grps_num,
+	.rx_ptp_support		= false,
 };
 
 /* e-Switch vport representors */
