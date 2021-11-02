@@ -1560,14 +1560,14 @@ error:
 }
 
 /**
- * mlx5_mr_cache_invalidate - Fence all DMA on the MR
+ * revoke_mr - Fence all DMA on the MR
  * @mr: The MR to fence
  *
  * Upon return the NIC will not be doing any DMA to the pages under the MR,
- * and any DMA inprogress will be completed. Failure of this function
+ * and any DMA in progress will be completed. Failure of this function
  * indicates the HW has failed catastrophically.
  */
-static int mlx5_mr_cache_invalidate(struct mlx5_ib_mr *mr)
+static int revoke_mr(struct mlx5_ib_mr *mr)
 {
 	struct mlx5_umr_wr umrwr = {};
 
@@ -1809,7 +1809,7 @@ int mlx5_ib_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 
 	/* Stop DMA */
 	if (mr->cache_ent) {
-		if (mlx5_mr_cache_invalidate(mr)) {
+		if (revoke_mr(mr)) {
 			spin_lock_irq(&mr->cache_ent->lock);
 			mr->cache_ent->total_mrs--;
 			spin_unlock_irq(&mr->cache_ent->lock);
