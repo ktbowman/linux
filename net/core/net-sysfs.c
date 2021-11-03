@@ -1217,6 +1217,9 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 	int err, index = get_netdev_queue_index(queue);
 	u32 rate = 0;
 
+	if (!capable(CAP_NET_ADMIN))
+		return -EPERM;
+
 	/* The check is also done later; this helps returning early without
 	 * hitting the trylock/restart below.
 	 */
