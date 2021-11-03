@@ -573,6 +573,9 @@ struct class_rh {
  * @shutdown_pre: Called at shut-down time before driver shutdown.
  * @ns_type:	Callbacks so sysfs can detemine namespaces.
  * @namespace:	Namespace of the device belongs to this class.
+ * @get_ownership: Allows class to specify uid/gid of the sysfs directories
+ *		for the devices belonging to the class. Usually tied to
+ *		device's namespace.
  * @pm:		The default device power management operations of this class.
  * @p:		The private data of the driver core, no one other than the
  *		driver core can touch this.
@@ -606,7 +609,7 @@ struct class {
 
 	struct subsys_private *p;
 
-	RH_KABI_RESERVE(1)
+	RH_KABI_USE(1, void (*get_ownership)(struct device *dev, kuid_t *uid, kgid_t *gid))
 	RH_KABI_RESERVE(2)
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
