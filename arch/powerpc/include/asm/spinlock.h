@@ -8,10 +8,11 @@
 #include <asm/qrwlock.h>
 #else
 #include <asm/simple_spinlock.h>
-#endif
-
-#ifndef CONFIG_PARAVIRT_SPINLOCKS
-static inline void pv_spinlocks_init(void) { }
+extern void __pv_init_lock_hash(void);
+static inline void pv_spinlocks_init(void)
+{
+	__pv_init_lock_hash();
+}
 #endif
 
 /*
