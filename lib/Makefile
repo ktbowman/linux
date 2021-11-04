@@ -87,6 +87,7 @@ obj-$(CONFIG_TEST_PARMAN) += test_parman.o
 obj-$(CONFIG_TEST_KMOD) += test_kmod.o
 obj-$(CONFIG_TEST_DEBUG_VIRTUAL) += test_debug_virtual.o
 obj-$(CONFIG_TEST_OBJAGG) += test_objagg.o
+obj-$(CONFIG_TEST_LOCKUP) += test_lockup.o
 
 #
 # CFLAGS for compiling floating point code inside the kernel. x86/Makefile turns
