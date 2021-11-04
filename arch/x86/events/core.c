@@ -243,7 +243,7 @@ bool check_hw_exists(struct pmu *pmu, int num_counters, int num_counters_fixed)
 		for (i = 0; i < num_counters_fixed; i++) {
 			if (fixed_counter_disabled(i, pmu))
 				continue;
-			if (val & (0x03 << i*4)) {
+			if (val & (0x03ULL << i*4)) {
 				bios_fail = 1;
 				val_fail = val;
 				reg_fail = reg;
@@ -1484,7 +1484,6 @@ static void x86_pmu_start(struct perf_event *event, int flags)
 
 	cpuc->events[idx] = event;
 	__set_bit(idx, cpuc->active_mask);
-	__set_bit(idx, cpuc->running);
 	x86_pmu.enable(event);
 	perf_event_update_userpage(event);
 }
