@@ -1108,7 +1108,7 @@ static int gic_init_bases(struct gic_chip_data *gic, int irq_start,
 	 * Calling mark_hardware_removed() to print a warning and mark kernel
 	 * tainted with TAINT_SUPPORT_REMOVED flag.
 	 */
-	mark_hardware_removed("GICv2");
+	mark_hardware_deprecated(THIS_MODULE->name, "%s", "GICv2");
 
 	if (IS_ENABLED(CONFIG_GIC_NON_BANKED) && gic->percpu_offset) {
 		/* Frankein-GIC without banked registers... */
