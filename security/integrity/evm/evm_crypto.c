@@ -127,7 +127,6 @@ alloc:
 		return ERR_PTR(-ENOMEM);
 
 	desc->tfm = *tfm;
-	desc->flags = CRYPTO_TFM_REQ_MAY_SLEEP;
 
 	rc = crypto_shash_init(desc);
 	if (rc) {
