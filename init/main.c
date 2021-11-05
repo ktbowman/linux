@@ -531,6 +531,7 @@ static void __init mm_init(void)
 	init_mem_debugging_and_hardening();
 	mem_init();
 	kmem_cache_init();
+	kmemleak_init();
 	pgtable_init();
 	vmalloc_init();
 	ioremap_huge_init();
@@ -711,7 +712,6 @@ asmlinkage __visible void __init start_kernel(void)
 	}
 #endif
 	page_ext_init();
-	kmemleak_init();
 	debug_objects_mem_init();
 	setup_per_cpu_pageset();
 	numa_policy_init();
