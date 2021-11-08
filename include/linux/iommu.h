@@ -243,7 +243,6 @@ struct iommu_iotlb_gather {
  * @put_resv_regions: Free list of reserved regions for a device
  * @apply_resv_region: Temporary helper call-back for iova reserved ranges
  * @domain_window_enable: Configure and enable a particular window for a domain
- * @domain_window_disable: Disable a particular window for a domain
  * @of_xlate: add OF master IDs to iommu grouping
  * @is_attach_deferred: Check if domain attach should be deferred from iommu
  *                      driver init to device driver init (default no)
@@ -309,7 +308,8 @@ struct iommu_ops {
 	/* Window handling functions */
 	int (*domain_window_enable)(struct iommu_domain *domain, u32 wnd_nr,
 				    phys_addr_t paddr, u64 size, int prot);
-	void (*domain_window_disable)(struct iommu_domain *domain, u32 wnd_nr);
+
+	RH_KABI_BROKEN_REMOVE(void (*domain_window_disable)(struct iommu_domain *domain, u32 wnd_nr))
 	RH_KABI_BROKEN_REMOVE(int (*domain_set_windows)(struct iommu_domain *domain, u32 w_count))
 	RH_KABI_BROKEN_REMOVE(u32 (*domain_get_windows)(struct iommu_domain *domain))
 
