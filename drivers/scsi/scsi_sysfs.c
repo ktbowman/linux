@@ -842,11 +842,17 @@ store_state_field(struct device *dev, struct device_attribute *attr,
 	mutex_lock(&sdev->state_mutex);
 	ret = scsi_device_set_state(sdev, state);
 	/*
-	 * If the device state changes to SDEV_RUNNING, we need to run
-	 * the queue to avoid I/O hang.
+	 * If the device state changes to SDEV_RUNNING, we need to
+	 * run the queue to avoid I/O hang, and rescan the device
+	 * to revalidate it. Running the queue first is necessary
+	 * because another thread may be waiting inside
+	 * blk_mq_freeze_queue_wait() and because that call may be
+	 * waiting for pending I/O to finish.
 	 */
-	if (ret == 0 && state == SDEV_RUNNING)
+	if (ret == 0 && state == SDEV_RUNNING) {
 		blk_mq_run_hw_queues(sdev->request_queue, true);
+		scsi_rescan_device(dev);
+	}
 	mutex_unlock(&sdev->state_mutex);
 
 	return ret == 0 ? count : -EINVAL;
@@ -1493,7 +1499,7 @@ void __scsi_remove_device(struct scsi_device *sdev)
 
 	/*
 	 * Paired with the kref_get() in scsi_sysfs_initialize().  We have
-	 * remoed sysfs visibility from the device, so make the target
+	 * removed sysfs visibility from the device, so make the target
 	 * invisible if this was the last device underneath it.
 	 */
 	scsi_target_reap(scsi_target(sdev));
