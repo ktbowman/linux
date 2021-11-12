@@ -11,9 +11,9 @@
 #include <linux/slab.h>
 #include <linux/uaccess.h>
 #include <linux/mm.h>
+#include <linux/io.h>
 #include <asm/vas.h>
 #include <uapi/asm/vas-api.h>
-#include "vas.h"
 
 /*
  * The driver creates the device node that can be used as follows:
