@@ -17,6 +17,7 @@
 
 #include "nvme.h"
 #include "fabrics.h"
+#include <linux/rh_tasklist_lock.h>
 
 struct nvme_tcp_queue;
 
