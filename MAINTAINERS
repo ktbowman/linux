@@ -6008,6 +6008,13 @@ S:	Maintained
 F:	fs/notify/
 F:	include/linux/fsnotify*.h
 
+FT260 FTDI USB-HID TO I2C BRIDGE DRIVER
+M:	Michael Zaidman <michael.zaidman@gmail.com>
+L:	linux-i2c@vger.kernel.org
+L:	linux-input@vger.kernel.org
+S:	Maintained
+F:	drivers/hid/hid-ft260.c
+
 FUJITSU LAPTOP EXTRAS
 M:	Jonathan Woithe <jwoithe@just42.net>
 L:	platform-driver-x86@vger.kernel.org
