@@ -350,6 +350,28 @@ static blk_qc_t nvme_ns_head_make_request(struct request_queue *q,
 	return ret;
 }
 
+static int nvme_ns_head_open(struct block_device *bdev, fmode_t mode)
+{
+	if (!nvme_tryget_ns_head(bdev->bd_disk->private_data))
+		return -ENXIO;
+	return 0;
+}
+
+static void nvme_ns_head_release(struct gendisk *disk, fmode_t mode)
+{
+	nvme_put_ns_head(disk->private_data);
+}
+
+const struct block_device_operations nvme_ns_head_ops = {
+	.owner		= THIS_MODULE,
+	.open		= nvme_ns_head_open,
+	.release	= nvme_ns_head_release,
+	.ioctl		= nvme_ns_head_ioctl,
+	.getgeo		= nvme_getgeo,
+	.report_zones	= nvme_report_zones,
+	.pr_ops		= &nvme_pr_ops,
+};
+
 static void nvme_requeue_work(struct work_struct *work)
 {
 	struct nvme_ns_head *head =
