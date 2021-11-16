@@ -1160,6 +1160,7 @@ struct device_extended_rh {
  * @dma_pools:	Dma pools (if dma'ble device).
  * @dma_mem:	Internal for coherent mem override.
  * @cma_area:	Contiguous memory area for dma allocations
+ * @dma_io_tlb_mem: Pointer to the swiotlb pool used.  Not for driver use.
  * @archdata:	For arch-specific additions.
  * @of_node:	Associated device tree node.
  * @fwnode:	Associated device node supplied by platform firmware.
@@ -1295,7 +1296,11 @@ struct device {
 	/* Use device_extended after all RESERVE fields used */
 
 	RH_KABI_USE(1, struct dev_iommu *iommu)
+#ifdef CONFIG_SWIOTLB
+	RH_KABI_USE(2, struct io_tlb_mem *dma_io_tlb_mem)
+#else
 	RH_KABI_RESERVE(2)
+#endif
 
 	/* NB: See the note for struct dev_links_info: */
 	RH_KABI_USE(3, 4, struct list_head links_needs_suppliers)
