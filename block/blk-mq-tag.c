@@ -207,7 +207,7 @@ static struct request *blk_mq_find_and_get_req(struct blk_mq_tags *tags,
 
 	spin_lock_irqsave(&tags->lock, flags);
 	rq = tags->rqs[bitnr];
-	if (!rq || !refcount_inc_not_zero(&rq->ref))
+	if (!rq || rq->tag != bitnr || !refcount_inc_not_zero(&rq->ref))
 		rq = NULL;
 	spin_unlock_irqrestore(&tags->lock, flags);
 	return rq;
@@ -399,8 +399,8 @@ static bool blk_mq_tagset_count_completed_rqs(struct request *rq,
 }
 
 /**
- * blk_mq_tagset_wait_completed_request - wait until all completed req's
- * complete funtion is run
+ * blk_mq_tagset_wait_completed_request - Wait until all scheduled request
+ * completions have finished.
  * @tagset:	Tag set to drain completed request
  *
  * Note: This function has to be run after all IO queues are shutdown
@@ -556,7 +556,7 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 	tags->nr_reserved_tags = reserved_tags;
 	spin_lock_init(&tags->lock);
 
-	if (flags & BLK_MQ_F_TAG_HCTX_SHARED)
+	if (blk_mq_is_sbitmap_shared(flags))
 		return tags;
 
 	if (blk_mq_init_bitmap_tags(tags, node, alloc_policy) < 0) {
@@ -568,7 +568,7 @@ struct blk_mq_tags *blk_mq_init_tags(unsigned int total_tags,
 
 void blk_mq_free_tags(struct blk_mq_tags *tags, unsigned int flags)
 {
-	if (!(flags & BLK_MQ_F_TAG_HCTX_SHARED)) {
+	if (!blk_mq_is_sbitmap_shared(flags)) {
 		sbitmap_queue_free(tags->bitmap_tags);
 		sbitmap_queue_free(tags->breserved_tags);
 	}
