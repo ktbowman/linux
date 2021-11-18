@@ -288,10 +288,7 @@ void wb_wakeup_delayed(struct bdi_writeback *wb)
 
 static void wb_update_bandwidth_workfn(struct work_struct *work)
 {
-	struct bdi_writeback *wb = container_of(to_delayed_work(work),
-						struct bdi_writeback, bw_dwork);
-
-	wb_update_bandwidth(wb);
+	wb_update_bandwidth((struct bdi_writeback*) work->bdi_wb_backptr);
 }
 
 /*
@@ -303,6 +300,7 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 		   int blkcg_id, gfp_t gfp)
 {
 	int i, err;
+	struct delayed_work *bw_dwork;
 
 	memset(wb, 0, sizeof(*wb));
 
@@ -326,7 +324,16 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 	spin_lock_init(&wb->work_lock);
 	INIT_LIST_HEAD(&wb->work_list);
 	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
-	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
+
+	bw_dwork = kzalloc(sizeof(*bw_dwork), GFP_KERNEL);
+	if (!bw_dwork) {
+		err = -ENOMEM;
+		goto out_put_bdi;
+	}
+	INIT_DELAYED_WORK(bw_dwork, wb_update_bandwidth_workfn);
+	wb->bw_dwork = bw_dwork;
+	bw_dwork->work.bdi_wb_backptr = wb;
+
 	wb->dirty_sleep = jiffies;
 
 	wb->congested = wb_congested_get_create(bdi, blkcg_id, gfp);
@@ -354,6 +361,8 @@ out_destroy_stat:
 out_put_cong:
 	wb_congested_put(wb->congested);
 out_put_bdi:
+	kfree(bw_dwork);
+	bw_dwork = NULL;
 	if (wb != &bdi->wb)
 		bdi_put(bdi);
 	return err;
@@ -383,7 +392,7 @@ static void wb_shutdown(struct bdi_writeback *wb)
 	mod_delayed_work(bdi_wq, &wb->dwork, 0);
 	flush_delayed_work(&wb->dwork);
 	WARN_ON(!list_empty(&wb->work_list));
-	flush_delayed_work(&wb->bw_dwork);
+	flush_delayed_work(wb->bw_dwork);
 }
 
 static void wb_exit(struct bdi_writeback *wb)
@@ -399,6 +408,8 @@ static void wb_exit(struct bdi_writeback *wb)
 	wb_congested_put(wb->congested);
 	if (wb != &wb->bdi->wb)
 		bdi_put(wb->bdi);
+	kfree(wb->bw_dwork);
+	wb->bw_dwork = NULL;
 }
 
 #ifdef CONFIG_CGROUP_WRITEBACK

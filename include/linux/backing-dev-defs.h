@@ -190,12 +190,11 @@ struct bdi_writeback {
 	};
 #endif
 
-	RH_KABI_RESERVE(1)
+	/* work item used for bandwidth estimate */
+	RH_KABI_USE(1,struct delayed_work *bw_dwork)
 	RH_KABI_RESERVE(2)
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
-	/* work item used for bandwidth estimate */
-	RH_KABI_BROKEN_INSERT(struct delayed_work bw_dwork)
 };
 
 struct backing_dev_info {

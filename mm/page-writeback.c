@@ -2762,7 +2762,7 @@ static void wb_inode_writeback_end(struct bdi_writeback *wb)
 	 * that if multiple inodes end writeback at a similar time, they get
 	 * batched into one bandwidth update.
 	 */
-	queue_delayed_work(bdi_wq, &wb->bw_dwork, BANDWIDTH_INTERVAL);
+	queue_delayed_work(bdi_wq, wb->bw_dwork, BANDWIDTH_INTERVAL);
 }
 
 int test_clear_page_writeback(struct page *page)
