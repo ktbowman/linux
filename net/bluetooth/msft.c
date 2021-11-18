@@ -64,6 +64,9 @@ static bool read_supported_features(struct hci_dev *hdev,
 	msft->evt_prefix_len = rp->evt_prefix_len;
 	msft->features = __le64_to_cpu(rp->features);
 
+	if (msft->features & MSFT_FEATURE_MASK_CURVE_VALIDITY)
+		hdev->msft_curve_validity = true;
+
 	kfree_skb(skb);
 	return true;
 
@@ -146,4 +149,9 @@ __u64 msft_get_features(struct hci_dev *hdev)
 	struct msft_data *msft = hdev->msft_data;
 
 	return  msft ? msft->features : 0;
+}
+
+bool msft_curve_validity(struct hci_dev *hdev)
+{
+	return hdev->msft_curve_validity;
 }

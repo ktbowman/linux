@@ -16,6 +16,7 @@ void msft_do_open(struct hci_dev *hdev);
 void msft_do_close(struct hci_dev *hdev);
 void msft_vendor_evt(struct hci_dev *hdev, struct sk_buff *skb);
 __u64 msft_get_features(struct hci_dev *hdev);
+bool msft_curve_validity(struct hci_dev *hdev);
 
 #else
 
@@ -23,5 +24,10 @@ static inline void msft_do_open(struct hci_dev *hdev) {}
 static inline void msft_do_close(struct hci_dev *hdev) {}
 static inline void msft_vendor_evt(struct hci_dev *hdev, struct sk_buff *skb) {}
 static inline __u64 msft_get_features(struct hci_dev *hdev) { return 0; }
+
+static inline bool msft_curve_validity(struct hci_dev *hdev)
+{
+	return false;
+}
 
 #endif
