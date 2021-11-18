@@ -15,6 +15,7 @@
 #include <linux/types.h>
 #include <linux/rh_kabi.h>
 #include <linux/list.h>
+#include <linux/bits.h>
 
 struct fwnode_operations;
 struct device;
