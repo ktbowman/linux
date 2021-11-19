@@ -872,6 +872,50 @@ static void mmu_notifier_free_rcu(struct rcu_head *rcu)
 	mmdrop(mm);
 }
 
+/**
+ * mmu_notifier_put - Release the reference on the notifier
+ * @mn: The notifier to act on
+ *
+ * This function must be paired with each mmu_notifier_get(), it releases the
+ * reference obtained by the get. If this is the last reference then process
+ * to free the notifier will be run asynchronously.
+ *
+ * Unlike mmu_notifier_unregister() the get/put flow only calls ops->release
+ * when the mm_struct is destroyed. Instead free_notifier is always called to
+ * release any resources held by the user.
+ *
+ * As ops->release is not guaranteed to be called, the user must ensure that
+ * all sptes are dropped, and no new sptes can be established before
+ * mmu_notifier_put() is called.
+ *
+ * This function can be called from the ops->release callback, however the
+ * caller must still ensure it is called pairwise with mmu_notifier_get().
+ *
+ * Modules calling this function must call mmu_notifier_synchronize() in
+ * their __exit functions to ensure the async work is completed.
+ */
+void mmu_notifier_put(struct mmu_notifier *mn)
+{
+	struct mm_struct *mm;
+
+	if (!RH_KABI_AUX(mn, mmu_notifier, mm))
+		return;
+
+	mm = mn->_rh->mm;
+	spin_lock(&mm->mmu_notifier_mm->lock);
+	if (WARN_ON(!mn->_rh->users) || --mn->_rh->users)
+		goto out_unlock;
+	hlist_del_init_rcu(&mn->hlist);
+	spin_unlock(&mm->mmu_notifier_mm->lock);
+
+	call_srcu(&srcu, &mn->_rh->rcu, mmu_notifier_free_rcu);
+	return;
+
+out_unlock:
+	spin_unlock(&mm->mmu_notifier_mm->lock);
+}
+EXPORT_SYMBOL_GPL(mmu_notifier_put);
+
 static int __mmu_interval_notifier_insert(
 	struct mmu_interval_notifier *mni, struct mm_struct *mm,
 	struct mmu_notifier_mm *mmn_mm, unsigned long start,
@@ -1046,49 +1090,6 @@ void mmu_interval_notifier_remove(struct mmu_interval_notifier *mni)
 }
 EXPORT_SYMBOL_GPL(mmu_interval_notifier_remove);
 
-/**
- * mmu_notifier_put - Release the reference on the notifier
- * @mn: The notifier to act on
- *
- * This function must be paired with each mmu_notifier_get(), it releases the
- * reference obtained by the get. If this is the last reference then process
- * to free the notifier will be run asynchronously.
- *
- * Unlike mmu_notifier_unregister() the get/put flow only calls ops->release
- * when the mm_struct is destroyed. Instead free_notifier is always called to
- * release any resources held by the user.
- *
- * As ops->release is not guaranteed to be called, the user must ensure that
- * all sptes are dropped, and no new sptes can be established before
- * mmu_notifier_put() is called.
- *
- * This function can be called from the ops->release callback, however the
- * caller must still ensure it is called pairwise with mmu_notifier_get().
- *
- * Modules calling this function must call mmu_notifier_synchronize() in
- * their __exit functions to ensure the async work is completed.
- */
-void mmu_notifier_put(struct mmu_notifier *mn)
-{
-	struct mm_struct *mm;
-
-	if (!RH_KABI_AUX(mn, mmu_notifier, mm))
-		return;
-
-	mm = mn->_rh->mm;
-	spin_lock(&mm->mmu_notifier_mm->lock);
-	if (WARN_ON(!mn->_rh->users) || --mn->_rh->users)
-		goto out_unlock;
-	hlist_del_init_rcu(&mn->hlist);
-	spin_unlock(&mm->mmu_notifier_mm->lock);
-
-	call_srcu(&srcu, &mn->_rh->rcu, mmu_notifier_free_rcu);
-	return;
-
-out_unlock:
-	spin_unlock(&mm->mmu_notifier_mm->lock);
-}
-EXPORT_SYMBOL_GPL(mmu_notifier_put);
 /**
  * mmu_notifier_synchronize - Ensure all mmu_notifiers are freed
  *
