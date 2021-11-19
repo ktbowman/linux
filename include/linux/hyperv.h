@@ -303,7 +303,7 @@ struct vmbus_channel_offer {
 
 		/*
 		 * Pipes:
-		 * The following sructure is an integrated pipe protocol, which
+		 * The following structure is an integrated pipe protocol, which
 		 * is implemented on top of standard user-defined data. Pipe
 		 * clients have MAX_PIPE_USER_DEFINED_BYTES left for their own
 		 * use.
@@ -550,12 +550,6 @@ struct vmbus_channel_rescind_offer {
 	struct vmbus_channel_message_header header;
 	u32 child_relid;
 } __packed;
-
-static inline u32
-hv_ringbuffer_pending_size(const struct hv_ring_buffer_info *rbi)
-{
-	return rbi->ring_buffer->pending_send_sz;
-}
 
 /*
  * Request Offer -- no parameters, SynIC message contains the partition ID
@@ -917,11 +911,11 @@ struct vmbus_channel {
 	 * Support for sub-channels. For high performance devices,
 	 * it will be useful to have multiple sub-channels to support
 	 * a scalable communication infrastructure with the host.
-	 * The support for sub-channels is implemented as an extention
+	 * The support for sub-channels is implemented as an extension
 	 * to the current infrastructure.
 	 * The initial offer is considered the primary channel and this
 	 * offer message will indicate if the host supports sub-channels.
-	 * The guest is free to ask for sub-channels to be offerred and can
+	 * The guest is free to ask for sub-channels to be offered and can
 	 * open these sub-channels as a normal "primary" channel. However,
 	 * all sub-channels will have the same type and instance guids as the
 	 * primary channel. Requests sent on a given channel will result in a
@@ -985,7 +979,7 @@ struct vmbus_channel {
 	 * Clearly, these optimizations improve throughput at the expense of
 	 * latency. Furthermore, since the channel is shared for both
 	 * control and data messages, control messages currently suffer
-	 * unnecessary latency adversley impacting performance and boot
+	 * unnecessary latency adversely impacting performance and boot
 	 * time. To fix this issue, permit tagging the channel as being
 	 * in "low latency" mode. In this mode, we will bypass the monitor
 	 * mechanism.
@@ -1103,16 +1097,6 @@ static inline void set_channel_pending_send_size(struct vmbus_channel *c,
 	}
 
 	c->outbound.ring_buffer->pending_send_sz = size;
-}
-
-static inline void set_low_latency_mode(struct vmbus_channel *c)
-{
-	c->low_latency = true;
-}
-
-static inline void clear_low_latency_mode(struct vmbus_channel *c)
-{
-	c->low_latency = false;
 }
 
 void vmbus_onmessage(struct vmbus_channel_message_header *hdr);
@@ -1562,14 +1546,14 @@ struct icmsg_hdr {
 #define IC_VERSION_NEGOTIATION_MAX_VER_COUNT 100
 #define ICMSG_HDR (sizeof(struct vmbuspipe_hdr) + sizeof(struct icmsg_hdr))
 #define ICMSG_NEGOTIATE_PKT_SIZE(icframe_vercnt, icmsg_vercnt) \
-	(ICMSG_HDR + offsetof(struct icmsg_negotiate, icversion_data) + \
+	(ICMSG_HDR + sizeof(struct icmsg_negotiate) + \
 	 (((icframe_vercnt) + (icmsg_vercnt)) * sizeof(struct ic_version)))
 
 struct icmsg_negotiate {
 	u16 icframe_vercnt;
 	u16 icmsg_vercnt;
 	u32 reserved;
-	struct ic_version icversion_data[1]; /* any size array */
+	struct ic_version icversion_data[]; /* any size array */
 } __packed;
 
 struct shutdown_msg_data {
