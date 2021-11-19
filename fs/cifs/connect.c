@@ -61,6 +61,9 @@
 #include "dfs_cache.h"
 #endif
 #include "fs_context.h"
+#ifdef CONFIG_CIFS_SWN_UPCALL
+#include "cifs_swn.h"
+#endif
 
 extern mempool_t *cifs_req_poolp;
 extern bool disable_legacy_dialects;
@@ -83,8 +86,7 @@ static void cifs_prune_tlinks(struct work_struct *work);
  *
  * This should be called with server->srv_mutex held.
  */
-#ifdef CONFIG_CIFS_DFS_UPCALL
-static int reconn_set_ipaddr(struct TCP_Server_Info *server)
+static int reconn_set_ipaddr_from_hostname(struct TCP_Server_Info *server)
 {
 	int rc;
 	int len;
@@ -119,12 +121,6 @@ static int reconn_set_ipaddr(struct TCP_Server_Info *server)
 
 	return !rc ? -1 : 0;
 }
-#else
-static inline int reconn_set_ipaddr(struct TCP_Server_Info *server)
-{
-	return 0;
-}
-#endif
 
 #ifdef CONFIG_CIFS_DFS_UPCALL
 /* These functions must be called with server->srv_mutex held */
@@ -134,6 +130,7 @@ static void reconn_set_next_dfs_target(struct TCP_Server_Info *server,
 				       struct dfs_cache_tgt_iterator **tgt_it)
 {
 	const char *name;
+	int rc;
 
 	if (!cifs_sb || !cifs_sb->origin_fullpath)
 		return;
@@ -157,6 +154,12 @@ static void reconn_set_next_dfs_target(struct TCP_Server_Info *server,
 		cifs_dbg(FYI,
 			 "%s: failed to extract hostname from target: %ld\n",
 			 __func__, PTR_ERR(server->hostname));
+	}
+
+	rc = reconn_set_ipaddr_from_hostname(server);
+	if (rc) {
+		cifs_dbg(FYI, "%s: failed to resolve hostname: %d\n",
+			 __func__, rc);
 	}
 }
 
@@ -308,19 +311,40 @@ cifs_reconnect(struct TCP_Server_Info *server)
 		try_to_freeze();
 
 		mutex_lock(&server->srv_mutex);
-#ifdef CONFIG_CIFS_DFS_UPCALL
-		/*
-		 * Set up next DFS target server (if any) for reconnect. If DFS
-		 * feature is disabled, then we will retry last server we
-		 * connected to before.
-		 */
-		reconn_set_next_dfs_target(server, cifs_sb, &tgt_list, &tgt_it);
+
+#ifdef CONFIG_CIFS_SWN_UPCALL
+		if (server->use_swn_dstaddr) {
+			server->dstaddr = server->swn_dstaddr;
+		} else {
 #endif
-		rc = reconn_set_ipaddr(server);
-		if (rc) {
-			cifs_dbg(FYI, "%s: failed to resolve hostname: %d\n",
-				 __func__, rc);
+
+#ifdef CONFIG_CIFS_DFS_UPCALL
+		if (cifs_sb && cifs_sb->origin_fullpath)
+			/*
+			 * Set up next DFS target server (if any) for reconnect. If DFS
+			 * feature is disabled, then we will retry last server we
+			 * connected to before.
+			 */
+			reconn_set_next_dfs_target(server, cifs_sb, &tgt_list, &tgt_it);
+		else {
+#endif
+			/*
+			 * Resolve the hostname again to make sure that IP address is up-to-date.
+			 */
+			rc = reconn_set_ipaddr_from_hostname(server);
+			if (rc) {
+				cifs_dbg(FYI, "%s: failed to resolve hostname: %d\n",
+						__func__, rc);
+			}
+
+#ifdef CONFIG_CIFS_DFS_UPCALL
 		}
+#endif
+
+
+#ifdef CONFIG_CIFS_SWN_UPCALL
+		}
+#endif
 
 		if (cifs_rdma_enabled(server))
 			rc = smbd_reconnect(server);
@@ -337,6 +361,9 @@ cifs_reconnect(struct TCP_Server_Info *server)
 			if (server->tcpStatus != CifsExiting)
 				server->tcpStatus = CifsNeedNegotiate;
 			spin_unlock(&GlobalMid_Lock);
+#ifdef CONFIG_CIFS_SWN_UPCALL
+			server->use_swn_dstaddr = false;
+#endif
 			mutex_unlock(&server->srv_mutex);
 		}
 	} while (server->tcpStatus == CifsNeedReconnect);
@@ -400,6 +427,11 @@ cifs_echo_request(struct work_struct *work)
 	if (rc)
 		cifs_dbg(FYI, "Unable to send echo request to server: %s\n",
 			 server->hostname);
+
+#ifdef CONFIG_CIFS_SWN_UPCALL
+	/* Check witness registrations */
+	cifs_swn_check();
+#endif
 
 requeue_echo:
 	queue_delayed_work(cifsiod_wq, &server->echo, server->echo_interval);
@@ -1938,6 +1970,18 @@ cifs_put_tcon(struct cifs_tcon *tcon)
 		return;
 	}
 
+#ifdef CONFIG_CIFS_SWN_UPCALL
+	if (tcon->use_witness) {
+		int rc;
+
+		rc = cifs_swn_unregister(tcon);
+		if (rc < 0) {
+			cifs_dbg(VFS, "%s: Failed to unregister for witness notifications: %d\n",
+					__func__, rc);
+		}
+	}
+#endif
+
 	list_del_init(&tcon->tcon_list);
 	spin_unlock(&cifs_tcp_ses_lock);
 
@@ -2098,6 +2142,35 @@ cifs_get_tcon(struct cifs_ses *ses, struct smb3_fs_context *ctx)
 		}
 		tcon->use_resilient = true;
 	}
+#ifdef CONFIG_CIFS_SWN_UPCALL
+	tcon->use_witness = false;
+	if (ctx->witness) {
+		if (ses->server->vals->protocol_id >= SMB30_PROT_ID) {
+			if (tcon->capabilities & SMB2_SHARE_CAP_CLUSTER) {
+				/*
+				 * Set witness in use flag in first place
+				 * to retry registration in the echo task
+				 */
+				tcon->use_witness = true;
+				/* And try to register immediately */
+				rc = cifs_swn_register(tcon);
+				if (rc < 0) {
+					cifs_dbg(VFS, "Failed to register for witness notifications: %d\n", rc);
+					goto out_fail;
+				}
+			} else {
+				/* TODO: try to extend for non-cluster uses (eg multichannel) */
+				cifs_dbg(VFS, "witness requested on mount but no CLUSTER capability on share\n");
+				rc = -EOPNOTSUPP;
+				goto out_fail;
+			}
+		} else {
+			cifs_dbg(VFS, "SMB3 or later required for witness option\n");
+			rc = -EOPNOTSUPP;
+			goto out_fail;
+		}
+	}
+#endif
 
 	/* If the user really knows what they are doing they can override */
 	if (tcon->share_flags & SMB2_SHAREFLAG_NO_CACHING) {
@@ -3781,6 +3854,9 @@ cifs_construct_tcon(struct cifs_sb_info *cifs_sb, kuid_t fsuid)
 	ctx->sectype = master_tcon->ses->sectype;
 	ctx->sign = master_tcon->ses->sign;
 	ctx->seal = master_tcon->seal;
+#ifdef CONFIG_CIFS_SWN_UPCALL
+	ctx->witness = master_tcon->use_witness;
+#endif
 
 	rc = cifs_set_vol_auth(ctx, master_tcon->ses);
 	if (rc) {
