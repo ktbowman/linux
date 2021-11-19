@@ -2,7 +2,6 @@
 #ifndef _LINUX_MMU_NOTIFIER_H
 #define _LINUX_MMU_NOTIFIER_H
 
-#include <linux/types.h>
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/mm_types.h>
@@ -475,7 +474,6 @@ extern void __mmu_notifier_invalidate_range_end(struct mmu_notifier_range *r,
 				  bool only_end);
 extern void __mmu_notifier_invalidate_range(struct mm_struct *mm,
 				  unsigned long start, unsigned long end);
-extern bool mm_has_blockable_invalidate_notifiers(struct mm_struct *mm);
 
 static inline bool
 mmu_notifier_range_blockable(const struct mmu_notifier_range *range)
@@ -779,11 +777,6 @@ mmu_notifier_invalidate_range_only_end(struct mmu_notifier_range *range)
 static inline void mmu_notifier_invalidate_range(struct mm_struct *mm,
 				  unsigned long start, unsigned long end)
 {
-}
-
-static inline bool mm_has_blockable_invalidate_notifiers(struct mm_struct *mm)
-{
-	return false;
 }
 
 static inline void mmu_notifier_mm_init(struct mm_struct *mm)
