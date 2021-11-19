@@ -236,11 +236,11 @@ struct mmu_notifier_ops {
 	 * the last refcount is dropped.
 	 *
 	 * If blockable argument is set to false then the callback cannot
-	 * sleep and has to return with -EAGAIN. 0 should be returned
-	 * otherwise. Please note that if invalidate_range_start approves
-	 * a non-blocking behavior then the same applies to
-	 * invalidate_range_end.
-	 *
+	 * sleep and has to return with -EAGAIN if sleeping would be required.
+	 * 0 should be returned otherwise. Please note that notifiers that can
+	 * fail invalidate_range_start are not allowed to implement
+	 * invalidate_range_end, as there is no mechanism for informing the
+	 * notifier that its start failed.
 	 */
 	void (*RH_MN_V1(invalidate_range_start))(struct mmu_notifier *subscription,
 				       struct mm_struct *mm,
