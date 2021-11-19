@@ -312,7 +312,7 @@ EXPORT_SYMBOL_GPL(mmu_notifier_call_srcu);
 static void mn_hlist_release(struct mmu_notifier_subscriptions *subscriptions,
 			     struct mm_struct *mm)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int id;
 
 	/*
@@ -320,27 +320,27 @@ static void mn_hlist_release(struct mmu_notifier_subscriptions *subscriptions,
 	 * ->release returns.
 	 */
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &subscriptions->list, hlist)
+	hlist_for_each_entry_rcu(subscription, &subscriptions->list, hlist)
 		/*
 		 * If ->release runs before mmu_notifier_unregister it must be
 		 * handled, as it's the only way for the driver to flush all
 		 * existing sptes and stop the driver from establishing any more
 		 * sptes before all the pages in the mm are freed.
 		 */
-		if (mn->ops->release)
-			mn->ops->release(mn, mm);
+		if (subscription->ops->release)
+			subscription->ops->release(subscription, mm);
 
 	spin_lock(&subscriptions->lock);
 	while (unlikely(!hlist_empty(&subscriptions->list))) {
-		mn = hlist_entry(subscriptions->list.first, struct mmu_notifier,
-				 hlist);
+		subscription = hlist_entry(subscriptions->list.first,
+					   struct mmu_notifier, hlist);
 		/*
 		 * We arrived before mmu_notifier_unregister so
 		 * mmu_notifier_unregister will do nothing other than to wait
 		 * for ->release to finish and for mmu_notifier_unregister to
 		 * return.
 		 */
-		hlist_del_init_rcu(&mn->hlist);
+		hlist_del_init_rcu(&subscription->hlist);
 	}
 	spin_unlock(&subscriptions->lock);
 	srcu_read_unlock(&srcu, id);
@@ -378,13 +378,15 @@ int __mmu_notifier_clear_flush_young(struct mm_struct *mm,
 					unsigned long start,
 					unsigned long end)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int young = 0, id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &mm->notifier_subscriptions->list, hlist) {
-		if (mn->ops->clear_flush_young)
-			young |= mn->ops->clear_flush_young(mn, mm, start, end);
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist) {
+		if (subscription->ops->clear_flush_young)
+			young |= subscription->ops->clear_flush_young(
+				subscription, mm, start, end);
 	}
 	srcu_read_unlock(&srcu, id);
 
@@ -395,13 +397,15 @@ int __mmu_notifier_clear_young(struct mm_struct *mm,
 			       unsigned long start,
 			       unsigned long end)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int young = 0, id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &mm->notifier_subscriptions->list, hlist) {
-		if (mn->ops->clear_young)
-			young |= mn->ops->clear_young(mn, mm, start, end);
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist) {
+		if (subscription->ops->clear_young)
+			young |= subscription->ops->clear_young(subscription,
+								mm, start, end);
 	}
 	srcu_read_unlock(&srcu, id);
 
@@ -411,13 +415,15 @@ int __mmu_notifier_clear_young(struct mm_struct *mm,
 int __mmu_notifier_test_young(struct mm_struct *mm,
 			      unsigned long address)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int young = 0, id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &mm->notifier_subscriptions->list, hlist) {
-		if (mn->ops->test_young) {
-			young = mn->ops->test_young(mn, mm, address);
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist) {
+		if (subscription->ops->test_young) {
+			young = subscription->ops->test_young(subscription, mm,
+							      address);
 			if (young)
 				break;
 		}
@@ -430,14 +436,15 @@ int __mmu_notifier_test_young(struct mm_struct *mm,
 void __mmu_notifier_change_pte(struct mm_struct *mm, unsigned long address,
 			       pte_t pte)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &mm->notifier_subscriptions->list,
-				 hlist) {
-		if (mn->ops->change_pte)
-			mn->ops->change_pte(mn, mm, address, pte);
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist) {
+		if (subscription->ops->change_pte)
+			subscription->ops->change_pte(subscription, mm, address,
+						      pte);
 	}
 	srcu_read_unlock(&srcu, id);
 }
@@ -474,24 +481,28 @@ static int mn_hlist_invalidate_range_start(
 	struct mmu_notifier_subscriptions *subscriptions,
 	struct mmu_notifier_range *range)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int ret = 0;
 	int id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &subscriptions->list, hlist) {
-		if (mn->ops->invalidate_range_start) {
+	hlist_for_each_entry_rcu(subscription, &subscriptions->list, hlist) {
+		const struct mmu_notifier_ops *ops = subscription->ops;
+
+		if (ops->invalidate_range_start) {
 			int _ret;
 
 			if (!mmu_notifier_range_blockable(range))
 				non_block_start();
-			_ret = mn->ops->invalidate_range_start(mn, range);
+			_ret = ops->invalidate_range_start(subscription, range);
 			if (!mmu_notifier_range_blockable(range))
 				non_block_end();
 			if (_ret) {
 				pr_info("%pS callback failed with %d in %sblockable context.\n",
-					mn->ops->invalidate_range_start, _ret,
-					!mmu_notifier_range_blockable(range) ? "non-" : "");
+					ops->invalidate_range_start, _ret,
+					!mmu_notifier_range_blockable(range) ?
+						"non-" :
+						"");
 				WARN_ON(mmu_notifier_range_blockable(range) ||
 					_ret != -EAGAIN);
 				ret = _ret;
@@ -499,16 +510,17 @@ static int mn_hlist_invalidate_range_start(
 		}
 
 		/* Legacy MMU_NOTIFIER_V1 callback */
-		else if (mn->ops->invalidate_range_start_v1) {
+		else if (ops->invalidate_range_start_v1) {
 			/*
 			 * Return true if both MMU_NOTIFIER_RANGE_BLOCKABLE
 			 * and MMU_INVALIDATE_DOES_NOT_BLOCK flags are not set.
 			 */
-			if (!(mn->ops->flags & MMU_INVALIDATE_DOES_NOT_BLOCK) &&
+			if (!(ops->flags & MMU_INVALIDATE_DOES_NOT_BLOCK) &&
 			    !(range->flags & MMU_NOTIFIER_RANGE_BLOCKABLE))
 				ret = 1;
 			else
-				mn->ops->invalidate_range_start_v1(mn, range->mm, range->start, range->end);
+				ops->invalidate_range_start_v1(subscription, range->mm,
+							       range->start, range->end);
 		}
 	}
 	srcu_read_unlock(&srcu, id);
@@ -536,11 +548,11 @@ static void
 mn_hlist_invalidate_end(struct mmu_notifier_subscriptions *subscriptions,
 			struct mmu_notifier_range *range, bool only_end)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &subscriptions->list, hlist) {
+	hlist_for_each_entry_rcu(subscription, &subscriptions->list, hlist) {
 		/*
 		 * Call invalidate_range here too to avoid the need for the
 		 * subsystem of having to register an invalidate_range_end
@@ -554,21 +566,24 @@ mn_hlist_invalidate_end(struct mmu_notifier_subscriptions *subscriptions,
 		 * is safe to do when we know that a call to invalidate_range()
 		 * already happen under page table lock.
 		 */
-		if (!only_end && mn->ops->invalidate_range)
-			mn->ops->invalidate_range(mn, range->mm,
-						  range->start,
-						  range->end);
-		if (mn->ops->invalidate_range_end) {
+		if (!only_end && subscription->ops->invalidate_range)
+			subscription->ops->invalidate_range(subscription,
+							    range->mm,
+							    range->start,
+							    range->end);
+		if (subscription->ops->invalidate_range_end) {
 			if (!mmu_notifier_range_blockable(range))
 				non_block_start();
-			mn->ops->invalidate_range_end(mn, range);
+			subscription->ops->invalidate_range_end(subscription,
+								range);
 			if (!mmu_notifier_range_blockable(range))
 				non_block_end();
 		}
 
 		/* Legacy MMU_NOTIFIER_V1 callback */
-		else if (mn->ops->invalidate_range_end_v1) {
-			mn->ops->invalidate_range_end_v1(mn, range->mm, range->start, range->end);
+		else if (subscription->ops->invalidate_range_end_v1) {
+			subscription->ops->invalidate_range_end_v1(subscription, range->mm,
+								   range->start, range->end);
 		}
 	}
 	srcu_read_unlock(&srcu, id);
@@ -592,13 +607,15 @@ void __mmu_notifier_invalidate_range_end(struct mmu_notifier_range *range,
 void __mmu_notifier_invalidate_range(struct mm_struct *mm,
 				  unsigned long start, unsigned long end)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int id;
 
 	id = srcu_read_lock(&srcu);
-	hlist_for_each_entry_rcu(mn, &mm->notifier_subscriptions->list, hlist) {
-		if (mn->ops->invalidate_range)
-			mn->ops->invalidate_range(mn, mm, start, end);
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist) {
+		if (subscription->ops->invalidate_range)
+			subscription->ops->invalidate_range(subscription, mm,
+							    start, end);
 	}
 	srcu_read_unlock(&srcu, id);
 }
@@ -609,7 +626,8 @@ EXPORT_SYMBOL_GPL(__mmu_notifier_invalidate_range);
  * write mode. A NULL mn signals the notifier is being registered for itree
  * mode.
  */
-int __mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
+int __mmu_notifier_register(struct mmu_notifier *subscription,
+			    struct mm_struct *mm)
 {
 	struct mmu_notifier_subscriptions *subscriptions = NULL;
 	int ret;
@@ -617,13 +635,13 @@ int __mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
 	mmap_assert_write_locked(mm);
 	BUG_ON(atomic_read(&mm->mm_users) <= 0);
 
-	if (mn) {
-		mn->_rh = kzalloc(sizeof(*mn->_rh), GFP_KERNEL);
-		if (!mn->_rh) {
+	if (subscription) {
+		subscription->_rh = kzalloc(sizeof(*subscription->_rh), GFP_KERNEL);
+		if (!subscription->_rh) {
 			return -ENOMEM;
 		}
-		mn->_rh->back_ptr = mn;
-		RH_KABI_AUX_SET_SIZE(mn, mmu_notifier);
+		subscription->_rh->back_ptr = subscription;
+		RH_KABI_AUX_SET_SIZE(subscription, mmu_notifier);
 	}
 
 	if (!mm->notifier_subscriptions) {
@@ -670,16 +688,16 @@ int __mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
 	if (subscriptions)
 		smp_store_release(&mm->notifier_subscriptions, subscriptions);
 
-	if (mn) {
+	if (subscription) {
 		/* Pairs with the mmdrop in mmu_notifier_unregister_* */
 		mmgrab(mm);
-		if (RH_KABI_AUX(mn, mmu_notifier, mm)) {
-			mn->_rh->mm = mm;
-			mn->_rh->users = 1;
+		if (RH_KABI_AUX(subscription, mmu_notifier, mm)) {
+			subscription->_rh->mm = mm;
+			subscription->_rh->users = 1;
 		}
 
 		spin_lock(&mm->notifier_subscriptions->lock);
-		hlist_add_head_rcu(&mn->hlist,
+		hlist_add_head_rcu(&subscription->hlist,
 				   &mm->notifier_subscriptions->list);
 		spin_unlock(&mm->notifier_subscriptions->lock);
 	} else
@@ -692,8 +710,8 @@ int __mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
 out_clean:
 	kfree(subscriptions);
 out_free_rh:
-	if (mn)
-		kfree(mn->_rh);
+	if (subscription)
+		kfree(subscription->_rh);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(__mmu_notifier_register);
@@ -714,15 +732,16 @@ EXPORT_SYMBOL_GPL(__mmu_notifier_register);
  * mmu_notifier_unregister() or mmu_notifier_put() must be always called to
  * unregister the notifier.
  *
- * While the caller has a mmu_notifier get the mn->mm pointer will remain
+ * While the caller has a mmu_notifier get the subscription->mm pointer will remain
  * valid, and can be converted to an active mm pointer via mmget_not_zero().
  */
-int mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
+int mmu_notifier_register(struct mmu_notifier *subscription,
+			  struct mm_struct *mm)
 {
 	int ret;
 
 	mmap_write_lock(mm);
-	ret = __mmu_notifier_register(mn, mm);
+	ret = __mmu_notifier_register(subscription, mm);
 	mmap_write_unlock(mm);
 	return ret;
 }
@@ -731,23 +750,23 @@ EXPORT_SYMBOL_GPL(mmu_notifier_register);
 static struct mmu_notifier *
 find_get_mmu_notifier(struct mm_struct *mm, const struct mmu_notifier_ops *ops)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 
 	spin_lock(&mm->notifier_subscriptions->lock);
-	hlist_for_each_entry_rcu(mn, &mm->notifier_subscriptions->list,
-				 hlist) {
-		if (mn->ops != ops)
+	hlist_for_each_entry_rcu(subscription,
+				 &mm->notifier_subscriptions->list, hlist) {
+		if (subscription->ops != ops)
 			continue;
 
-		if (!RH_KABI_AUX(mn, mmu_notifier, mm))
+		if (!RH_KABI_AUX(subscription, mmu_notifier, mm))
 			continue;
 
-		if (likely(mn->_rh->users != UINT_MAX))
-			mn->_rh->users++;
+		if (likely(subscription->_rh->users != UINT_MAX))
+			subscription->_rh->users++;
 		else
-			mn = ERR_PTR(-EOVERFLOW);
+			subscription = ERR_PTR(-EOVERFLOW);
 		spin_unlock(&mm->notifier_subscriptions->lock);
-		return mn;
+		return subscription;
 	}
 	spin_unlock(&mm->notifier_subscriptions->lock);
 	return NULL;
@@ -773,28 +792,27 @@ find_get_mmu_notifier(struct mm_struct *mm, const struct mmu_notifier_ops *ops)
 struct mmu_notifier *mmu_notifier_get_locked(const struct mmu_notifier_ops *ops,
 					     struct mm_struct *mm)
 {
-	struct mmu_notifier *mn;
+	struct mmu_notifier *subscription;
 	int ret;
 
 	mmap_assert_write_locked(mm);
 
 	if (mm->notifier_subscriptions) {
-		mn = find_get_mmu_notifier(mm, ops);
-		if (mn)
-			return mn;
+		subscription = find_get_mmu_notifier(mm, ops);
+		if (subscription)
+			return subscription;
 	}
 
-	mn = ops->alloc_notifier(mm);
-	if (IS_ERR(mn))
-		return mn;
-
-	mn->ops = ops;
-	ret = __mmu_notifier_register(mn, mm);
+	subscription = ops->alloc_notifier(mm);
+	if (IS_ERR(subscription))
+		return subscription;
+	subscription->ops = ops;
+	ret = __mmu_notifier_register(subscription, mm);
 	if (ret)
 		goto out_free;
-	return mn;
+	return subscription;
 out_free:
-	mn->ops->free_notifier(mn);
+	subscription->ops->free_notifier(subscription);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(mmu_notifier_get_locked);
@@ -817,11 +835,12 @@ void __mmu_notifier_subscriptions_destroy(struct mm_struct *mm)
  * and only after mmu_notifier_unregister returned we're guaranteed
  * that ->release or any other method can't run anymore.
  */
-void mmu_notifier_unregister(struct mmu_notifier *mn, struct mm_struct *mm)
+void mmu_notifier_unregister(struct mmu_notifier *subscription,
+			     struct mm_struct *mm)
 {
 	BUG_ON(atomic_read(&mm->mm_count) <= 0);
 
-	if (!hlist_unhashed(&mn->hlist)) {
+	if (!hlist_unhashed(&subscription->hlist)) {
 		/*
 		 * SRCU here will force exit_mmap to wait for ->release to
 		 * finish before freeing the pages.
@@ -833,8 +852,8 @@ void mmu_notifier_unregister(struct mmu_notifier *mn, struct mm_struct *mm)
 		 * exit_mmap will block in mmu_notifier_release to guarantee
 		 * that ->release is called before freeing the pages.
 		 */
-		if (mn->ops->release)
-			mn->ops->release(mn, mm);
+		if (subscription->ops->release)
+			subscription->ops->release(subscription, mm);
 		srcu_read_unlock(&srcu, id);
 
 		spin_lock(&mm->notifier_subscriptions->lock);
@@ -842,7 +861,7 @@ void mmu_notifier_unregister(struct mmu_notifier *mn, struct mm_struct *mm)
 		 * Can not use list_del_rcu() since __mmu_notifier_release
 		 * can delete it before we hold the lock.
 		 */
-		hlist_del_init_rcu(&mn->hlist);
+		hlist_del_init_rcu(&subscription->hlist);
 		spin_unlock(&mm->notifier_subscriptions->lock);
 	}
 
@@ -852,7 +871,7 @@ void mmu_notifier_unregister(struct mmu_notifier *mn, struct mm_struct *mm)
 	 */
 	synchronize_srcu(&srcu);
 
-	kfree(mn->_rh);
+	kfree(subscription->_rh);
 
 	BUG_ON(atomic_read(&mm->mm_count) <= 0);
 
@@ -890,10 +909,10 @@ static void mmu_notifier_free_rcu(struct rcu_head *rcu)
 {
 	struct mmu_notifier_rh *mn_rh = container_of(rcu, struct mmu_notifier_rh, rcu);
 	struct mm_struct *mm = mn_rh->mm;
-	struct mmu_notifier *mn = mn_rh->back_ptr;
+	struct mmu_notifier *subscription = mn_rh->back_ptr;
 
 	kfree(mn_rh);
-	mn->ops->free_notifier(mn);
+	subscription->ops->free_notifier(subscription);
 	/* Pairs with the get in __mmu_notifier_register() */
 	mmdrop(mm);
 }
@@ -920,21 +939,21 @@ static void mmu_notifier_free_rcu(struct rcu_head *rcu)
  * Modules calling this function must call mmu_notifier_synchronize() in
  * their __exit functions to ensure the async work is completed.
  */
-void mmu_notifier_put(struct mmu_notifier *mn)
+void mmu_notifier_put(struct mmu_notifier *subscription)
 {
 	struct mm_struct *mm;
 
-	if (!RH_KABI_AUX(mn, mmu_notifier, mm))
+	if (!RH_KABI_AUX(subscription, mmu_notifier, mm))
 		return;
 
-	mm = mn->_rh->mm;
+	mm = subscription->_rh->mm;
 	spin_lock(&mm->notifier_subscriptions->lock);
-	if (WARN_ON(!mn->_rh->users) || --mn->_rh->users)
+	if (WARN_ON(!subscription->_rh->users) || --subscription->_rh->users)
 		goto out_unlock;
-	hlist_del_init_rcu(&mn->hlist);
+	hlist_del_init_rcu(&subscription->hlist);
 	spin_unlock(&mm->notifier_subscriptions->lock);
 
-	call_srcu(&srcu, &mn->_rh->rcu, mmu_notifier_free_rcu);
+	call_srcu(&srcu, &subscription->_rh->rcu, mmu_notifier_free_rcu);
 	return;
 
 out_unlock:
@@ -1151,25 +1170,27 @@ EXPORT_SYMBOL_GPL(mmu_notifier_range_update_to_read_only);
 /*
  * RH_MMU_NOTIFIER_V2 register functions
  */
-int __mmu_notifier_register_v2(struct mmu_notifier *mn, struct mm_struct *mm)
+int __mmu_notifier_register_v2(struct mmu_notifier *subscription,
+			       struct mm_struct *mm)
 {
 	int ret;
 
-	WARN_ON_ONCE(mn->ops->invalidate_range_start_v1 ||
-		     mn->ops->invalidate_range_end_v1);
-	ret = __mmu_notifier_register(mn, mm);
-	if (!ret && RH_KABI_AUX(mn, mmu_notifier, mm))
-		mn->_rh->version = 2;
+	WARN_ON_ONCE(subscription->ops->invalidate_range_start_v1 ||
+		     subscription->ops->invalidate_range_end_v1);
+	ret = __mmu_notifier_register(subscription, mm);
+	if (!ret && RH_KABI_AUX(subscription, mmu_notifier, mm))
+		subscription->_rh->version = 2;
 	return ret;
 }
 EXPORT_SYMBOL_GPL(__mmu_notifier_register_v2);
 
-int mmu_notifier_register_v2(struct mmu_notifier *mn, struct mm_struct *mm)
+int mmu_notifier_register_v2(struct mmu_notifier *subscription,
+			     struct mm_struct *mm)
 {
 	int ret;
 
 	mmap_write_lock(mm);
-	ret = __mmu_notifier_register_v2(mn, mm);
+	ret = __mmu_notifier_register_v2(subscription, mm);
 	mmap_write_unlock(mm);
 	return ret;
 }

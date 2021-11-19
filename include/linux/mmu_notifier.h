@@ -20,16 +20,16 @@
  *
  * The original v1 function prototypes are:
  *
- * invalidate_range_start(struct mmu_notifier *mn, struct mm_struct *mm,
+ * invalidate_range_start(struct mmu_notifier *subscription, struct mm_struct *mm,
  *			  unsigned long start, unsigned long end)
- * invalidate_range_end  (struct mmu_notifier *mn, struct mm_struct *mm,
+ * invalidate_range_end  (struct mmu_notifier *subscription, struct mm_struct *mm,
  *			  unsigned long start, unsigned long end)
  *
  * The new v2 function prototypes are
  *
- * invalidate_range_start(struct mmu_notifier *mn, struct mm_struct *mm,
+ * invalidate_range_start(struct mmu_notifier *subscription, struct mm_struct *mm,
  *			  unsigned long start, unsigned long end)
- * invalidate_range_end  (struct mmu_notifier *mn, struct mm_struct *mm,
+ * invalidate_range_end  (struct mmu_notifier *subscription, struct mm_struct *mm,
  *			  unsigned long start, unsigned long end)
  *
  * By default, the v1 function prototypes will be used. To use the newer
@@ -146,7 +146,7 @@ struct mmu_notifier_ops {
 	 * through the gart alias address, so leading to memory
 	 * corruption.
 	 */
-	void (*release)(struct mmu_notifier *mn,
+	void (*release)(struct mmu_notifier *subscription,
 			struct mm_struct *mm);
 
 	/*
@@ -158,7 +158,7 @@ struct mmu_notifier_ops {
 	 * Start-end is necessary in case the secondary MMU is mapping the page
 	 * at a smaller granularity than the primary MMU.
 	 */
-	int (*clear_flush_young)(struct mmu_notifier *mn,
+	int (*clear_flush_young)(struct mmu_notifier *subscription,
 				 struct mm_struct *mm,
 				 unsigned long start,
 				 unsigned long end);
@@ -168,7 +168,7 @@ struct mmu_notifier_ops {
 	 * latter, it is supposed to test-and-clear the young/accessed bitflag
 	 * in the secondary pte, but it may omit flushing the secondary tlb.
 	 */
-	int (*clear_young)(struct mmu_notifier *mn,
+	int (*clear_young)(struct mmu_notifier *subscription,
 			   struct mm_struct *mm,
 			   unsigned long start,
 			   unsigned long end);
@@ -179,7 +179,7 @@ struct mmu_notifier_ops {
 	 * frequently used without actually clearing the flag or tearing
 	 * down the secondary mapping on the page.
 	 */
-	int (*test_young)(struct mmu_notifier *mn,
+	int (*test_young)(struct mmu_notifier *subscription,
 			  struct mm_struct *mm,
 			  unsigned long address);
 
@@ -187,7 +187,7 @@ struct mmu_notifier_ops {
 	 * change_pte is called in cases that pte mapping to page is changed:
 	 * for example, when ksm remaps pte to point to a new shared page.
 	 */
-	void (*change_pte)(struct mmu_notifier *mn,
+	void (*change_pte)(struct mmu_notifier *subscription,
 			   struct mm_struct *mm,
 			   unsigned long address,
 			   pte_t pte);
@@ -242,10 +242,10 @@ struct mmu_notifier_ops {
 	 * invalidate_range_end.
 	 *
 	 */
-	void (*RH_MN_V1(invalidate_range_start))(struct mmu_notifier *mn,
+	void (*RH_MN_V1(invalidate_range_start))(struct mmu_notifier *subscription,
 				       struct mm_struct *mm,
 				       unsigned long start, unsigned long end);
-	void (*RH_MN_V1(invalidate_range_end))(struct mmu_notifier *mn,
+	void (*RH_MN_V1(invalidate_range_end))(struct mmu_notifier *subscription,
 				     struct mm_struct *mm,
 				     unsigned long start, unsigned long end);
 
@@ -271,8 +271,10 @@ struct mmu_notifier_ops {
 	 * cannot block, mmu_notifier_ops.flags should have
 	 * MMU_INVALIDATE_DOES_NOT_BLOCK set.
 	 */
-	void (*invalidate_range)(struct mmu_notifier *mn, struct mm_struct *mm,
-				 unsigned long start, unsigned long end);
+	void (*invalidate_range)(struct mmu_notifier *subscription,
+				 struct mm_struct *mm,
+				 unsigned long start,
+				 unsigned long end);
 
        /*
 	* These callbacks are used with the get/put interface to manage the
@@ -285,13 +287,13 @@ struct mmu_notifier_ops {
 	* and cannot sleep.
 	*/
 	RH_KABI_USE(1, struct mmu_notifier *(*alloc_notifier)(struct mm_struct *mm))
-	RH_KABI_USE(2, void (*free_notifier)(struct mmu_notifier *mn))
+	RH_KABI_USE(2, void (*free_notifier)(struct mmu_notifier *subscription))
 	RH_KABI_USE(3,
-	int (*RH_MN_V2(invalidate_range_start))(struct mmu_notifier *mn,
+	int (*RH_MN_V2(invalidate_range_start))(struct mmu_notifier *subscription,
 				       const struct mmu_notifier_range *range)
 	)
 	RH_KABI_USE(4,
-	void (*RH_MN_V2(invalidate_range_end))(struct mmu_notifier *mn,
+	void (*RH_MN_V2(invalidate_range_end))(struct mmu_notifier *subscription,
 				     const struct mmu_notifier_range *range)
 	)
 };
@@ -369,14 +371,14 @@ mmu_notifier_get(const struct mmu_notifier_ops *ops, struct mm_struct *mm)
 	mmap_write_unlock(mm);
 	return ret;
 }
-void mmu_notifier_put(struct mmu_notifier *mn);
+void mmu_notifier_put(struct mmu_notifier *subscription);
 void mmu_notifier_synchronize(void);
 
-extern int mmu_notifier_register(struct mmu_notifier *mn,
+extern int mmu_notifier_register(struct mmu_notifier *subscription,
 				 struct mm_struct *mm);
-extern int __mmu_notifier_register(struct mmu_notifier *mn,
+extern int __mmu_notifier_register(struct mmu_notifier *subscription,
 				   struct mm_struct *mm);
-extern void mmu_notifier_unregister(struct mmu_notifier *mn,
+extern void mmu_notifier_unregister(struct mmu_notifier *subscription,
 				    struct mm_struct *mm);
 extern void mmu_notifier_unregister_no_release(struct mmu_notifier *mn,
 					       struct mm_struct *mm);
@@ -805,9 +807,9 @@ static inline void mmu_notifier_synchronize(void)
 }
 
 #ifdef RH_MMU_NOTIFIER_V2
-extern int mmu_notifier_register_v2(struct mmu_notifier *mn,
+extern int mmu_notifier_register_v2(struct mmu_notifier *subscription,
 				    struct mm_struct *mm);
-extern int __mmu_notifier_register_v2(struct mmu_notifier *mn,
+extern int __mmu_notifier_register_v2(struct mmu_notifier *subscription,
 				      struct mm_struct *mm);
 # define mmu_notifier_register(__a, __b)	\
 	 mmu_notifier_register_v2(__a, __b)
