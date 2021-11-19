@@ -205,6 +205,8 @@ struct net {
 	RH_KABI_EXTEND(struct netns_smc		smc)
 #endif
 	RH_KABI_EXTEND(seqcount_spinlock_t	xfrm_policy_hash_generation)
+	/* The interval for PLPMTUD probe timer */
+	RH_KABI_EXTEND(unsigned int	sctp_probe_interval)
 } __randomize_layout;
 
 #include <linux/seq_file_net.h>
