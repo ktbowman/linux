@@ -236,9 +236,10 @@ struct mmu_notifier_ops {
 	 * address space but may still be referenced by sptes until
 	 * the last refcount is dropped.
 	 *
-	 * If both of these callbacks cannot block, and invalidate_range
-	 * cannot block, mmu_notifier_ops.flags should have
-	 * MMU_INVALIDATE_DOES_NOT_BLOCK set.
+	 * If blockable argument is set to false then the callback cannot
+	 * sleep and has to return with -EAGAIN. 0 should be returned
+	 * otherwise.
+	 *
 	 */
 	void (*RH_MN_V1(invalidate_range_start))(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
@@ -285,9 +286,10 @@ struct mmu_notifier_ops {
 	RH_KABI_USE(1, struct mmu_notifier *(*alloc_notifier)(struct mm_struct *mm))
 	RH_KABI_USE(2, void (*free_notifier)(struct mmu_notifier *mn))
 	RH_KABI_USE(3,
-	void (*RH_MN_V2(invalidate_range_start))(struct mmu_notifier *mn,
+	int (*RH_MN_V2(invalidate_range_start))(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
-				       unsigned long start, unsigned long end)
+				       unsigned long start, unsigned long end,
+				       bool blockable)
 	)
 	RH_KABI_USE(4,
 	void (*RH_MN_V2(invalidate_range_end))(struct mmu_notifier *mn,
@@ -466,7 +468,7 @@ extern int __mmu_notifier_test_young(struct mm_struct *mm,
 				     unsigned long address);
 extern void __mmu_notifier_change_pte(struct mm_struct *mm,
 				      unsigned long address, pte_t pte);
-extern void __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *r);
+extern int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *r);
 extern void __mmu_notifier_invalidate_range_end(struct mmu_notifier_range *r,
 				  bool only_end);
 extern void __mmu_notifier_invalidate_range(struct mm_struct *mm,
@@ -522,9 +524,25 @@ static inline void
 mmu_notifier_invalidate_range_start(struct mmu_notifier_range *range)
 {
 	lock_map_acquire(&__mmu_notifier_invalidate_range_start_map);
-	if (mm_has_notifiers(range->mm))
+	if (mm_has_notifiers(range->mm)) {
+		range->flags |= MMU_NOTIFIER_RANGE_BLOCKABLE;
 		__mmu_notifier_invalidate_range_start(range);
+	}
 	lock_map_release(&__mmu_notifier_invalidate_range_start_map);
+}
+
+static inline int
+mmu_notifier_invalidate_range_start_nonblock(struct mmu_notifier_range *range)
+{
+	int ret = 0;
+
+	lock_map_acquire(&__mmu_notifier_invalidate_range_start_map);
+	if (mm_has_notifiers(range->mm)) {
+		range->flags &= ~MMU_NOTIFIER_RANGE_BLOCKABLE;
+		ret = __mmu_notifier_invalidate_range_start(range);
+	}
+	lock_map_release(&__mmu_notifier_invalidate_range_start_map);
+	return ret;
 }
 
 static inline void
@@ -738,6 +756,12 @@ static inline void mmu_notifier_change_pte(struct mm_struct *mm,
 static inline void
 mmu_notifier_invalidate_range_start(struct mmu_notifier_range *range)
 {
+}
+
+static inline int
+mmu_notifier_invalidate_range_start_nonblock(struct mmu_notifier_range *range)
+{
+	return 0;
 }
 
 static inline void

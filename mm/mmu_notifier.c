@@ -437,48 +437,85 @@ void __mmu_notifier_change_pte(struct mm_struct *mm, unsigned long address,
 	srcu_read_unlock(&srcu, id);
 }
 
-static void mn_itree_invalidate(struct mmu_notifier_mm *mmn_mm,
-				const struct mmu_notifier_range *range)
+static int mn_itree_invalidate(struct mmu_notifier_mm *mmn_mm,
+			       const struct mmu_notifier_range *range)
 {
 	struct mmu_interval_notifier *mni;
 	unsigned long cur_seq;
 
 	for (mni = mn_itree_inv_start_range(mmn_mm, range, &cur_seq); mni;
 	     mni = mn_itree_inv_next(mni, range)) {
+		bool ret;
 
-		mni->ops->invalidate(mni, range, cur_seq);
+		ret = mni->ops->invalidate(mni, range, cur_seq);
+		if (!ret) {
+			if (WARN_ON(mmu_notifier_range_blockable(range)))
+				continue;
+			goto out_would_block;
+		}
 	}
+	return 0;
+
+out_would_block:
+	/*
+	 * On -EAGAIN the non-blocking caller is not allowed to call
+	 * invalidate_range_end()
+	 */
+	mn_itree_inv_end(mmn_mm);
+	return -EAGAIN;
 }
 
-static void mn_hlist_invalidate_range_start(struct mmu_notifier_mm *mmn_mm,
-					    struct mmu_notifier_range *range)
+static int mn_hlist_invalidate_range_start(struct mmu_notifier_mm *mmn_mm,
+					   struct mmu_notifier_range *range)
 {
 	struct mmu_notifier *mn;
+	int ret = 0;
 	int id;
 
 	id = srcu_read_lock(&srcu);
 	hlist_for_each_entry_rcu(mn, &mmn_mm->list, hlist) {
 		if (mn->ops->invalidate_range_start) {
-			mn->ops->invalidate_range_start(mn, range->mm, range->start, range->end);
+			bool blockable = !mmu_notifier_range_blockable(range);
+			int _ret = mn->ops->invalidate_range_start(mn, range->mm, range->start, range->end, blockable);
+			if (_ret) {
+				pr_info("%pS callback failed with %d in %sblockable context.\n",
+					mn->ops->invalidate_range_start, _ret,
+					!mmu_notifier_range_blockable(range) ? "non-" : "");
+				ret = _ret;
+			}
 		}
 
 		/* Legacy MMU_NOTIFIER_V1 callback */
 		else if (mn->ops->invalidate_range_start_v1) {
-			mn->ops->invalidate_range_start_v1(mn, range->mm, range->start, range->end);
+			/*
+			 * Return true if both MMU_NOTIFIER_RANGE_BLOCKABLE
+			 * and MMU_INVALIDATE_DOES_NOT_BLOCK flags are not set.
+			 */
+			if (!(mn->ops->flags & MMU_INVALIDATE_DOES_NOT_BLOCK) &&
+			    !(range->flags & MMU_NOTIFIER_RANGE_BLOCKABLE))
+				ret = 1;
+			else
+				mn->ops->invalidate_range_start_v1(mn, range->mm, range->start, range->end);
 		}
 	}
 	srcu_read_unlock(&srcu, id);
+
+	return ret;
 }
 
-void __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *range)
+int __mmu_notifier_invalidate_range_start(struct mmu_notifier_range *range)
 {
 	struct mmu_notifier_mm *mmn_mm = range->mm->mmu_notifier_mm;
+	int ret;
 
 	if (mmn_mm->has_itree) {
-		mn_itree_invalidate(mmn_mm, range);
+		ret = mn_itree_invalidate(mmn_mm, range);
+		if (ret)
+			return ret;
 	}
 	if (!hlist_empty(&mmn_mm->list))
-		mn_hlist_invalidate_range_start(mmn_mm, range);
+		return mn_hlist_invalidate_range_start(mmn_mm, range);
+	return 0;
 }
 
 static void mn_hlist_invalidate_end(struct mmu_notifier_mm *mmn_mm,
