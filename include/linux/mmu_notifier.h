@@ -288,14 +288,11 @@ struct mmu_notifier_ops {
 	RH_KABI_USE(2, void (*free_notifier)(struct mmu_notifier *mn))
 	RH_KABI_USE(3,
 	int (*RH_MN_V2(invalidate_range_start))(struct mmu_notifier *mn,
-				       struct mm_struct *mm,
-				       unsigned long start, unsigned long end,
-				       bool blockable)
+				       const struct mmu_notifier_range *range)
 	)
 	RH_KABI_USE(4,
 	void (*RH_MN_V2(invalidate_range_end))(struct mmu_notifier *mn,
-				     struct mm_struct *mm,
-				     unsigned long start, unsigned long end);
+				     const struct mmu_notifier_range *range)
 	)
 };
 
