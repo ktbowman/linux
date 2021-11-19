@@ -215,12 +215,6 @@ __rh_drm_mmu_notifier_unregister(struct __rh_drm_mmu_notifier *mn,
 
 extern void __rh_drm_mmu_notifier_put(struct __rh_drm_mmu_notifier *mn);
 
-static inline bool
-mmu_notifier_range_blockable(const struct mmu_notifier_range *range)
-{
-	return true;
-}
-
 #define mmu_notifier     __rh_drm_mmu_notifier
 #define mmu_notifier_ops __rh_drm_mmu_notifier_ops
 
