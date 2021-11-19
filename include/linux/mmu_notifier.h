@@ -11,6 +11,43 @@
 #include <linux/interval_tree.h>
 #include <linux/rh_kabi.h>
 
+/*
+ * RH_MMU_NOTIFIER versioning
+ *
+ * With upstream changes in callback function prototypes for the
+ * invalidate_range_start and invalidate_range_end methods defined in
+ * mmu_notifier_ops structure, the new function prototypes are supported
+ * via the RH_MMU_NOTIFIER versioning mechanism.
+ *
+ * The original v1 function prototypes are:
+ *
+ * invalidate_range_start(struct mmu_notifier *mn, struct mm_struct *mm,
+ *			  unsigned long start, unsigned long end)
+ * invalidate_range_end  (struct mmu_notifier *mn, struct mm_struct *mm,
+ *			  unsigned long start, unsigned long end)
+ *
+ * The new v2 function prototypes are
+ *
+ * invalidate_range_start(struct mmu_notifier *mn, struct mm_struct *mm,
+ *			  unsigned long start, unsigned long end)
+ * invalidate_range_end  (struct mmu_notifier *mn, struct mm_struct *mm,
+ *			  unsigned long start, unsigned long end)
+ *
+ * By default, the v1 function prototypes will be used. To use the newer
+ * v2 function prototypes, define the macro RH_MMU_NOTIFIER_V2 before
+ * header file includes or passed as a compile time "-DRH_MMU_NOTIFIER_V2"
+ * parameter.
+ */
+#if !defined(RH_MMU_NOTIFIER_V2) || defined(__GENKSYMS__)
+# define RH_MMU_NOTIFIER_VERSION	1
+# define RH_MN_V1(__x)			__x
+# define RH_MN_V2(__x)			__x ## _v2
+#else
+# define RH_MMU_NOTIFIER_VERSION	2
+# define RH_MN_V1(__x)			__x ## _v1
+# define RH_MN_V2(__x)			__x
+#endif /* RH_MMU_NOTIFIER_V2 && !__GENKSYMS__ */
+
 struct mmu_notifier;
 struct mmu_notifier_range;
 struct mmu_notifier_ops;
@@ -203,10 +240,10 @@ struct mmu_notifier_ops {
 	 * cannot block, mmu_notifier_ops.flags should have
 	 * MMU_INVALIDATE_DOES_NOT_BLOCK set.
 	 */
-	void (*invalidate_range_start)(struct mmu_notifier *mn,
+	void (*RH_MN_V1(invalidate_range_start))(struct mmu_notifier *mn,
 				       struct mm_struct *mm,
 				       unsigned long start, unsigned long end);
-	void (*invalidate_range_end)(struct mmu_notifier *mn,
+	void (*RH_MN_V1(invalidate_range_end))(struct mmu_notifier *mn,
 				     struct mm_struct *mm,
 				     unsigned long start, unsigned long end);
 
@@ -247,8 +284,16 @@ struct mmu_notifier_ops {
 	*/
 	RH_KABI_USE(1, struct mmu_notifier *(*alloc_notifier)(struct mm_struct *mm))
 	RH_KABI_USE(2, void (*free_notifier)(struct mmu_notifier *mn))
-	RH_KABI_RESERVE(3)
-	RH_KABI_RESERVE(4)
+	RH_KABI_USE(3,
+	void (*RH_MN_V2(invalidate_range_start))(struct mmu_notifier *mn,
+				       struct mm_struct *mm,
+				       unsigned long start, unsigned long end)
+	)
+	RH_KABI_USE(4,
+	void (*RH_MN_V2(invalidate_range_end))(struct mmu_notifier *mn,
+				     struct mm_struct *mm,
+				     unsigned long start, unsigned long end);
+	)
 };
 
 /*
@@ -266,6 +311,7 @@ struct mmu_notifier_rh {
 	struct mm_struct *mm;
 	struct rcu_head rcu;
 	unsigned int users;
+	unsigned int version;
 	struct mmu_notifier *back_ptr;
 };
 
@@ -724,6 +770,16 @@ static inline void mmu_notifier_synchronize(void)
 {
 }
 
+#ifdef RH_MMU_NOTIFIER_V2
+extern int mmu_notifier_register_v2(struct mmu_notifier *mn,
+				    struct mm_struct *mm);
+extern int __mmu_notifier_register_v2(struct mmu_notifier *mn,
+				      struct mm_struct *mm);
+# define mmu_notifier_register(__a, __b)	\
+	 mmu_notifier_register_v2(__a, __b)
+# define __mmu_notifier_register(__a, __b)	\
+	 __mmu_notifier_register_v2(__a, __b)
+#endif /* RH_MMU_NOTIFIER_V2 */
 #endif /* CONFIG_MMU_NOTIFIER */
 
 #endif /* _LINUX_MMU_NOTIFIER_H */

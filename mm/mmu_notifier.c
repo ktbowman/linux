@@ -9,6 +9,8 @@
  *  the COPYING file in the top-level directory.
  */
 
+#define RH_MMU_NOTIFIER_V2
+
 #include <linux/rculist.h>
 #include <linux/mmu_notifier.h>
 #include <linux/export.h>
@@ -20,6 +22,9 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/slab.h>
+
+#undef mmu_notifier_register
+#undef __mmu_notifier_register
 
 /* global SRCU for all MMs */
 DEFINE_STATIC_SRCU(srcu);
@@ -456,6 +461,11 @@ static void mn_hlist_invalidate_range_start(struct mmu_notifier_mm *mmn_mm,
 		if (mn->ops->invalidate_range_start) {
 			mn->ops->invalidate_range_start(mn, range->mm, range->start, range->end);
 		}
+
+		/* Legacy MMU_NOTIFIER_V1 callback */
+		else if (mn->ops->invalidate_range_start_v1) {
+			mn->ops->invalidate_range_start_v1(mn, range->mm, range->start, range->end);
+		}
 	}
 	srcu_read_unlock(&srcu, id);
 }
@@ -499,6 +509,11 @@ static void mn_hlist_invalidate_end(struct mmu_notifier_mm *mmn_mm,
 						  range->end);
 		if (mn->ops->invalidate_range_end) {
 			mn->ops->invalidate_range_end(mn, range->mm, range->start, range->end);
+		}
+
+		/* Legacy MMU_NOTIFIER_V1 callback */
+		else if (mn->ops->invalidate_range_end_v1) {
+			mn->ops->invalidate_range_end_v1(mn, range->mm, range->start, range->end);
 		}
 	}
 	srcu_read_unlock(&srcu, id);
@@ -552,7 +567,9 @@ bool mm_has_blockable_invalidate_notifiers(struct mm_struct *mm)
 	hlist_for_each_entry_rcu(mn, &mm->mmu_notifier_mm->list, hlist) {
 		if (!mn->ops->invalidate_range &&
 		    !mn->ops->invalidate_range_start &&
-		    !mn->ops->invalidate_range_end)
+		    !mn->ops->invalidate_range_start_v1 &&
+		    !mn->ops->invalidate_range_end &&
+		    !mn->ops->invalidate_range_end_v1)
 				continue;
 
 		if (!(mn->ops->flags & MMU_INVALIDATE_DOES_NOT_BLOCK)) {
@@ -578,7 +595,7 @@ int __mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
 	BUG_ON(atomic_read(&mm->mm_users) <= 0);
 
 	if (mn) {
-		mn->_rh = kmalloc(sizeof(*mn->_rh), GFP_KERNEL);
+		mn->_rh = kzalloc(sizeof(*mn->_rh), GFP_KERNEL);
 		if (!mn->_rh) {
 			return -ENOMEM;
 		}
@@ -627,10 +644,10 @@ int __mmu_notifier_register(struct mmu_notifier *mn, struct mm_struct *mm)
 	 * mm_take_all_locks() do not need to use acquire semantics.
 	 */
 	if (mmu_notifier_mm)
-		smp_store_release(&mm->mmu_notifier_mm,  mmu_notifier_mm);
+		smp_store_release(&mm->mmu_notifier_mm, mmu_notifier_mm);
 
 	if (mn) {
-		/* Pairs with the mmdrop in mmu_notifier_unregister_ */
+		/* Pairs with the mmdrop in mmu_notifier_unregister_* */
 		mmgrab(mm);
 		if (RH_KABI_AUX(mn, mmu_notifier, mm)) {
 			mn->_rh->mm = mm;
@@ -1090,3 +1107,30 @@ void mmu_notifier_synchronize(void)
 	synchronize_srcu(&srcu);
 }
 EXPORT_SYMBOL_GPL(mmu_notifier_synchronize);
+
+/*
+ * RH_MMU_NOTIFIER_V2 register functions
+ */
+int __mmu_notifier_register_v2(struct mmu_notifier *mn, struct mm_struct *mm)
+{
+	int ret;
+
+	WARN_ON_ONCE(mn->ops->invalidate_range_start_v1 ||
+		     mn->ops->invalidate_range_end_v1);
+	ret = __mmu_notifier_register(mn, mm);
+	if (!ret && RH_KABI_AUX(mn, mmu_notifier, mm))
+		mn->_rh->version = 2;
+	return ret;
+}
+EXPORT_SYMBOL_GPL(__mmu_notifier_register_v2);
+
+int mmu_notifier_register_v2(struct mmu_notifier *mn, struct mm_struct *mm)
+{
+	int ret;
+
+	mmap_write_lock(mm);
+	ret = __mmu_notifier_register_v2(mn, mm);
+	mmap_write_unlock(mm);
+	return ret;
+}
+EXPORT_SYMBOL_GPL(mmu_notifier_register_v2);
