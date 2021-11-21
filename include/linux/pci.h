@@ -302,9 +302,19 @@ struct pci_cap_saved_state {
 	struct pci_cap_saved_data	cap;
 };
 
+/* RHEL: We need to hide 'pci_vpd' content from the kABI checker to avoid
+ * checksum changes of affected symbols.
+ */
+#ifndef __GENKSYMS__
+struct pci_vpd {
+	struct mutex	lock;
+	unsigned int	len;
+	u8		cap;
+};
+#endif
+
 struct irq_affinity;
 struct pcie_link_state;
-struct pci_vpd;
 struct pci_sriov;
 struct pci_p2pdma;
 struct rcec_ea;
@@ -484,7 +494,7 @@ struct pci_dev {
 #ifdef CONFIG_PCI_MSI
 	const struct attribute_group **msi_irq_groups;
 #endif
-	struct pci_vpd *vpd;
+	RH_KABI_DEPRECATE(struct pci_vpd *, vpd)
 #ifdef CONFIG_PCI_ATS
 	union {
 		struct pci_sriov	*sriov;		/* PF: SR-IOV info */
@@ -525,11 +535,7 @@ struct pci_dev {
 	RH_KABI_USE(7, struct rcec_ea  *rcec_ea) /* RCEC cached endpoint association */
 	RH_KABI_USE(8, struct pci_dev  *rcec)	 /* Associated RCEC device */
 #endif
-	RH_KABI_RESERVE(9)
-	RH_KABI_RESERVE(10)
-	RH_KABI_RESERVE(11)
-	RH_KABI_RESERVE(12)
-	RH_KABI_RESERVE(13)
+	RH_KABI_USE(9, 10, 11, 12, 13, struct pci_vpd  vpd)
 	RH_KABI_RESERVE(14)
 	RH_KABI_RESERVE(15)
 	RH_KABI_AUX_EMBED(pci_dev_extended)
