@@ -1339,7 +1339,7 @@ static void i40iw_copy_user_pgaddrs(struct i40iw_mr *iwmr,
 	pinfo = (level == I40IW_LEVEL_1) ? NULL : palloc->level2.leaf;
 
 	if (iwmr->type == IW_MEMREG_TYPE_QP)
-		iwpbl->qp_mr.sq_page = sg_page(region->sg_head.sgl);
+		iwpbl->qp_mr.sq_page = sg_page(region->sgt_append.sgt.sgl);
 
 	rdma_umem_for_each_dma_block(region, &biter, iwmr->page_size) {
 		*pbl = rdma_block_iter_dma_address(&biter);
