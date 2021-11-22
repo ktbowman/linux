@@ -1802,7 +1802,6 @@ long fpu_xstate_prctl(struct task_struct *tsk, int option, unsigned long arg2)
 }
 
 #ifdef CONFIG_PROC_PID_ARCH_STATUS
-
 /*
  * Report the amount of time elapsed in millisecond since last AVX512
  * use in the task.
