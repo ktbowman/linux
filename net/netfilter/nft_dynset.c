@@ -237,8 +237,6 @@ static int nft_dynset_init(const struct nft_ctx *ctx,
 
 		if (!(set->flags & NFT_SET_EVAL))
 			return -EINVAL;
-		if (!nft_set_is_anonymous(set))
-			return -EOPNOTSUPP;
 
 		dynset_expr = nft_dynset_expr_alloc(ctx, set,
 						    tb[NFTA_DYNSET_EXPR], 0);
