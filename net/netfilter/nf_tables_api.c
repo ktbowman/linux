@@ -3733,9 +3733,9 @@ static int nf_tables_fill_set(struct sk_buff *skb, const struct nft_ctx *ctx,
 
 	nla_nest_end(skb, nest);
 
-	if (set->expr) {
+	if (set->num_exprs == 1) {
 		nest = nla_nest_start_noflag(skb, NFTA_SET_EXPR);
-		if (nf_tables_fill_expr_info(skb, set->expr) < 0)
+		if (nf_tables_fill_expr_info(skb, set->exprs[0]) < 0)
 			goto nla_put_failure;
 
 		nla_nest_end(skb, nest);
@@ -4158,6 +4158,8 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 			err = PTR_ERR(expr);
 			goto err_set_alloc_name;
 		}
+		set->exprs[0] = expr;
+		set->num_exprs++;
 	}
 
 	udata = NULL;
@@ -4175,7 +4177,6 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 	set->dtype = dtype;
 	set->objtype = objtype;
 	set->dlen  = desc.dlen;
-	set->expr = expr;
 	set->flags = flags;
 	set->size  = desc.size;
 	set->policy = policy;
@@ -4204,8 +4205,8 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 err_set_trans:
 	ops->destroy(set);
 err_set_init:
-	if (expr)
-		nft_expr_destroy(&ctx, expr);
+	for (i = 0; i < set->num_exprs; i++)
+		nft_expr_destroy(&ctx, set->exprs[i]);
 err_set_alloc_name:
 	kfree(set->name);
 err_set_name:
@@ -4217,11 +4218,13 @@ err1:
 
 static void nft_set_destroy(const struct nft_ctx *ctx, struct nft_set *set)
 {
+	int i;
+
 	if (WARN_ON(set->use > 0))
 		return;
 
-	if (set->expr)
-		nft_expr_destroy(ctx, set->expr);
+	for (i = 0; i < set->num_exprs; i++)
+		nft_expr_destroy(ctx, set->exprs[i]);
 
 	set->ops->destroy(set);
 	module_put(to_set_type(set->ops)->owner);
@@ -4992,9 +4995,39 @@ static void nf_tables_set_elem_destroy(const struct nft_ctx *ctx,
 	kfree(elem);
 }
 
+static int nft_set_elem_expr_clone(const struct nft_ctx *ctx,
+				   struct nft_set *set,
+				   struct nft_expr *expr_array[])
+{
+	struct nft_expr *expr;
+	int err, i, k;
+
+	for (i = 0; i < set->num_exprs; i++) {
+		expr = kzalloc(set->exprs[i]->ops->size, GFP_KERNEL);
+		if (!expr)
+			goto err_expr;
+
+		err = nft_expr_clone(expr, set->exprs[i]);
+		if (err < 0) {
+			nft_expr_destroy(ctx, expr);
+			goto err_expr;
+		}
+		expr_array[i] = expr;
+	}
+
+	return 0;
+
+err_expr:
+	for (k = i - 1; k >= 0; k++)
+		nft_expr_destroy(ctx, expr_array[i]);
+
+	return -ENOMEM;
+}
+
 static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			    const struct nlattr *attr, u32 nlmsg_flags)
 {
+	struct nft_expr *expr_array[NFT_SET_EXPR_MAX] = {};
 	struct nlattr *nla[NFTA_SET_ELEM_MAX + 1];
 	u8 genmask = nft_genmask_next(ctx->net);
 	struct nft_set_ext_tmpl tmpl;
@@ -5002,7 +5035,6 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 	struct nft_set_elem elem;
 	struct nft_set_binding *binding;
 	struct nft_object *obj = NULL;
-	struct nft_expr *expr = NULL;
 	struct nft_userdata *udata;
 	struct nft_data_desc desc;
 	struct nft_data data;
@@ -5012,7 +5044,7 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 	u64 timeout;
 	u64 expiration;
 	u8 ulen;
-	int err;
+	int err, i;
 
 	err = nla_parse_nested_deprecated(nla, NFTA_SET_ELEM_MAX, attr,
 					  nft_set_elem_policy, NULL);
@@ -5070,23 +5102,27 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			return err;
 	}
 
-	if (nla[NFTA_SET_ELEM_EXPR] != NULL) {
+	if (nla[NFTA_SET_ELEM_EXPR]) {
+		struct nft_expr *expr;
+
+		if (set->num_exprs != 1)
+			return -EOPNOTSUPP;
+
 		expr = nft_set_elem_expr_alloc(ctx, set,
 					       nla[NFTA_SET_ELEM_EXPR]);
 		if (IS_ERR(expr))
 			return PTR_ERR(expr);
 
-		err = -EOPNOTSUPP;
-		if (set->expr && set->expr->ops != expr->ops)
-			goto err_set_elem_expr;
-	} else if (set->expr) {
-		expr = kzalloc(set->expr->ops->size, GFP_KERNEL);
-		if (!expr)
-			return -ENOMEM;
+		expr_array[0] = expr;
 
-		err = nft_expr_clone(expr, set->expr);
-		if (err < 0)
+		if (set->exprs[0] && set->exprs[0]->ops != expr->ops) {
+			err = -EOPNOTSUPP;
 			goto err_set_elem_expr;
+		}
+	} else if (set->num_exprs > 0) {
+		err = nft_set_elem_expr_clone(ctx, set, expr_array);
+		if (err < 0)
+			goto err_set_elem_expr_clone;
 	}
 
 	err = nft_setelem_parse_key(ctx, set, &elem.key.val,
@@ -5111,9 +5147,9 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			nft_set_ext_add(&tmpl, NFT_SET_EXT_TIMEOUT);
 	}
 
-	if (expr)
+	if (set->num_exprs == 1)
 		nft_set_ext_add_length(&tmpl, NFT_SET_EXT_EXPR,
-				       expr->ops->size);
+				       expr_array[0]->ops->size);
 
 	if (nla[NFTA_SET_ELEM_OBJREF] != NULL) {
 		if (!(set->flags & NFT_SET_OBJECT)) {
@@ -5199,10 +5235,12 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 		*nft_set_ext_obj(ext) = obj;
 		obj->use++;
 	}
-	if (expr) {
+	if (set->num_exprs == 1) {
+		struct nft_expr *expr = expr_array[0];
+
 		memcpy(nft_set_ext_expr(ext), expr, expr->ops->size);
 		kfree(expr);
-		expr = NULL;
+		expr_array[0] = NULL;
 	}
 
 	trans = nft_trans_elem_alloc(ctx, NFT_MSG_NEWSETELEM, set);
@@ -5261,9 +5299,9 @@ err_parse_key_end:
 err_parse_key:
 	nft_data_release(&elem.key.val, NFT_DATA_VALUE);
 err_set_elem_expr:
-	if (expr != NULL)
-		nft_expr_destroy(ctx, expr);
-
+	for (i = 0; i < set->num_exprs && expr_array[i]; i++)
+		nft_expr_destroy(ctx, expr_array[i]);
+err_set_elem_expr_clone:
 	return err;
 }
 
