@@ -21,21 +21,21 @@ struct mptcp_pernet {
 	struct ctl_table_header *ctl_table_hdr;
 #endif
 
-	int mptcp_enabled;
 	unsigned int add_addr_timeout;
+	int mptcp_enabled;
 };
 
-static struct mptcp_pernet *mptcp_get_pernet(struct net *net)
+static struct mptcp_pernet *mptcp_get_pernet(const struct net *net)
 {
 	return net_generic(net, mptcp_pernet_id);
 }
 
-int mptcp_is_enabled(struct net *net)
+int mptcp_is_enabled(const struct net *net)
 {
 	return mptcp_get_pernet(net)->mptcp_enabled;
 }
 
-unsigned int mptcp_get_add_addr_timeout(struct net *net)
+unsigned int mptcp_get_add_addr_timeout(const struct net *net)
 {
 	return mptcp_get_pernet(net)->add_addr_timeout;
 }
