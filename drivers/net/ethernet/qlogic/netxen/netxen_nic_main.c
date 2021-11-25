@@ -1473,6 +1473,8 @@ netxen_nic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	uint8_t revision_id;
 	u32 val;
 
+	pci_hw_unmaintained(ent, pdev);
+
 	if (pdev->revision >= NX_P3_A0 && pdev->revision <= NX_P3_B1) {
 		pr_warn("%s: chip revisions between 0x%x-0x%x will not be enabled\n",
 			module_name(THIS_MODULE), NX_P3_A0, NX_P3_B1);
@@ -3508,7 +3510,6 @@ static struct pci_driver netxen_driver = {
 static int __init netxen_init_module(void)
 {
 	printk(KERN_INFO "%s\n", netxen_nic_driver_string);
-	mark_hardware_unsupported(netxen_nic_driver_name);
 
 #ifdef CONFIG_INET
 	register_netdevice_notifier(&netxen_netdev_cb);
