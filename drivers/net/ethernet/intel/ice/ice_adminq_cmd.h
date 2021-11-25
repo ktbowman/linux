@@ -116,6 +116,7 @@ struct ice_aqc_list_caps_elem {
 #define ICE_AQC_CAPS_PENDING_OROM_VER			0x004B
 #define ICE_AQC_CAPS_NET_VER				0x004C
 #define ICE_AQC_CAPS_PENDING_NET_VER			0x004D
+#define ICE_AQC_CAPS_RDMA				0x0051
 #define ICE_AQC_CAPS_NVM_MGMT				0x0080
 
 	u8 major_ver;
@@ -878,16 +879,18 @@ struct ice_aqc_get_phy_caps {
 	__le16 param0;
 	/* 18.0 - Report qualified modules */
 #define ICE_AQC_GET_PHY_RQM		BIT(0)
-	/* 18.1 - 18.2 : Report mode
-	 * 00b - Report NVM capabilities
-	 * 01b - Report topology capabilities
-	 * 10b - Report SW configured
+	/* 18.1 - 18.3 : Report mode
+	 * 000b - Report NVM capabilities
+	 * 001b - Report topology capabilities
+	 * 010b - Report SW configured
+	 * 100b - Report default capabilities
 	 */
-#define ICE_AQC_REPORT_MODE_S		1
-#define ICE_AQC_REPORT_MODE_M		(3 << ICE_AQC_REPORT_MODE_S)
-#define ICE_AQC_REPORT_NVM_CAP		0
-#define ICE_AQC_REPORT_TOPO_CAP		BIT(1)
-#define ICE_AQC_REPORT_SW_CFG		BIT(2)
+#define ICE_AQC_REPORT_MODE_S			1
+#define ICE_AQC_REPORT_MODE_M			(7 << ICE_AQC_REPORT_MODE_S)
+#define ICE_AQC_REPORT_TOPO_CAP_NO_MEDIA	0
+#define ICE_AQC_REPORT_TOPO_CAP_MEDIA		BIT(1)
+#define ICE_AQC_REPORT_ACTIVE_CFG		BIT(2)
+#define ICE_AQC_REPORT_DFLT_CFG		BIT(3)
 	__le32 reserved1;
 	__le32 addr_high;
 	__le32 addr_low;
@@ -1121,7 +1124,9 @@ struct ice_aqc_get_link_status_data {
 #define ICE_AQ_LINK_TOPO_UNDRUTIL_PRT	BIT(5)
 #define ICE_AQ_LINK_TOPO_UNDRUTIL_MEDIA	BIT(6)
 #define ICE_AQ_LINK_TOPO_UNSUPP_MEDIA	BIT(7)
-	u8 reserved1;
+	u8 link_cfg_err;
+#define ICE_AQ_LINK_MODULE_POWER_UNSUPPORTED	BIT(5)
+#define ICE_AQ_LINK_INVAL_MAX_POWER_LIMIT	BIT(7)
 	u8 link_info;
 #define ICE_AQ_LINK_UP			BIT(0)	/* Link Status */
 #define ICE_AQ_LINK_FAULT		BIT(1)
@@ -1164,7 +1169,7 @@ struct ice_aqc_get_link_status_data {
 #define ICE_AQ_CFG_PACING_TYPE_FIXED	ICE_AQ_CFG_PACING_TYPE_M
 	/* External Device Power Ability */
 	u8 power_desc;
-#define ICE_AQ_PWR_CLASS_M		0x3
+#define ICE_AQ_PWR_CLASS_M		0x3F
 #define ICE_AQ_LINK_PWR_BASET_LOW_HIGH	0
 #define ICE_AQ_LINK_PWR_BASET_HIGH	1
 #define ICE_AQ_LINK_PWR_QSFP_CLASS_1	0
@@ -1408,8 +1413,7 @@ struct ice_aqc_nvm_comp_tbl {
 	u8 cvs[]; /* Component Version String */
 } __packed;
 
-/**
- * Send to PF command (indirect 0x0801) ID is only used by PF
+/* Send to PF command (indirect 0x0801) ID is only used by PF
  *
  * Send to VF command (indirect 0x0802) ID is only used by PF
  *
@@ -1693,6 +1697,36 @@ struct ice_aqc_dis_txq_item {
 	__le16 q_id[];
 } __packed;
 
+/* Add Tx RDMA Queue Set (indirect 0x0C33) */
+struct ice_aqc_add_rdma_qset {
+	u8 num_qset_grps;
+	u8 reserved[7];
+	__le32 addr_high;
+	__le32 addr_low;
+};
+
+/* This is the descriptor of each Qset entry for the Add Tx RDMA Queue Set
+ * command (0x0C33). Only used within struct ice_aqc_add_rdma_qset.
+ */
+struct ice_aqc_add_tx_rdma_qset_entry {
+	__le16 tx_qset_id;
+	u8 rsvd[2];
+	__le32 qset_teid;
+	struct ice_aqc_txsched_elem info;
+};
+
+/* The format of the command buffer for Add Tx RDMA Queue Set(0x0C33)
+ * is an array of the following structs. Please note that the length of
+ * each struct ice_aqc_add_rdma_qset is variable due to the variable
+ * number of queues in each group!
+ */
+struct ice_aqc_add_rdma_qset_data {
+	__le32 parent_teid;
+	__le16 num_qsets;
+	u8 rsvd[2];
+	struct ice_aqc_add_tx_rdma_qset_entry rdma_qsets[];
+};
+
 /* Configure Firmware Logging Command (indirect 0xFF09)
  * Logging Information Read Response (indirect 0xFF10)
  * Note: The 0xFF10 command has no input parameters.
@@ -1800,6 +1834,7 @@ struct ice_pkg_ver {
 };
 
 #define ICE_PKG_NAME_SIZE	32
+#define ICE_SEG_ID_SIZE		28
 #define ICE_SEG_NAME_SIZE	28
 
 struct ice_aqc_get_pkg_info {
@@ -1913,6 +1948,7 @@ struct ice_aq_desc {
 		struct ice_aqc_neigh_dev_req neigh_dev;
 		struct ice_aqc_add_txqs add_txqs;
 		struct ice_aqc_dis_txqs dis_txqs;
+		struct ice_aqc_add_rdma_qset add_rdma_qset;
 		struct ice_aqc_add_get_update_free_vsi vsi_cmd;
 		struct ice_aqc_add_update_free_vsi_resp add_update_free_vsi_res;
 		struct ice_aqc_fw_logging fw_logging;
@@ -2065,6 +2101,7 @@ enum ice_adminq_opc {
 	/* Tx queue handling commands/events */
 	ice_aqc_opc_add_txqs				= 0x0C30,
 	ice_aqc_opc_dis_txqs				= 0x0C31,
+	ice_aqc_opc_add_rdma_qset			= 0x0C33,
 
 	/* package commands */
 	ice_aqc_opc_download_pkg			= 0x0C40,

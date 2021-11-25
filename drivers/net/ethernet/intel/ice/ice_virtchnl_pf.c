@@ -620,7 +620,7 @@ void ice_free_vfs(struct ice_pf *pf)
 	if (!pf->vf)
 		return;
 
-	while (test_and_set_bit(__ICE_VF_DIS, pf->state))
+	while (test_and_set_bit(ICE_VF_DIS, pf->state))
 		usleep_range(1000, 2000);
 
 	/* Disable IOV before freeing resources. This lets any VF drivers
@@ -634,8 +634,7 @@ void ice_free_vfs(struct ice_pf *pf)
 
 	/* Avoid wait time by stopping all VFs at the same time */
 	ice_for_each_vf(pf, i)
-		if (test_bit(ICE_VF_STATE_QS_ENA, pf->vf[i].vf_states))
-			ice_dis_vf_qs(&pf->vf[i]);
+		ice_dis_vf_qs(&pf->vf[i]);
 
 	tmp = pf->num_alloc_vfs;
 	pf->num_qps_per_vf = 0;
@@ -647,6 +646,8 @@ void ice_free_vfs(struct ice_pf *pf)
 			set_bit(ICE_VF_STATE_DIS, pf->vf[i].vf_states);
 			ice_free_vf_res(&pf->vf[i]);
 		}
+
+		mutex_destroy(&pf->vf[i].cfg_lock);
 	}
 
 	if (ice_sriov_free_msix_res(pf))
@@ -681,7 +682,7 @@ void ice_free_vfs(struct ice_pf *pf)
 			dev_dbg(dev, "failed to clear malicious VF state for VF %u\n",
 				i);
 
-	clear_bit(__ICE_VF_DIS, pf->state);
+	clear_bit(ICE_VF_DIS, pf->state);
 	clear_bit(ICE_VF_DEINIT_IN_PROGRESS, pf->state);
 	clear_bit(ICE_FLAG_SRIOV_ENA, pf->flags);
 }
@@ -942,16 +943,18 @@ static int ice_vf_rebuild_host_mac_cfg(struct ice_vf *vf)
 
 	vf->num_mac++;
 
-	if (is_valid_ether_addr(vf->dflt_lan_addr.addr)) {
-		status = ice_fltr_add_mac(vsi, vf->dflt_lan_addr.addr,
+	if (is_valid_ether_addr(vf->hw_lan_addr.addr)) {
+		status = ice_fltr_add_mac(vsi, vf->hw_lan_addr.addr,
 					  ICE_FWD_TO_VSI);
 		if (status) {
 			dev_err(dev, "failed to add default unicast MAC filter %pM for VF %u, error %s\n",
-				&vf->dflt_lan_addr.addr[0], vf->vf_id,
+				&vf->hw_lan_addr.addr[0], vf->vf_id,
 				ice_stat_str(status));
 			return ice_status_to_errno(status);
 		}
 		vf->num_mac++;
+
+		ether_addr_copy(vf->dev_lan_addr.addr, vf->hw_lan_addr.addr);
 	}
 
 	return 0;
@@ -1521,7 +1524,7 @@ bool ice_reset_all_vfs(struct ice_pf *pf, bool is_vflr)
 			dev_dbg(dev, "failed to clear malicious VF state for VF %u\n", i);
 
 	/* If VFs have been disabled, there is no need to reset */
-	if (test_and_set_bit(__ICE_VF_DIS, pf->state))
+	if (test_and_set_bit(ICE_VF_DIS, pf->state))
 		return false;
 
 	/* Begin reset on all VFs at once */
@@ -1580,7 +1583,7 @@ bool ice_reset_all_vfs(struct ice_pf *pf, bool is_vflr)
 	}
 
 	ice_flush(hw);
-	clear_bit(__ICE_VF_DIS, pf->state);
+	clear_bit(ICE_VF_DIS, pf->state);
 
 	return true;
 }
@@ -1600,7 +1603,7 @@ static bool ice_is_vf_disabled(struct ice_vf *vf)
 	 * means something else is resetting the VF, so we shouldn't continue.
 	 * Otherwise, set disable VF state bit for actual reset, and continue.
 	 */
-	return (test_bit(__ICE_VF_DIS, pf->state) ||
+	return (test_bit(ICE_VF_DIS, pf->state) ||
 		test_bit(ICE_VF_STATE_DIS, vf->vf_states));
 }
 
@@ -1625,7 +1628,7 @@ bool ice_reset_vf(struct ice_vf *vf, bool is_vflr)
 
 	dev = ice_pf_to_dev(pf);
 
-	if (test_bit(__ICE_VF_RESETS_DISABLED, pf->state)) {
+	if (test_bit(ICE_VF_RESETS_DISABLED, pf->state)) {
 		dev_dbg(dev, "Trying to reset VF %d, but all VF resets are disabled\n",
 			vf->vf_id);
 		return true;
@@ -1643,8 +1646,7 @@ bool ice_reset_vf(struct ice_vf *vf, bool is_vflr)
 
 	vsi = ice_get_vf_vsi(vf);
 
-	if (test_bit(ICE_VF_STATE_QS_ENA, vf->vf_states))
-		ice_dis_vf_qs(vf);
+	ice_dis_vf_qs(vf);
 
 	/* Call Disable LAN Tx queue AQ whether or not queues are
 	 * enabled. This is needed for successful completion of VFR.
@@ -1690,7 +1692,6 @@ bool ice_reset_vf(struct ice_vf *vf, bool is_vflr)
 		else
 			promisc_m = ICE_UCAST_PROMISC_BITS;
 
-		vsi = ice_get_vf_vsi(vf);
 		if (ice_vf_set_vsi_promisc(vf, vsi, promisc_m, true))
 			dev_err(dev, "disabling promiscuous mode failed\n");
 	}
@@ -1869,7 +1870,7 @@ teardown:
 }
 
 /**
- * ice_set_dflt_settings - set VF defaults during initialization/creation
+ * ice_set_dflt_settings_vfs - set VF defaults during initialization/creation
  * @pf: PF holding reference to all VFs for default configuration
  */
 static void ice_set_dflt_settings_vfs(struct ice_pf *pf)
@@ -1893,6 +1894,8 @@ static void ice_set_dflt_settings_vfs(struct ice_pf *pf)
 		 */
 		ice_vf_ctrl_invalidate_vsi(vf);
 		ice_vf_fdir_init(vf);
+
+		mutex_init(&vf->cfg_lock);
 	}
 }
 
@@ -1930,7 +1933,7 @@ static int ice_ena_vfs(struct ice_pf *pf, u16 num_vfs)
 	/* Disable global interrupt 0 so we don't try to handle the VFLR. */
 	wr32(hw, GLINT_DYN_CTL(pf->oicr_idx),
 	     ICE_ITR_NONE << GLINT_DYN_CTL_ITR_INDX_S);
-	set_bit(__ICE_OICR_INTR_DIS, pf->state);
+	set_bit(ICE_OICR_INTR_DIS, pf->state);
 	ice_flush(hw);
 
 	ret = pci_enable_sriov(pf->pdev, num_vfs);
@@ -1958,7 +1961,7 @@ static int ice_ena_vfs(struct ice_pf *pf, u16 num_vfs)
 		goto err_unroll_sriov;
 	}
 
-	clear_bit(__ICE_VF_DIS, pf->state);
+	clear_bit(ICE_VF_DIS, pf->state);
 	return 0;
 
 err_unroll_sriov:
@@ -1970,7 +1973,7 @@ err_pci_disable_sriov:
 err_unroll_intr:
 	/* rearm interrupts here */
 	ice_irq_dynamic_ena(hw, NULL, NULL);
-	clear_bit(__ICE_OICR_INTR_DIS, pf->state);
+	clear_bit(ICE_OICR_INTR_DIS, pf->state);
 	return ret;
 }
 
@@ -2059,6 +2062,8 @@ int ice_sriov_configure(struct pci_dev *pdev, int num_vfs)
 		if (!pci_vfs_assigned(pdev)) {
 			ice_mbx_deinit_snapshot(&pf->hw);
 			ice_free_vfs(pf);
+			if (pf->lag)
+				ice_enable_lag(pf->lag);
 			return 0;
 		}
 
@@ -2076,6 +2081,8 @@ int ice_sriov_configure(struct pci_dev *pdev, int num_vfs)
 		return err;
 	}
 
+	if (pf->lag)
+		ice_disable_lag(pf->lag);
 	return num_vfs;
 }
 
@@ -2092,7 +2099,7 @@ void ice_process_vflr_event(struct ice_pf *pf)
 	unsigned int vf_id;
 	u32 reg;
 
-	if (!test_and_clear_bit(__ICE_VFLR_EVENT_PENDING, pf->state) ||
+	if (!test_and_clear_bit(ICE_VFLR_EVENT_PENDING, pf->state) ||
 	    !pf->num_alloc_vfs)
 		return;
 
@@ -2385,7 +2392,7 @@ static int ice_vc_get_vf_res_msg(struct ice_vf *vf, u8 *msg)
 	vfres->vsi_res[0].vsi_type = VIRTCHNL_VSI_SRIOV;
 	vfres->vsi_res[0].num_queue_pairs = vsi->num_txq;
 	ether_addr_copy(vfres->vsi_res[0].default_mac_addr,
-			vf->dflt_lan_addr.addr);
+			vf->hw_lan_addr.addr);
 
 	/* match guest capabilities */
 	vf->driver_caps = vfres->vf_cap_flags;
@@ -2949,6 +2956,7 @@ bool ice_is_any_vf_in_promisc(struct ice_pf *pf)
 static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 {
 	enum virtchnl_status_code v_ret = VIRTCHNL_STATUS_SUCCESS;
+	enum ice_status mcast_status = 0, ucast_status = 0;
 	bool rm_promisc, alluni = false, allmulti = false;
 	struct virtchnl_promisc_info *info =
 	    (struct virtchnl_promisc_info *)msg;
@@ -2990,23 +2998,6 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 	rm_promisc = !allmulti && !alluni;
 
 	if (vsi->num_vlan || vf->port_vlan_info) {
-		struct ice_vsi *pf_vsi = ice_get_main_vsi(pf);
-		struct net_device *pf_netdev;
-
-		if (!pf_vsi) {
-			v_ret = VIRTCHNL_STATUS_ERR_PARAM;
-			goto error_param;
-		}
-
-		pf_netdev = pf_vsi->netdev;
-
-		ret = ice_set_vf_spoofchk(pf_netdev, vf->vf_id, rm_promisc);
-		if (ret) {
-			dev_err(dev, "Failed to update spoofchk to %s for VF %d VSI %d when setting promiscuous mode\n",
-				rm_promisc ? "ON" : "OFF", vf->vf_id,
-				vsi->vsi_num);
-			v_ret = VIRTCHNL_STATUS_ERR_PARAM;
-		}
 
 		ret = ice_cfg_vlan_pruning(vsi, true, !rm_promisc);
 		if (ret) {
@@ -3038,52 +3029,51 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 			goto error_param;
 		}
 	} else {
-		enum ice_status status;
-		u8 promisc_m;
+		u8 mcast_m, ucast_m;
 
-		if (alluni) {
-			if (vf->port_vlan_info || vsi->num_vlan)
-				promisc_m = ICE_UCAST_VLAN_PROMISC_BITS;
-			else
-				promisc_m = ICE_UCAST_PROMISC_BITS;
-		} else if (allmulti) {
-			if (vf->port_vlan_info || vsi->num_vlan)
-				promisc_m = ICE_MCAST_VLAN_PROMISC_BITS;
-			else
-				promisc_m = ICE_MCAST_PROMISC_BITS;
+		if (vf->port_vlan_info || vsi->num_vlan > 1) {
+			mcast_m = ICE_MCAST_VLAN_PROMISC_BITS;
+			ucast_m = ICE_UCAST_VLAN_PROMISC_BITS;
 		} else {
-			if (vf->port_vlan_info || vsi->num_vlan)
-				promisc_m = ICE_UCAST_VLAN_PROMISC_BITS;
-			else
-				promisc_m = ICE_UCAST_PROMISC_BITS;
+			mcast_m = ICE_MCAST_PROMISC_BITS;
+			ucast_m = ICE_UCAST_PROMISC_BITS;
 		}
 
-		/* Configure multicast/unicast with or without VLAN promiscuous
-		 * mode
-		 */
-		status = ice_vf_set_vsi_promisc(vf, vsi, promisc_m, rm_promisc);
-		if (status) {
-			dev_err(dev, "%sable Tx/Rx filter promiscuous mode on VF-%d failed, error: %s\n",
-				rm_promisc ? "dis" : "en", vf->vf_id,
-				ice_stat_str(status));
-			v_ret = ice_err_to_virt_err(status);
-			goto error_param;
-		} else {
-			dev_dbg(dev, "%sable Tx/Rx filter promiscuous mode on VF-%d succeeded\n",
-				rm_promisc ? "dis" : "en", vf->vf_id);
+		ucast_status = ice_vf_set_vsi_promisc(vf, vsi, ucast_m,
+						      !alluni);
+		if (ucast_status) {
+			dev_err(dev, "%sable Tx/Rx filter promiscuous mode on VF-%d failed\n",
+				alluni ? "en" : "dis", vf->vf_id);
+			v_ret = ice_err_to_virt_err(ucast_status);
+		}
+
+		mcast_status = ice_vf_set_vsi_promisc(vf, vsi, mcast_m,
+						      !allmulti);
+		if (mcast_status) {
+			dev_err(dev, "%sable Tx/Rx filter promiscuous mode on VF-%d failed\n",
+				allmulti ? "en" : "dis", vf->vf_id);
+			v_ret = ice_err_to_virt_err(mcast_status);
 		}
 	}
 
-	if (allmulti &&
-	    !test_and_set_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states))
-		dev_info(dev, "VF %u successfully set multicast promiscuous mode\n", vf->vf_id);
-	else if (!allmulti && test_and_clear_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states))
-		dev_info(dev, "VF %u successfully unset multicast promiscuous mode\n", vf->vf_id);
+	if (!mcast_status) {
+		if (allmulti &&
+		    !test_and_set_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states))
+			dev_info(dev, "VF %u successfully set multicast promiscuous mode\n",
+				 vf->vf_id);
+		else if (!allmulti && test_and_clear_bit(ICE_VF_STATE_MC_PROMISC, vf->vf_states))
+			dev_info(dev, "VF %u successfully unset multicast promiscuous mode\n",
+				 vf->vf_id);
+	}
 
-	if (alluni && !test_and_set_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states))
-		dev_info(dev, "VF %u successfully set unicast promiscuous mode\n", vf->vf_id);
-	else if (!alluni && test_and_clear_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states))
-		dev_info(dev, "VF %u successfully unset unicast promiscuous mode\n", vf->vf_id);
+	if (!ucast_status) {
+		if (alluni && !test_and_set_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states))
+			dev_info(dev, "VF %u successfully set unicast promiscuous mode\n",
+				 vf->vf_id);
+		else if (!alluni && test_and_clear_bit(ICE_VF_STATE_UC_PROMISC, vf->vf_states))
+			dev_info(dev, "VF %u successfully unset unicast promiscuous mode\n",
+				 vf->vf_id);
+	}
 
 error_param:
 	return ice_vc_send_msg_to_vf(vf, VIRTCHNL_OP_CONFIG_PROMISCUOUS_MODE,
@@ -3541,10 +3531,9 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 	struct virtchnl_vsi_queue_config_info *qci =
 	    (struct virtchnl_vsi_queue_config_info *)msg;
 	struct virtchnl_queue_pair_info *qpi;
-	u16 num_rxq = 0, num_txq = 0;
 	struct ice_pf *pf = vf->pf;
 	struct ice_vsi *vsi;
-	int i;
+	int i, q_idx;
 
 	if (!test_bit(ICE_VF_STATE_ACTIVE, vf->vf_states)) {
 		v_ret = VIRTCHNL_STATUS_ERR_PARAM;
@@ -3582,18 +3571,31 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 			v_ret = VIRTCHNL_STATUS_ERR_PARAM;
 			goto error_param;
 		}
+
+		q_idx = qpi->rxq.queue_id;
+
+		/* make sure selected "q_idx" is in valid range of queues
+		 * for selected "vsi"
+		 */
+		if (q_idx >= vsi->alloc_txq || q_idx >= vsi->alloc_rxq) {
+			v_ret = VIRTCHNL_STATUS_ERR_PARAM;
+			goto error_param;
+		}
+
 		/* copy Tx queue info from VF into VSI */
 		if (qpi->txq.ring_len > 0) {
-			num_txq++;
 			vsi->tx_rings[i]->dma = qpi->txq.dma_ring_addr;
 			vsi->tx_rings[i]->count = qpi->txq.ring_len;
+			if (ice_vsi_cfg_single_txq(vsi, vsi->tx_rings, q_idx)) {
+				v_ret = VIRTCHNL_STATUS_ERR_PARAM;
+				goto error_param;
+			}
 		}
 
 		/* copy Rx queue info from VF into VSI */
 		if (qpi->rxq.ring_len > 0) {
 			u16 max_frame_size = ice_vc_get_max_frame_size(vf);
 
-			num_rxq++;
 			vsi->rx_rings[i]->dma = qpi->rxq.dma_ring_addr;
 			vsi->rx_rings[i]->count = qpi->rxq.ring_len;
 
@@ -3610,27 +3612,20 @@ static int ice_vc_cfg_qs_msg(struct ice_vf *vf, u8 *msg)
 				v_ret = VIRTCHNL_STATUS_ERR_PARAM;
 				goto error_param;
 			}
+
+			vsi->max_frame = qpi->rxq.max_pkt_size;
+			/* add space for the port VLAN since the VF driver is not
+			 * expected to account for it in the MTU calculation
+			 */
+			if (vf->port_vlan_info)
+				vsi->max_frame += VLAN_HLEN;
+
+			if (ice_vsi_cfg_single_rxq(vsi, q_idx)) {
+				v_ret = VIRTCHNL_STATUS_ERR_PARAM;
+				goto error_param;
+			}
 		}
-
-		vsi->max_frame = qpi->rxq.max_pkt_size;
-		/* add space for the port VLAN since the VF driver is not
-		 * expected to account for it in the MTU calculation
-		 */
-		if (vf->port_vlan_info)
-			vsi->max_frame += VLAN_HLEN;
 	}
-
-	/* VF can request to configure less than allocated queues or default
-	 * allocated queues. So update the VSI with new number
-	 */
-	vsi->num_txq = num_txq;
-	vsi->num_rxq = num_rxq;
-	/* All queues of VF VSI are in TC 0 */
-	vsi->tc_cfg.tc_info[0].qcount_tx = num_txq;
-	vsi->tc_cfg.tc_info[0].qcount_rx = num_rxq;
-
-	if (ice_vsi_cfg_lan_txqs(vsi) || ice_vsi_cfg_rxqs(vsi))
-		v_ret = VIRTCHNL_STATUS_ERR_ADMIN_QUEUE_ERROR;
 
 error_param:
 	/* send the response to the VF */
@@ -3666,19 +3661,96 @@ static bool ice_can_vf_change_mac(struct ice_vf *vf)
 }
 
 /**
+ * ice_vc_ether_addr_type - get type of virtchnl_ether_addr
+ * @vc_ether_addr: used to extract the type
+ */
+static u8
+ice_vc_ether_addr_type(struct virtchnl_ether_addr *vc_ether_addr)
+{
+	return (vc_ether_addr->type & VIRTCHNL_ETHER_ADDR_TYPE_MASK);
+}
+
+/**
+ * ice_is_vc_addr_legacy - check if the MAC address is from an older VF
+ * @vc_ether_addr: VIRTCHNL structure that contains MAC and type
+ */
+static bool
+ice_is_vc_addr_legacy(struct virtchnl_ether_addr *vc_ether_addr)
+{
+	u8 type = ice_vc_ether_addr_type(vc_ether_addr);
+
+	return (type == VIRTCHNL_ETHER_ADDR_LEGACY);
+}
+
+/**
+ * ice_is_vc_addr_primary - check if the MAC address is the VF's primary MAC
+ * @vc_ether_addr: VIRTCHNL structure that contains MAC and type
+ *
+ * This function should only be called when the MAC address in
+ * virtchnl_ether_addr is a valid unicast MAC
+ */
+static bool
+ice_is_vc_addr_primary(struct virtchnl_ether_addr __maybe_unused *vc_ether_addr)
+{
+	u8 type = ice_vc_ether_addr_type(vc_ether_addr);
+
+	return (type == VIRTCHNL_ETHER_ADDR_PRIMARY);
+}
+
+/**
+ * ice_vfhw_mac_add - update the VF's cached hardware MAC if allowed
+ * @vf: VF to update
+ * @vc_ether_addr: structure from VIRTCHNL with MAC to add
+ */
+static void
+ice_vfhw_mac_add(struct ice_vf *vf, struct virtchnl_ether_addr *vc_ether_addr)
+{
+	u8 *mac_addr = vc_ether_addr->addr;
+
+	if (!is_valid_ether_addr(mac_addr))
+		return;
+
+	/* only allow legacy VF drivers to set the device and hardware MAC if it
+	 * is zero and allow new VF drivers to set the hardware MAC if the type
+	 * was correctly specified over VIRTCHNL
+	 */
+	if ((ice_is_vc_addr_legacy(vc_ether_addr) &&
+	     is_zero_ether_addr(vf->hw_lan_addr.addr)) ||
+	    ice_is_vc_addr_primary(vc_ether_addr)) {
+		ether_addr_copy(vf->dev_lan_addr.addr, mac_addr);
+		ether_addr_copy(vf->hw_lan_addr.addr, mac_addr);
+	}
+
+	/* hardware and device MACs are already set, but its possible that the
+	 * VF driver sent the VIRTCHNL_OP_ADD_ETH_ADDR message before the
+	 * VIRTCHNL_OP_DEL_ETH_ADDR when trying to update its MAC, so save it
+	 * away for the legacy VF driver case as it will be updated in the
+	 * delete flow for this case
+	 */
+	if (ice_is_vc_addr_legacy(vc_ether_addr)) {
+		ether_addr_copy(vf->legacy_last_added_umac.addr,
+				mac_addr);
+		vf->legacy_last_added_umac.time_modified = jiffies;
+	}
+}
+
+/**
  * ice_vc_add_mac_addr - attempt to add the MAC address passed in
  * @vf: pointer to the VF info
  * @vsi: pointer to the VF's VSI
- * @mac_addr: MAC address to add
+ * @vc_ether_addr: VIRTCHNL MAC address structure used to add MAC
  */
 static int
-ice_vc_add_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi, u8 *mac_addr)
+ice_vc_add_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi,
+		    struct virtchnl_ether_addr *vc_ether_addr)
 {
 	struct device *dev = ice_pf_to_dev(vf->pf);
+	u8 *mac_addr = vc_ether_addr->addr;
 	enum ice_status status;
+	int ret = 0;
 
-	/* default unicast MAC already added */
-	if (ether_addr_equal(mac_addr, vf->dflt_lan_addr.addr))
+	/* device MAC already added */
+	if (ether_addr_equal(mac_addr, vf->dev_lan_addr.addr))
 		return 0;
 
 	if (is_unicast_ether_addr(mac_addr) && !ice_can_vf_change_mac(vf)) {
@@ -3688,41 +3760,85 @@ ice_vc_add_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi, u8 *mac_addr)
 
 	status = ice_fltr_add_mac(vsi, mac_addr, ICE_FWD_TO_VSI);
 	if (status == ICE_ERR_ALREADY_EXISTS) {
-		dev_err(dev, "MAC %pM already exists for VF %d\n", mac_addr,
+		dev_dbg(dev, "MAC %pM already exists for VF %d\n", mac_addr,
 			vf->vf_id);
-		return -EEXIST;
+		/* don't return since we might need to update
+		 * the primary MAC in ice_vfhw_mac_add() below
+		 */
+		ret = -EEXIST;
 	} else if (status) {
 		dev_err(dev, "Failed to add MAC %pM for VF %d\n, error %s\n",
 			mac_addr, vf->vf_id, ice_stat_str(status));
 		return -EIO;
+	} else {
+		vf->num_mac++;
 	}
 
-	/* Set the default LAN address to the latest unicast MAC address added
-	 * by the VF. The default LAN address is reported by the PF via
-	 * ndo_get_vf_config.
+	ice_vfhw_mac_add(vf, vc_ether_addr);
+
+	return ret;
+}
+
+/**
+ * ice_is_legacy_umac_expired - check if last added legacy unicast MAC expired
+ * @last_added_umac: structure used to check expiration
+ */
+static bool ice_is_legacy_umac_expired(struct ice_time_mac *last_added_umac)
+{
+#define ICE_LEGACY_VF_MAC_CHANGE_EXPIRE_TIME	msecs_to_jiffies(3000)
+	return time_is_before_jiffies(last_added_umac->time_modified +
+				      ICE_LEGACY_VF_MAC_CHANGE_EXPIRE_TIME);
+}
+
+/**
+ * ice_vfhw_mac_del - update the VF's cached hardware MAC if allowed
+ * @vf: VF to update
+ * @vc_ether_addr: structure from VIRTCHNL with MAC to delete
+ */
+static void
+ice_vfhw_mac_del(struct ice_vf *vf, struct virtchnl_ether_addr *vc_ether_addr)
+{
+	u8 *mac_addr = vc_ether_addr->addr;
+
+	if (!is_valid_ether_addr(mac_addr) ||
+	    !ether_addr_equal(vf->dev_lan_addr.addr, mac_addr))
+		return;
+
+	/* allow the device MAC to be repopulated in the add flow and don't
+	 * clear the hardware MAC (i.e. hw_lan_addr.addr) here as that is meant
+	 * to be persistent on VM reboot and across driver unload/load, which
+	 * won't work if we clear the hardware MAC here
 	 */
-	if (is_unicast_ether_addr(mac_addr))
-		ether_addr_copy(vf->dflt_lan_addr.addr, mac_addr);
+	eth_zero_addr(vf->dev_lan_addr.addr);
 
-	vf->num_mac++;
-
-	return 0;
+	/* only update cached hardware MAC for legacy VF drivers on delete
+	 * because we cannot guarantee order/type of MAC from the VF driver
+	 */
+	if (ice_is_vc_addr_legacy(vc_ether_addr) &&
+	    !ice_is_legacy_umac_expired(&vf->legacy_last_added_umac)) {
+		ether_addr_copy(vf->dev_lan_addr.addr,
+				vf->legacy_last_added_umac.addr);
+		ether_addr_copy(vf->hw_lan_addr.addr,
+				vf->legacy_last_added_umac.addr);
+	}
 }
 
 /**
  * ice_vc_del_mac_addr - attempt to delete the MAC address passed in
  * @vf: pointer to the VF info
  * @vsi: pointer to the VF's VSI
- * @mac_addr: MAC address to delete
+ * @vc_ether_addr: VIRTCHNL MAC address structure used to delete MAC
  */
 static int
-ice_vc_del_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi, u8 *mac_addr)
+ice_vc_del_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi,
+		    struct virtchnl_ether_addr *vc_ether_addr)
 {
 	struct device *dev = ice_pf_to_dev(vf->pf);
+	u8 *mac_addr = vc_ether_addr->addr;
 	enum ice_status status;
 
 	if (!ice_can_vf_change_mac(vf) &&
-	    ether_addr_equal(mac_addr, vf->dflt_lan_addr.addr))
+	    ether_addr_equal(vf->dev_lan_addr.addr, mac_addr))
 		return 0;
 
 	status = ice_fltr_remove_mac(vsi, mac_addr, ICE_FWD_TO_VSI);
@@ -3736,8 +3852,7 @@ ice_vc_del_mac_addr(struct ice_vf *vf, struct ice_vsi *vsi, u8 *mac_addr)
 		return -EIO;
 	}
 
-	if (ether_addr_equal(mac_addr, vf->dflt_lan_addr.addr))
-		eth_zero_addr(vf->dflt_lan_addr.addr);
+	ice_vfhw_mac_del(vf, vc_ether_addr);
 
 	vf->num_mac--;
 
@@ -3756,7 +3871,8 @@ static int
 ice_vc_handle_mac_addr_msg(struct ice_vf *vf, u8 *msg, bool set)
 {
 	int (*ice_vc_cfg_mac)
-		(struct ice_vf *vf, struct ice_vsi *vsi, u8 *mac_addr);
+		(struct ice_vf *vf, struct ice_vsi *vsi,
+		 struct virtchnl_ether_addr *virtchnl_ether_addr);
 	enum virtchnl_status_code v_ret = VIRTCHNL_STATUS_SUCCESS;
 	struct virtchnl_ether_addr_list *al =
 	    (struct virtchnl_ether_addr_list *)msg;
@@ -3805,7 +3921,7 @@ ice_vc_handle_mac_addr_msg(struct ice_vf *vf, u8 *msg, bool set)
 		    is_zero_ether_addr(mac_addr))
 			continue;
 
-		result = ice_vc_cfg_mac(vf, vsi, mac_addr);
+		result = ice_vc_cfg_mac(vf, vsi, &al->list[i]);
 		if (result == -EEXIST || result == -ENOENT) {
 			continue;
 		} else if (result) {
@@ -3951,6 +4067,8 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 		return 0;
 	}
 
+	mutex_lock(&vf->cfg_lock);
+
 	vf->port_vlan_info = vlanprio;
 
 	if (vf->port_vlan_info)
@@ -3960,6 +4078,7 @@ ice_set_vf_port_vlan(struct net_device *netdev, int vf_id, u16 vlan_id, u8 qos,
 		dev_info(dev, "Clearing port VLAN on VF %d\n", vf_id);
 
 	ice_vc_reset_vf(vf);
+	mutex_unlock(&vf->cfg_lock);
 
 	return 0;
 }
@@ -4334,6 +4453,15 @@ error_handler:
 		return;
 	}
 
+	/* VF is being configured in another context that triggers a VFR, so no
+	 * need to process this message
+	 */
+	if (!mutex_trylock(&vf->cfg_lock)) {
+		dev_info(dev, "VF %u is being configured in another context that will trigger a VFR, so there is no need to handle this message\n",
+			 vf->vf_id);
+		return;
+	}
+
 	switch (v_opcode) {
 	case VIRTCHNL_OP_VERSION:
 		err = ice_vc_get_ver_msg(vf, msg);
@@ -4422,6 +4550,8 @@ error_handler:
 		dev_info(dev, "PF failed to honor VF %d, opcode %d, error %d\n",
 			 vf_id, v_opcode, err);
 	}
+
+	mutex_unlock(&vf->cfg_lock);
 }
 
 /**
@@ -4447,7 +4577,7 @@ ice_get_vf_cfg(struct net_device *netdev, int vf_id, struct ifla_vf_info *ivi)
 		return -EBUSY;
 
 	ivi->vf = vf_id;
-	ether_addr_copy(ivi->mac, vf->dflt_lan_addr.addr);
+	ether_addr_copy(ivi->mac, vf->hw_lan_addr.addr);
 
 	/* VF configuration for VLAN and applicable QoS */
 	ivi->vlan = vf->port_vlan_info & VLAN_VID_MASK;
@@ -4523,7 +4653,8 @@ int ice_set_vf_mac(struct net_device *netdev, int vf_id, u8 *mac)
 
 	vf = &pf->vf[vf_id];
 	/* nothing left to do, unicast MAC already set */
-	if (ether_addr_equal(vf->dflt_lan_addr.addr, mac))
+	if (ether_addr_equal(vf->dev_lan_addr.addr, mac) &&
+	    ether_addr_equal(vf->hw_lan_addr.addr, mac))
 		return 0;
 
 	ret = ice_check_vf_ready_for_cfg(vf);
@@ -4536,10 +4667,13 @@ int ice_set_vf_mac(struct net_device *netdev, int vf_id, u8 *mac)
 		return -EINVAL;
 	}
 
+	mutex_lock(&vf->cfg_lock);
+
 	/* VF is notified of its new MAC via the PF's response to the
 	 * VIRTCHNL_OP_GET_VF_RESOURCES message after the VF has been reset
 	 */
-	ether_addr_copy(vf->dflt_lan_addr.addr, mac);
+	ether_addr_copy(vf->dev_lan_addr.addr, mac);
+	ether_addr_copy(vf->hw_lan_addr.addr, mac);
 	if (is_zero_ether_addr(mac)) {
 		/* VF will send VIRTCHNL_OP_ADD_ETH_ADDR message with its MAC */
 		vf->pf_set_mac = false;
@@ -4553,6 +4687,7 @@ int ice_set_vf_mac(struct net_device *netdev, int vf_id, u8 *mac)
 	}
 
 	ice_vc_reset_vf(vf);
+	mutex_unlock(&vf->cfg_lock);
 	return 0;
 }
 
@@ -4582,10 +4717,14 @@ int ice_set_vf_trust(struct net_device *netdev, int vf_id, bool trusted)
 	if (trusted == vf->trusted)
 		return 0;
 
+	mutex_lock(&vf->cfg_lock);
+
 	vf->trusted = trusted;
 	ice_vc_reset_vf(vf);
 	dev_info(ice_pf_to_dev(pf), "VF %u is now %strusted\n",
 		 vf_id, trusted ? "" : "un");
+
+	mutex_unlock(&vf->cfg_lock);
 
 	return 0;
 }
@@ -4692,13 +4831,13 @@ void ice_print_vf_rx_mdd_event(struct ice_vf *vf)
 
 	dev_info(dev, "%d Rx Malicious Driver Detection events detected on PF %d VF %d MAC %pM. mdd-auto-reset-vfs=%s\n",
 		 vf->mdd_rx_events.count, pf->hw.pf_id, vf->vf_id,
-		 vf->dflt_lan_addr.addr,
+		 vf->dev_lan_addr.addr,
 		 test_bit(ICE_FLAG_MDD_AUTO_RESET_VF, pf->flags)
 			  ? "on" : "off");
 }
 
 /**
- * ice_print_vfs_mdd_event - print VFs malicious driver detect event
+ * ice_print_vfs_mdd_events - print VFs malicious driver detect event
  * @pf: pointer to the PF structure
  *
  * Called from ice_handle_mdd_event to rate limit and print VFs MDD events.
@@ -4710,7 +4849,7 @@ void ice_print_vfs_mdd_events(struct ice_pf *pf)
 	int i;
 
 	/* check that there are pending MDD events to print */
-	if (!test_and_clear_bit(__ICE_MDD_VF_PRINT_PENDING, pf->state))
+	if (!test_and_clear_bit(ICE_MDD_VF_PRINT_PENDING, pf->state))
 		return;
 
 	/* VF MDD event logs are rate limited to one second intervals */
@@ -4736,7 +4875,7 @@ void ice_print_vfs_mdd_events(struct ice_pf *pf)
 
 			dev_info(dev, "%d Tx Malicious Driver Detection events detected on PF %d VF %d MAC %pM.\n",
 				 vf->mdd_tx_events.count, hw->pf_id, i,
-				 vf->dflt_lan_addr.addr);
+				 vf->dev_lan_addr.addr);
 		}
 	}
 }
@@ -4750,7 +4889,6 @@ void ice_print_vfs_mdd_events(struct ice_pf *pf)
  */
 void ice_restore_all_vfs_msi_state(struct pci_dev *pdev)
 {
-	struct pci_dev *vfdev;
 	u16 vf_id;
 	int pos;
 
@@ -4759,6 +4897,8 @@ void ice_restore_all_vfs_msi_state(struct pci_dev *pdev)
 
 	pos = pci_find_ext_capability(pdev, PCI_EXT_CAP_ID_SRIOV);
 	if (pos) {
+		struct pci_dev *vfdev;
+
 		pci_read_config_word(pdev, pos + PCI_SRIOV_VF_DID,
 				     &vf_id);
 		vfdev = pci_get_device(pdev->vendor, vf_id, NULL);
@@ -4825,7 +4965,7 @@ ice_is_malicious_vf(struct ice_pf *pf, struct ice_rq_event_info *event,
 
 			if (pf_vsi)
 				dev_warn(dev, "VF MAC %pM on PF MAC %pM is generating asynchronous messages and may be overflowing the PF message queue. Please see the Adapter User Guide for more information\n",
-					 &vf->dflt_lan_addr.addr[0],
+					 &vf->dev_lan_addr.addr[0],
 					 pf_vsi->netdev->dev_addr);
 		}
 

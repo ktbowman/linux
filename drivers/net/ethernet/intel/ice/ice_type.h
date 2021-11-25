@@ -46,6 +46,7 @@ static inline u32 ice_round_to_num(u32 N, u32 R)
 #define ICE_DBG_FLOW		BIT_ULL(9)
 #define ICE_DBG_SW		BIT_ULL(13)
 #define ICE_DBG_SCHED		BIT_ULL(14)
+#define ICE_DBG_RDMA		BIT_ULL(15)
 #define ICE_DBG_PKG		BIT_ULL(16)
 #define ICE_DBG_RES		BIT_ULL(17)
 #define ICE_DBG_PTP		BIT_ULL(19)
@@ -65,7 +66,7 @@ enum ice_aq_res_ids {
 /* FW update timeout definitions are in milliseconds */
 #define ICE_NVM_TIMEOUT			180000
 #define ICE_CHANGE_LOCK_TIMEOUT		1000
-#define ICE_GLOBAL_CFG_LOCK_TIMEOUT	3000
+#define ICE_GLOBAL_CFG_LOCK_TIMEOUT	5000
 
 enum ice_aq_res_access_type {
 	ICE_RES_READ = 1,
@@ -148,6 +149,7 @@ struct ice_link_status {
 	u16 max_frame_size;
 	u16 link_speed;
 	u16 req_speeds;
+	u8 link_cfg_err;
 	u8 lse_ena;	/* Link Status Event notification */
 	u8 link_info;
 	u8 an_info;
@@ -265,6 +267,7 @@ struct ice_hw_common_caps {
 
 	u8 dcb;
 	u8 ieee_1588;
+	u8 rdma;
 
 	bool nvm_update_pending_nvm;
 	bool nvm_update_pending_orom;
@@ -493,6 +496,7 @@ struct ice_sched_node {
 	u8 tc_num;
 	u8 owner;
 #define ICE_SCHED_NODE_OWNER_LAN	0
+#define ICE_SCHED_NODE_OWNER_RDMA	2
 };
 
 /* Access Macros for Tx Sched Elements data */
@@ -564,6 +568,7 @@ struct ice_sched_vsi_info {
 	struct ice_sched_node *ag_node[ICE_MAX_TRAFFIC_CLASS];
 	struct list_head list_entry;
 	u16 max_lanq[ICE_MAX_TRAFFIC_CLASS];
+	u16 max_rdmaq[ICE_MAX_TRAFFIC_CLASS];
 };
 
 /* driver defines the policy */
@@ -604,10 +609,7 @@ struct ice_dcb_app_priority_table {
 #define ICE_TLV_STATUS_OPER	0x1
 #define ICE_TLV_STATUS_SYNC	0x2
 #define ICE_TLV_STATUS_ERR	0x4
-#define ICE_APP_PROT_ID_FCOE	0x8906
-#define ICE_APP_PROT_ID_ISCSI	0x0cbc
 #define ICE_APP_PROT_ID_ISCSI_860 0x035c
-#define ICE_APP_PROT_ID_FIP	0x8914
 #define ICE_APP_SEL_ETHTYPE	0x1
 #define ICE_APP_SEL_TCPIP	0x2
 #define ICE_CEE_APP_SEL_ETHTYPE	0x0
@@ -857,13 +859,13 @@ struct ice_hw {
 
 	enum ice_aq_err pkg_dwnld_status;
 
-	/* Driver's package ver - (from the Metadata seg) */
+	/* Driver's package ver - (from the Ice Metadata section) */
 	struct ice_pkg_ver pkg_ver;
 	u8 pkg_name[ICE_PKG_NAME_SIZE];
 
-	/* Driver's Ice package version (from the Ice seg) */
-	struct ice_pkg_ver ice_pkg_ver;
-	u8 ice_pkg_name[ICE_PKG_NAME_SIZE];
+	/* Driver's Ice segment format version and ID (from the Ice seg) */
+	struct ice_pkg_ver ice_seg_fmt_ver;
+	u8 ice_seg_id[ICE_SEG_ID_SIZE];
 
 	/* Pointer to the ice segment */
 	struct ice_seg *seg;
@@ -1075,5 +1077,10 @@ struct ice_aq_get_set_rss_lut_params {
 #define ICE_FW_API_LLDP_FLTR_MAJ	1
 #define ICE_FW_API_LLDP_FLTR_MIN	7
 #define ICE_FW_API_LLDP_FLTR_PATCH	1
+
+/* AQ API version for report default configuration */
+#define ICE_FW_API_REPORT_DFLT_CFG_MAJ		1
+#define ICE_FW_API_REPORT_DFLT_CFG_MIN		7
+#define ICE_FW_API_REPORT_DFLT_CFG_PATCH	3
 
 #endif /* _ICE_TYPE_H_ */

@@ -221,14 +221,12 @@ ice_ptp_read_src_clk_reg(struct ice_pf *pf, struct ptp_system_timestamp *sts)
 
 	tmr_idx = ice_get_ptp_src_clock_index(hw);
 	/* Read the system timestamp pre PHC read */
-	if (sts)
-		ptp_read_system_prets(sts);
+	ptp_read_system_prets(sts);
 
 	lo = rd32(hw, GLTSYN_TIME_L(tmr_idx));
 
 	/* Read the system timestamp post PHC read */
-	if (sts)
-		ptp_read_system_postts(sts);
+	ptp_read_system_postts(sts);
 
 	hi = rd32(hw, GLTSYN_TIME_H(tmr_idx));
 	lo2 = rd32(hw, GLTSYN_TIME_L(tmr_idx));
@@ -237,11 +235,9 @@ ice_ptp_read_src_clk_reg(struct ice_pf *pf, struct ptp_system_timestamp *sts)
 		/* if TIME_L rolled over read TIME_L again and update
 		 * system timestamps
 		 */
-		if (sts)
-			ptp_read_system_prets(sts);
+		ptp_read_system_prets(sts);
 		lo = rd32(hw, GLTSYN_TIME_L(tmr_idx));
-		if (sts)
-			ptp_read_system_postts(sts);
+		ptp_read_system_postts(sts);
 		hi = rd32(hw, GLTSYN_TIME_H(tmr_idx));
 	}
 
@@ -1114,17 +1110,6 @@ static long ice_ptp_create_clock(struct ice_pf *pf)
 	info = &pf->ptp.info;
 	dev = ice_pf_to_dev(pf);
 
-	/* Allocate memory for kernel pins interface */
-	if (info->n_pins) {
-		info->pin_config = devm_kcalloc(dev, info->n_pins,
-						sizeof(*info->pin_config),
-						GFP_KERNEL);
-		if (!info->pin_config) {
-			info->n_pins = 0;
-			return -ENOMEM;
-		}
-	}
-
 	/* Attempt to register the clock before enabling the hardware. */
 	clock = ptp_clock_register(info, dev);
 	if (IS_ERR(clock))
@@ -1331,14 +1316,17 @@ ice_ptp_flush_tx_tracker(struct ice_pf *pf, struct ice_ptp_tx *tx)
 	for (idx = 0; idx < tx->len; idx++) {
 		u8 phy_idx = idx + tx->quad_offset;
 
-		/* Clear any potential residual timestamp in the PHY block */
-		if (!pf->hw.reset_ongoing)
-			ice_clear_phy_tstamp(&pf->hw, tx->quad, phy_idx);
-
+		spin_lock(&tx->lock);
 		if (tx->tstamps[idx].skb) {
 			dev_kfree_skb_any(tx->tstamps[idx].skb);
 			tx->tstamps[idx].skb = NULL;
 		}
+		clear_bit(idx, tx->in_use);
+		spin_unlock(&tx->lock);
+
+		/* Clear any potential residual timestamp in the PHY block */
+		if (!pf->hw.reset_ongoing)
+			ice_clear_phy_tstamp(&pf->hw, tx->quad, phy_idx);
 	}
 }
 
