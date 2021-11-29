@@ -7,6 +7,13 @@ extern struct kmem_cache *fanotify_mark_cache;
 extern struct kmem_cache *fanotify_event_cachep;
 extern struct kmem_cache *fanotify_perm_event_cachep;
 
+/* Possible states of the permission event */
+enum {
+	FAN_EVENT_INIT,
+	FAN_EVENT_REPORTED,
+	FAN_EVENT_ANSWERED
+};
+
 /*
  * Structure for normal fanotify events. It gets allocated in
  * fanotify_handle_event() and freed when the information is retrieved by
@@ -31,7 +38,8 @@ struct fanotify_event {
  */
 struct fanotify_perm_event {
 	struct fanotify_event fae;
-	int response;	/* userspace answer to question */
+	unsigned short response;	/* userspace answer to the event */
+	unsigned short state;		/* state of the event */
 	int fd;		/* fd we passed to userspace for this event */
 };
 

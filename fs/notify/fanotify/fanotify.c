@@ -65,7 +65,8 @@ static int fanotify_get_response(struct fsnotify_group *group,
 
 	pr_debug("%s: group=%p event=%p\n", __func__, group, event);
 
-	wait_event(group->fanotify_data.access_waitq, event->response);
+	wait_event(group->fanotify_data.access_waitq,
+		   event->state == FAN_EVENT_ANSWERED);
 
 	/* userspace responded, convert to something usable */
 	switch (event->response & ~FAN_AUDIT) {
@@ -80,8 +81,6 @@ static int fanotify_get_response(struct fsnotify_group *group,
 	/* Check if the response should be audited */
 	if (event->response & FAN_AUDIT)
 		audit_fanotify(event->response & ~FAN_AUDIT);
-
-	event->response = 0;
 
 	pr_debug("%s: group=%p event=%p about to return ret=%d\n", __func__,
 		 group, event, ret);
@@ -174,6 +173,7 @@ struct fanotify_event *fanotify_alloc_event(struct fsnotify_group *group,
 			goto out;
 		event = &pevent->fae;
 		pevent->response = 0;
+		pevent->state = FAN_EVENT_INIT;
 		goto init;
 	}
 	event = kmem_cache_alloc(fanotify_event_cachep, gfp);
