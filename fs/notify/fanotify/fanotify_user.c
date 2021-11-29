@@ -51,25 +51,26 @@ struct kmem_cache *fanotify_perm_event_cachep __read_mostly;
  * Get an fsnotify notification event if one exists and is small
  * enough to fit in "count". Return an error pointer if the count
  * is not large enough.
- *
- * Called with the group->notification_lock held.
  */
 static struct fsnotify_event *get_one_event(struct fsnotify_group *group,
 					    size_t count)
 {
-	assert_spin_locked(&group->notification_lock);
+	struct fsnotify_event *fsn_event = NULL;
 
 	pr_debug("%s: group=%p count=%zd\n", __func__, group, count);
 
+	spin_lock(&group->notification_lock);
 	if (fsnotify_notify_queue_is_empty(group))
-		return NULL;
+		goto out;
 
-	if (FAN_EVENT_METADATA_LEN > count)
-		return ERR_PTR(-EINVAL);
-
-	/* held the notification_lock the whole time, so this is the
-	 * same event we peeked above */
-	return fsnotify_remove_first_event(group);
+	if (FAN_EVENT_METADATA_LEN > count) {
+		fsn_event = ERR_PTR(-EINVAL);
+		goto out;
+	}
+	fsn_event = fsnotify_remove_first_event(group);
+out:
+	spin_unlock(&group->notification_lock);
+	return fsn_event;
 }
 
 static int create_fd(struct fsnotify_group *group,
@@ -261,10 +262,7 @@ static ssize_t fanotify_read(struct file *file, char __user *buf,
 
 	add_wait_queue(&group->notification_waitq, &wait);
 	while (1) {
-		spin_lock(&group->notification_lock);
 		kevent = get_one_event(group, count);
-		spin_unlock(&group->notification_lock);
-
 		if (IS_ERR(kevent)) {
 			ret = PTR_ERR(kevent);
 			break;
