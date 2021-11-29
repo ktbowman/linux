@@ -81,6 +81,9 @@ static int __init early_initrd(char *p)
 early_param("initrd", early_initrd);
 #endif
 
+s64 physvirt_offset __ro_after_init;
+EXPORT_SYMBOL(physvirt_offset);
+
 #ifdef CONFIG_KEXEC_CORE
 /*
  * reserve_crashkernel() - reserves memory for crash kernel
@@ -329,7 +332,7 @@ static void __init fdt_enforce_memory_region(void)
 
 void __init arm64_memblock_init(void)
 {
-	const s64 linear_region_size = BIT(VA_BITS - 1);
+	const s64 linear_region_size = BIT(vabits_actual - 1);
 
 	/* Handle linux,usable-memory-range property */
 	fdt_enforce_memory_region();
@@ -342,6 +345,8 @@ void __init arm64_memblock_init(void)
 	 */
 	memstart_addr = round_down(memblock_start_of_DRAM(),
 				   ARM64_MEMSTART_ALIGN);
+
+	physvirt_offset = PHYS_OFFSET - PAGE_OFFSET;
 
 	/*
 	 * Remove the memory that we will not be able to cover with the
