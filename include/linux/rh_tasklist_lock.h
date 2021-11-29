@@ -21,18 +21,9 @@
 #define write_lock_irq(l)	qwrite_lock_irq(l)
 #define write_unlock_irq(l)	qwrite_unlock_irq(l)
 
-#ifdef CONFIG_DEBUG_SPINLOCK
-#define __QRW_LOCK_UNLOCKED(lockname)					\
-	(qrwlock_t)	{	.raw_lock = __ARCH_RW_LOCK_UNLOCKED,	\
-				.magic = RWLOCK_MAGIC,			\
-				.owner = SPINLOCK_OWNER_INIT,		\
-				.owner_cpu = -1,			\
-				RW_DEP_MAP_INIT(lockname) }
-#else
 #define __QRW_LOCK_UNLOCKED(lockname) \
 	(qrwlock_t)	{	.raw_lock = __ARCH_RW_LOCK_UNLOCKED,	\
 				RW_DEP_MAP_INIT(lockname) }
-#endif
 
 #define DEFINE_QRWLOCK(x)	qrwlock_t x = __QRW_LOCK_UNLOCKED(x)
 #else

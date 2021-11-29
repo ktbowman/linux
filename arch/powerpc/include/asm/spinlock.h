@@ -20,10 +20,6 @@ static inline void pv_spinlocks_init(void)
  */
 typedef struct {
 	atomic_long_t raw_lock;	/* 8 bytes */
-#ifdef CONFIG_DEBUG_SPINLOCK
-	unsigned int magic, owner_cpu;
-	void *owner;
-#endif
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map dep_map;
 #endif
