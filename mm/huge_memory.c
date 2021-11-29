@@ -532,7 +532,7 @@ bool is_transparent_hugepage(struct page *page)
 }
 EXPORT_SYMBOL_GPL(is_transparent_hugepage);
 
-unsigned long __thp_get_unmapped_area(struct file *filp, unsigned long len,
+static unsigned long __thp_get_unmapped_area(struct file *filp, unsigned long len,
 		loff_t off, unsigned long flags, unsigned long size)
 {
 	unsigned long addr;
