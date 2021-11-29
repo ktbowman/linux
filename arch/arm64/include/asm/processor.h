@@ -55,7 +55,7 @@
  */
 
 #define DEFAULT_MAP_WINDOW_64	(UL(1) << VA_BITS_MIN)
-#define TASK_SIZE_64		(UL(1) << vabits_user)
+#define TASK_SIZE_64		(UL(1) << vabits_actual)
 
 #ifdef CONFIG_COMPAT
 #define TASK_SIZE_32		UL(0x100000000)

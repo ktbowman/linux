@@ -327,11 +327,6 @@ __create_page_tables:
 #endif
 	mov	x5, #VA_BITS_MIN
 1:
-	adr_l	x6, vabits_user
-	str	x5, [x6]
-	dmb	sy
-	dc	ivac, x6		// Invalidate potentially stale cache line
-
 	adr_l	x6, vabits_actual
 	str	x5, [x6]
 	dmb	sy
@@ -807,7 +802,7 @@ ENDPROC(__enable_mmu)
 
 ENTRY(__cpu_secondary_check52bitva)
 #ifdef CONFIG_ARM64_VA_BITS_52
-	ldr_l	x0, vabits_user
+	ldr_l	x0, vabits_actual
 	cmp	x0, #52
 	b.ne	2f
 
