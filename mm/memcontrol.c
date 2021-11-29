@@ -950,7 +950,7 @@ EXPORT_SYMBOL(get_mem_cgroup_from_mm);
 
 static __always_inline struct mem_cgroup *active_memcg(void)
 {
-	if (in_interrupt())
+	if (!in_task())
 		return this_cpu_read(int_active_memcg);
 	else
 		return current->active_memcg;
