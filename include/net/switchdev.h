@@ -46,6 +46,10 @@ enum switchdev_attr_id {
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_BRIDGE_VLAN_PROTOCOL)
 	SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED,
 	SWITCHDEV_ATTR_ID_BRIDGE_MROUTER,
+#if IS_ENABLED(CONFIG_BRIDGE_MRP)
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_MRP_PORT_STATE)
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_MRP_PORT_ROLE)
+#endif
 };
 
 struct switchdev_attr {
@@ -79,6 +83,11 @@ struct switchdev_attr {
 		bool vlan_filtering;			/* BRIDGE_VLAN_FILTERING */
 		u16 vlan_protocol;			/* BRIDGE_VLAN_PROTOCOL */
 		bool mc_disabled;			/* MC_DISABLED */
+#if IS_ENABLED(CONFIG_BRIDGE_MRP)
+		u8 mrp_port_state;			/* MRP_PORT_STATE */
+		u8 mrp_port_role;			/* MRP_PORT_ROLE */
+		u8 mrp_ring_state;			/* MRP_RING_STATE */
+#endif
 		) /* RH_KABI_BROKEN_INSERT_BLOCK */
 	} u;
 };
@@ -88,6 +97,12 @@ enum switchdev_obj_id {
 	SWITCHDEV_OBJ_ID_PORT_VLAN,
 	SWITCHDEV_OBJ_ID_PORT_MDB,
 	SWITCHDEV_OBJ_ID_HOST_MDB,
+#if IS_ENABLED(CONFIG_BRIDGE_MRP)
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_MRP)
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_RING_TEST_MRP)
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_RING_ROLE_MRP)
+	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_RING_STATE_MRP)
+#endif
 };
 
 struct switchdev_obj {
@@ -123,6 +138,53 @@ struct switchdev_obj_port_mdb {
 
 #define SWITCHDEV_OBJ_PORT_MDB(OBJ) \
 	container_of((OBJ), struct switchdev_obj_port_mdb, obj)
+
+
+#if IS_ENABLED(CONFIG_BRIDGE_MRP)
+/* SWITCHDEV_OBJ_ID_MRP */
+struct switchdev_obj_mrp {
+	struct switchdev_obj obj;
+	struct net_device *p_port;
+	struct net_device *s_port;
+	u32 ring_id;
+};
+
+#define SWITCHDEV_OBJ_MRP(OBJ) \
+	container_of((OBJ), struct switchdev_obj_mrp, obj)
+
+/* SWITCHDEV_OBJ_ID_RING_TEST_MRP */
+struct switchdev_obj_ring_test_mrp {
+	struct switchdev_obj obj;
+	/* The value is in us and a value of 0 represents to stop */
+	u32 interval;
+	u8 max_miss;
+	u32 ring_id;
+	u32 period;
+};
+
+#define SWITCHDEV_OBJ_RING_TEST_MRP(OBJ) \
+	container_of((OBJ), struct switchdev_obj_ring_test_mrp, obj)
+
+/* SWICHDEV_OBJ_ID_RING_ROLE_MRP */
+struct switchdev_obj_ring_role_mrp {
+	struct switchdev_obj obj;
+	u8 ring_role;
+	u32 ring_id;
+};
+
+#define SWITCHDEV_OBJ_RING_ROLE_MRP(OBJ) \
+	container_of((OBJ), struct switchdev_obj_ring_role_mrp, obj)
+
+struct switchdev_obj_ring_state_mrp {
+	struct switchdev_obj obj;
+	u8 ring_state;
+	u32 ring_id;
+};
+
+#define SWITCHDEV_OBJ_RING_STATE_MRP(OBJ) \
+	container_of((OBJ), struct switchdev_obj_ring_state_mrp, obj)
+
+#endif
 
 typedef int switchdev_obj_dump_cb_t(struct switchdev_obj *obj);
 
