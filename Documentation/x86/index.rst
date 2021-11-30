@@ -11,3 +11,4 @@ x86 architecture specifics
    buslock
    sgx
    sva
+   elf_auxvec

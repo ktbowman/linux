@@ -227,7 +227,7 @@ create_elf_tables(struct linux_binprm *bprm, struct elfhdr *exec,
 		return -EFAULT;
 
 	/* Create the ELF interpreter info */
-	elf_info = (elf_addr_t *)current->mm->saved_auxv;
+	elf_info = (elf_addr_t *)current->mm->mm_rh->saved_auxv;
 	/* update AT_VECTOR_SIZE_BASE if the number of NEW_AUX_ENT() changes */
 #define NEW_AUX_ENT(id, val) \
 	do { \
@@ -277,7 +277,7 @@ create_elf_tables(struct linux_binprm *bprm, struct elfhdr *exec,
 #undef NEW_AUX_ENT
 	/* AT_NULL is zero; clear the rest too */
 	memset(&elf_info[ei_index], 0,
-	       sizeof current->mm->saved_auxv - ei_index * sizeof elf_info[0]);
+	       sizeof current->mm->mm_rh->saved_auxv - ei_index * sizeof elf_info[0]);
 
 	/* And advance past the AT_NULL entry.  */
 	ei_index += 2;
@@ -1584,7 +1584,7 @@ static int fill_psinfo(struct elf_prpsinfo *psinfo, struct task_struct *p,
 
 static void fill_auxv_note(struct memelfnote *note, struct mm_struct *mm)
 {
-	elf_addr_t *auxv = (elf_addr_t *) mm->saved_auxv;
+	elf_addr_t *auxv = (elf_addr_t *) mm->mm_rh->saved_auxv;
 	int i = 0;
 	do
 		i += 2;
