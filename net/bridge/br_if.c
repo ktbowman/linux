@@ -385,8 +385,7 @@ static int find_portno(struct net_bridge *br)
 	struct net_bridge_port *p;
 	unsigned long *inuse;
 
-	inuse = kcalloc(BITS_TO_LONGS(BR_MAX_PORTS), sizeof(unsigned long),
-			GFP_KERNEL);
+	inuse = bitmap_zalloc(BR_MAX_PORTS, GFP_KERNEL);
 	if (!inuse)
 		return -ENOMEM;
 
@@ -395,7 +394,7 @@ static int find_portno(struct net_bridge *br)
 		set_bit(p->port_no, inuse);
 	}
 	index = find_first_zero_bit(inuse, BR_MAX_PORTS);
-	kfree(inuse);
+	bitmap_free(inuse);
 
 	return (index >= BR_MAX_PORTS) ? -EXFULL : index;
 }
