@@ -90,6 +90,7 @@ enum switchdev_obj_id {
 };
 
 struct switchdev_obj {
+	RH_KABI_BROKEN_INSERT(struct list_head list)
 	struct net_device *orig_dev;
 	enum switchdev_obj_id id;
 	u32 flags;
