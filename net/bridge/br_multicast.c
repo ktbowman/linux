@@ -1800,7 +1800,7 @@ static void __grp_send_query_and_rexmit(struct net_bridge_port_group *pg)
  * INCLUDE (A)    ALLOW (B)     INCLUDE (A+B)            (B)=GMI
  * EXCLUDE (X,Y)  ALLOW (A)     EXCLUDE (X+A,Y-A)        (A)=GMI
  */
-static bool br_multicast_isinc_allow(struct net_bridge_port_group *pg,
+static bool br_multicast_isinc_allow(struct net_bridge_port_group *pg, void *h_addr,
 				     void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge *br = pg->key.port->br;
@@ -1834,7 +1834,7 @@ static bool br_multicast_isinc_allow(struct net_bridge_port_group *pg,
  *                                                       Delete (A-B)
  *                                                       Group Timer=GMI
  */
-static void __grp_src_isexc_incl(struct net_bridge_port_group *pg,
+static void __grp_src_isexc_incl(struct net_bridge_port_group *pg, void *h_addr,
 				 void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge_group_src *ent;
@@ -1867,7 +1867,7 @@ static void __grp_src_isexc_incl(struct net_bridge_port_group *pg,
  *                                                       Delete (Y-A)
  *                                                       Group Timer=GMI
  */
-static bool __grp_src_isexc_excl(struct net_bridge_port_group *pg,
+static bool __grp_src_isexc_excl(struct net_bridge_port_group *pg, void *h_addr,
 				 void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge *br = pg->key.port->br;
@@ -1904,7 +1904,7 @@ static bool __grp_src_isexc_excl(struct net_bridge_port_group *pg,
 	return changed;
 }
 
-static bool br_multicast_isexc(struct net_bridge_port_group *pg,
+static bool br_multicast_isexc(struct net_bridge_port_group *pg, void *h_addr,
 			       void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge *br = pg->key.port->br;
@@ -1912,12 +1912,12 @@ static bool br_multicast_isexc(struct net_bridge_port_group *pg,
 
 	switch (pg->filter_mode) {
 	case MCAST_INCLUDE:
-		__grp_src_isexc_incl(pg, srcs, nsrcs, addr_size);
+		__grp_src_isexc_incl(pg, h_addr, srcs, nsrcs, addr_size);
 		br_multicast_star_g_handle_mode(pg, MCAST_EXCLUDE);
 		changed = true;
 		break;
 	case MCAST_EXCLUDE:
-		changed = __grp_src_isexc_excl(pg, srcs, nsrcs, addr_size);
+		changed = __grp_src_isexc_excl(pg, h_addr, srcs, nsrcs, addr_size);
 		break;
 	}
 
@@ -1931,7 +1931,7 @@ static bool br_multicast_isexc(struct net_bridge_port_group *pg,
  * INCLUDE (A)    TO_IN (B)     INCLUDE (A+B)            (B)=GMI
  *                                                       Send Q(G,A-B)
  */
-static bool __grp_src_toin_incl(struct net_bridge_port_group *pg,
+static bool __grp_src_toin_incl(struct net_bridge_port_group *pg, void *h_addr,
 				void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge *br = pg->key.port->br;
@@ -1973,7 +1973,7 @@ static bool __grp_src_toin_incl(struct net_bridge_port_group *pg,
  *                                                       Send Q(G,X-A)
  *                                                       Send Q(G)
  */
-static bool __grp_src_toin_excl(struct net_bridge_port_group *pg,
+static bool __grp_src_toin_excl(struct net_bridge_port_group *pg, void *h_addr,
 				void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge *br = pg->key.port->br;
@@ -2015,17 +2015,17 @@ static bool __grp_src_toin_excl(struct net_bridge_port_group *pg,
 	return changed;
 }
 
-static bool br_multicast_toin(struct net_bridge_port_group *pg,
+static bool br_multicast_toin(struct net_bridge_port_group *pg, void *h_addr,
 			      void *srcs, u32 nsrcs, size_t addr_size)
 {
 	bool changed = false;
 
 	switch (pg->filter_mode) {
 	case MCAST_INCLUDE:
-		changed = __grp_src_toin_incl(pg, srcs, nsrcs, addr_size);
+		changed = __grp_src_toin_incl(pg, h_addr, srcs, nsrcs, addr_size);
 		break;
 	case MCAST_EXCLUDE:
-		changed = __grp_src_toin_excl(pg, srcs, nsrcs, addr_size);
+		changed = __grp_src_toin_excl(pg, h_addr, srcs, nsrcs, addr_size);
 		break;
 	}
 
@@ -2038,7 +2038,7 @@ static bool br_multicast_toin(struct net_bridge_port_group *pg,
  *                                                       Send Q(G,A*B)
  *                                                       Group Timer=GMI
  */
-static void __grp_src_toex_incl(struct net_bridge_port_group *pg,
+static void __grp_src_toex_incl(struct net_bridge_port_group *pg, void *h_addr,
 				void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge_group_src *ent;
@@ -2077,7 +2077,7 @@ static void __grp_src_toex_incl(struct net_bridge_port_group *pg,
  *                                                       Send Q(G,A-Y)
  *                                                       Group Timer=GMI
  */
-static bool __grp_src_toex_excl(struct net_bridge_port_group *pg,
+static bool __grp_src_toex_excl(struct net_bridge_port_group *pg, void *h_addr,
 				void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge_group_src *ent;
@@ -2117,7 +2117,7 @@ static bool __grp_src_toex_excl(struct net_bridge_port_group *pg,
 	return changed;
 }
 
-static bool br_multicast_toex(struct net_bridge_port_group *pg,
+static bool br_multicast_toex(struct net_bridge_port_group *pg, void *h_addr,
 			      void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge *br = pg->key.port->br;
@@ -2125,12 +2125,12 @@ static bool br_multicast_toex(struct net_bridge_port_group *pg,
 
 	switch (pg->filter_mode) {
 	case MCAST_INCLUDE:
-		__grp_src_toex_incl(pg, srcs, nsrcs, addr_size);
+		__grp_src_toex_incl(pg, h_addr, srcs, nsrcs, addr_size);
 		br_multicast_star_g_handle_mode(pg, MCAST_EXCLUDE);
 		changed = true;
 		break;
 	case MCAST_EXCLUDE:
-		changed = __grp_src_toex_excl(pg, srcs, nsrcs, addr_size);
+		changed = __grp_src_toex_excl(pg, h_addr, srcs, nsrcs, addr_size);
 		break;
 	}
 
@@ -2143,7 +2143,7 @@ static bool br_multicast_toex(struct net_bridge_port_group *pg,
 /* State          Msg type      New state                Actions
  * INCLUDE (A)    BLOCK (B)     INCLUDE (A)              Send Q(G,A*B)
  */
-static void __grp_src_block_incl(struct net_bridge_port_group *pg,
+static void __grp_src_block_incl(struct net_bridge_port_group *pg, void *h_addr,
 				 void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge_group_src *ent;
@@ -2176,7 +2176,7 @@ static void __grp_src_block_incl(struct net_bridge_port_group *pg,
  * EXCLUDE (X,Y)  BLOCK (A)     EXCLUDE (X+(A-Y),Y)      (A-X-Y)=Group Timer
  *                                                       Send Q(G,A-Y)
  */
-static bool __grp_src_block_excl(struct net_bridge_port_group *pg,
+static bool __grp_src_block_excl(struct net_bridge_port_group *pg, void *h_addr,
 				 void *srcs, u32 nsrcs, size_t addr_size)
 {
 	struct net_bridge_group_src *ent;
@@ -2212,17 +2212,17 @@ static bool __grp_src_block_excl(struct net_bridge_port_group *pg,
 	return changed;
 }
 
-static bool br_multicast_block(struct net_bridge_port_group *pg,
+static bool br_multicast_block(struct net_bridge_port_group *pg, void *h_addr,
 			       void *srcs, u32 nsrcs, size_t addr_size)
 {
 	bool changed = false;
 
 	switch (pg->filter_mode) {
 	case MCAST_INCLUDE:
-		__grp_src_block_incl(pg, srcs, nsrcs, addr_size);
+		__grp_src_block_incl(pg, h_addr, srcs, nsrcs, addr_size);
 		break;
 	case MCAST_EXCLUDE:
-		changed = __grp_src_block_excl(pg, srcs, nsrcs, addr_size);
+		changed = __grp_src_block_excl(pg, h_addr, srcs, nsrcs, addr_size);
 		break;
 	}
 
@@ -2258,8 +2258,8 @@ static int br_ip4_multicast_igmp3_report(struct net_bridge *br,
 	struct igmpv3_report *ih;
 	struct igmpv3_grec *grec;
 	int i, len, num, type;
+	__be32 group, *h_addr;
 	bool changed = false;
-	__be32 group;
 	int err = 0;
 	u16 nsrcs;
 
@@ -2319,32 +2319,33 @@ static int br_ip4_multicast_igmp3_report(struct net_bridge *br,
 		pg = br_multicast_find_port(mdst, port, src);
 		if (!pg || (pg->flags & MDB_PG_FLAGS_PERMANENT))
 			goto unlock_continue;
-		/* reload grec */
+		/* reload grec and host addr */
 		grec = (void *)(skb->data + len - sizeof(*grec) - (nsrcs * 4));
+		h_addr = &ip_hdr(skb)->saddr;
 		switch (type) {
 		case IGMPV3_ALLOW_NEW_SOURCES:
-			changed = br_multicast_isinc_allow(pg, grec->grec_src,
+			changed = br_multicast_isinc_allow(pg, h_addr, grec->grec_src,
 							   nsrcs, sizeof(__be32));
 			break;
 		case IGMPV3_MODE_IS_INCLUDE:
-			changed = br_multicast_isinc_allow(pg, grec->grec_src, nsrcs,
-							   sizeof(__be32));
+			changed = br_multicast_isinc_allow(pg, h_addr, grec->grec_src,
+							   nsrcs, sizeof(__be32));
 			break;
 		case IGMPV3_MODE_IS_EXCLUDE:
-			changed = br_multicast_isexc(pg, grec->grec_src, nsrcs,
-						     sizeof(__be32));
+			changed = br_multicast_isexc(pg, h_addr, grec->grec_src,
+						     nsrcs, sizeof(__be32));
 			break;
 		case IGMPV3_CHANGE_TO_INCLUDE:
-			changed = br_multicast_toin(pg, grec->grec_src, nsrcs,
-						    sizeof(__be32));
+			changed = br_multicast_toin(pg, h_addr, grec->grec_src,
+						    nsrcs, sizeof(__be32));
 			break;
 		case IGMPV3_CHANGE_TO_EXCLUDE:
-			changed = br_multicast_toex(pg, grec->grec_src, nsrcs,
-						    sizeof(__be32));
+			changed = br_multicast_toex(pg, h_addr, grec->grec_src,
+						    nsrcs, sizeof(__be32));
 			break;
 		case IGMPV3_BLOCK_OLD_SOURCES:
-			changed = br_multicast_block(pg, grec->grec_src, nsrcs,
-						     sizeof(__be32));
+			changed = br_multicast_block(pg, h_addr, grec->grec_src,
+						     nsrcs, sizeof(__be32));
 			break;
 		}
 		if (changed)
@@ -2368,6 +2369,7 @@ static int br_ip6_multicast_mld2_report(struct net_bridge *br,
 	unsigned int nsrcs_offset;
 	const unsigned char *src;
 	struct icmp6hdr *icmp6h;
+	struct in6_addr *h_addr;
 	struct mld2_grec *grec;
 	unsigned int grec_len;
 	bool changed = false;
@@ -2446,30 +2448,36 @@ static int br_ip6_multicast_mld2_report(struct net_bridge *br,
 		pg = br_multicast_find_port(mdst, port, src);
 		if (!pg || (pg->flags & MDB_PG_FLAGS_PERMANENT))
 			goto unlock_continue;
+		h_addr = &ipv6_hdr(skb)->saddr;
 		switch (grec->grec_type) {
 		case MLD2_ALLOW_NEW_SOURCES:
-			changed = br_multicast_isinc_allow(pg, grec->grec_src,
-							   nsrcs,
+			changed = br_multicast_isinc_allow(pg, h_addr,
+							   grec->grec_src, nsrcs,
 							   sizeof(struct in6_addr));
 			break;
 		case MLD2_MODE_IS_INCLUDE:
-			changed = br_multicast_isinc_allow(pg, grec->grec_src, nsrcs,
+			changed = br_multicast_isinc_allow(pg, h_addr,
+							   grec->grec_src, nsrcs,
 							   sizeof(struct in6_addr));
 			break;
 		case MLD2_MODE_IS_EXCLUDE:
-			changed = br_multicast_isexc(pg, grec->grec_src, nsrcs,
+			changed = br_multicast_isexc(pg, h_addr,
+						     grec->grec_src, nsrcs,
 						     sizeof(struct in6_addr));
 			break;
 		case MLD2_CHANGE_TO_INCLUDE:
-			changed = br_multicast_toin(pg, grec->grec_src, nsrcs,
+			changed = br_multicast_toin(pg, h_addr,
+						    grec->grec_src, nsrcs,
 						    sizeof(struct in6_addr));
 			break;
 		case MLD2_CHANGE_TO_EXCLUDE:
-			changed = br_multicast_toex(pg, grec->grec_src, nsrcs,
+			changed = br_multicast_toex(pg, h_addr,
+						    grec->grec_src, nsrcs,
 						    sizeof(struct in6_addr));
 			break;
 		case MLD2_BLOCK_OLD_SOURCES:
-			changed = br_multicast_block(pg, grec->grec_src, nsrcs,
+			changed = br_multicast_block(pg, h_addr,
+						     grec->grec_src, nsrcs,
 						     sizeof(struct in6_addr));
 			break;
 		}
