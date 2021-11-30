@@ -1260,10 +1260,6 @@ int ebt_register_table(struct net *net, const struct ebt_table *input_table,
 	mutex_unlock(&ebt_mutex);
 
 	WRITE_ONCE(*res, table);
-
-	if (!ops)
-		return 0;
-
 	ret = nf_register_net_hooks(net, ops, hweight32(table->valid_hooks));
 	if (ret) {
 		__ebt_unregister_table(net, table);
