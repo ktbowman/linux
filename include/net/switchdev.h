@@ -18,21 +18,6 @@
 #define SWITCHDEV_F_SKIP_EOPNOTSUPP	BIT(1)
 #define SWITCHDEV_F_DEFER		BIT(2)
 
-struct switchdev_trans {
-	RH_KABI_BROKEN_REMOVE(struct list_head item_list)
-	bool ph_prepare;
-};
-
-static inline bool switchdev_trans_ph_prepare(struct switchdev_trans *trans)
-{
-	return trans && trans->ph_prepare;
-}
-
-static inline bool switchdev_trans_ph_commit(struct switchdev_trans *trans)
-{
-	return trans && !trans->ph_prepare;
-}
-
 enum switchdev_attr_id {
 	SWITCHDEV_ATTR_ID_UNDEFINED,
 	RH_KABI_BROKEN_REMOVE_ENUM(SWITCHDEV_ATTR_ID_PORT_PARENT_ID)
@@ -227,6 +212,12 @@ struct switchdev_obj_in_state_mrp {
 typedef int switchdev_obj_dump_cb_t(struct switchdev_obj *obj);
 
 struct switchdev_ops_extended_rh {
+};
+
+/* RHEL: Need to keep this struct definition for deprecated callbacks below */
+struct switchdev_trans {
+	struct list_head item_list;
+	bool ph_prepare;
 };
 
 /**
