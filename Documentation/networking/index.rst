@@ -21,6 +21,7 @@ Contents:
    msg_zerocopy
    phy
    sfp-phylink
+   bridge
    tls
    tls-offload
    filter
