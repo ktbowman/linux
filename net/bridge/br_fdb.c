@@ -863,6 +863,7 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 			 struct nlattr *nfea_tb[])
 {
 	bool is_sticky = !!(ndm->ndm_flags & NTF_STICKY);
+	bool refresh = !nfea_tb[NFEA_DONT_REFRESH];
 	struct net_bridge_fdb_entry *fdb;
 	u16 state = ndm->ndm_state;
 	bool modified = false;
@@ -940,7 +941,8 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 
 	fdb->used = jiffies;
 	if (modified) {
-		fdb->updated = jiffies;
+		if (refresh)
+			fdb->updated = jiffies;
 		fdb_notify(br, fdb, RTM_NEWNEIGH, true);
 	}
 
@@ -980,6 +982,7 @@ static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br,
 
 static const struct nla_policy br_nda_fdb_pol[NFEA_MAX + 1] = {
 	[NFEA_ACTIVITY_NOTIFY]	= { .type = NLA_U8 },
+	[NFEA_DONT_REFRESH]	= { .type = NLA_FLAG },
 };
 
 /* Add new permanent fdb entry with RTM_NEWNEIGH */
