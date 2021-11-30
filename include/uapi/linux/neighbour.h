@@ -29,6 +29,8 @@ enum {
 	NDA_LINK_NETNSID,
 	NDA_SRC_VNI,
 	NDA_PROTOCOL,  /* Originator of entry */
+	__RH_RESERVED_NDA_NH_ID,
+	NDA_FDB_EXT_ATTRS,
 	__NDA_MAX
 };
 
@@ -170,5 +172,16 @@ enum {
 	__NDTA_MAX
 };
 #define NDTA_MAX (__NDTA_MAX - 1)
+
+/* embedded into NDA_FDB_EXT_ATTRS:
+ * [NDA_FDB_EXT_ATTRS] = {
+ *     ...
+ * }
+ */
+enum {
+	NFEA_UNSPEC,
+	__NFEA_MAX
+};
+#define NFEA_MAX (__NFEA_MAX - 1)
 
 #endif
