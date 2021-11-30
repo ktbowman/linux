@@ -35,13 +35,15 @@ static struct net_bridge_vlan *br_vlan_lookup(struct rhashtable *tbl, u16 vid)
 	return rhashtable_lookup_fast(tbl, &vid, br_vlan_rht_params);
 }
 
-static bool __vlan_add_pvid(struct net_bridge_vlan_group *vg, u16 vid)
+static bool __vlan_add_pvid(struct net_bridge_vlan_group *vg,
+			    const struct net_bridge_vlan *v)
 {
-	if (vg->pvid == vid)
+	if (vg->pvid == v->vid)
 		return false;
 
 	smp_wmb();
-	vg->pvid = vid;
+	br_vlan_set_pvid_state(vg, v->state);
+	vg->pvid = v->vid;
 
 	return true;
 }
@@ -70,7 +72,7 @@ static bool __vlan_add_flags(struct net_bridge_vlan *v, u16 flags)
 		vg = nbp_vlan_group(v->port);
 
 	if (flags & BRIDGE_VLAN_INFO_PVID)
-		ret = __vlan_add_pvid(vg, v->vid);
+		ret = __vlan_add_pvid(vg, v);
 	else
 		ret = __vlan_delete_pvid(vg, v->vid);
 
@@ -296,6 +298,9 @@ static int __vlan_add(struct net_bridge_vlan *v, u16 flags,
 		vg->num_vlans++;
 	}
 
+	/* set the state before publishing */
+	v->state = BR_STATE_FORWARDING;
+
 	err = rhashtable_lookup_insert_fast(&vg->vlan_hash, &v->vnode,
 					    br_vlan_rht_params);
 	if (err)
@@ -469,7 +474,8 @@ out:
 /* Called under RCU */
 static bool __allowed_ingress(const struct net_bridge *br,
 			      struct net_bridge_vlan_group *vg,
-			      struct sk_buff *skb, u16 *vid)
+			      struct sk_buff *skb, u16 *vid,
+			      u8 *state)
 {
 	struct br_vlan_stats *stats;
 	struct net_bridge_vlan *v;
@@ -535,12 +541,24 @@ static bool __allowed_ingress(const struct net_bridge *br,
 			skb->vlan_tci |= pvid;
 
 		/* if stats are disabled we can avoid the lookup */
-		if (!br_opt_get(br, BROPT_VLAN_STATS_ENABLED))
-			return true;
+		if (!br_opt_get(br, BROPT_VLAN_STATS_ENABLED)) {
+			if (*state == BR_STATE_FORWARDING) {
+				*state = br_vlan_get_pvid_state(vg);
+				return br_vlan_state_allowed(*state, true);
+			} else {
+				return true;
+			}
+		}
 	}
 	v = br_vlan_find(vg, *vid);
 	if (!v || !br_vlan_should_use(v))
 		goto drop;
+
+	if (*state == BR_STATE_FORWARDING) {
+		*state = br_vlan_get_state(v);
+		if (!br_vlan_state_allowed(*state, true))
+			goto drop;
+	}
 
 	if (br_opt_get(br, BROPT_VLAN_STATS_ENABLED)) {
 		stats = this_cpu_ptr(v->stats);
@@ -559,7 +577,7 @@ drop:
 
 bool br_allowed_ingress(const struct net_bridge *br,
 			struct net_bridge_vlan_group *vg, struct sk_buff *skb,
-			u16 *vid)
+			u16 *vid, u8 *state)
 {
 	/* If VLAN filtering is disabled on the bridge, all packets are
 	 * permitted.
@@ -569,7 +587,7 @@ bool br_allowed_ingress(const struct net_bridge *br,
 		return true;
 	}
 
-	return __allowed_ingress(br, vg, skb, vid);
+	return __allowed_ingress(br, vg, skb, vid, state);
 }
 
 /* Called under RCU. */
@@ -585,7 +603,8 @@ bool br_allowed_egress(struct net_bridge_vlan_group *vg,
 
 	br_vlan_get_tag(skb, &vid);
 	v = br_vlan_find(vg, vid);
-	if (v && br_vlan_should_use(v))
+	if (v && br_vlan_should_use(v) &&
+	    br_vlan_state_allowed(br_vlan_get_state(v), false))
 		return true;
 
 	return false;
@@ -596,6 +615,7 @@ bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid)
 {
 	struct net_bridge_vlan_group *vg;
 	struct net_bridge *br = p->br;
+	struct net_bridge_vlan *v;
 
 	/* If filtering was disabled at input, let it pass. */
 	if (!br_opt_get(br, BROPT_VLAN_ENABLED))
@@ -610,13 +630,15 @@ bool br_should_learn(struct net_bridge_port *p, struct sk_buff *skb, u16 *vid)
 
 	if (!*vid) {
 		*vid = br_get_pvid(vg);
-		if (!*vid)
+		if (!*vid ||
+		    !br_vlan_state_allowed(br_vlan_get_pvid_state(vg), true))
 			return false;
 
 		return true;
 	}
 
-	if (br_vlan_find(vg, *vid))
+	v = br_vlan_find(vg, *vid);
+	if (v && br_vlan_state_allowed(br_vlan_get_state(v), true))
 		return true;
 
 	return false;
@@ -1844,6 +1866,7 @@ static const struct nla_policy br_vlan_db_policy[BRIDGE_VLANDB_ENTRY_MAX + 1] = 
 	[BRIDGE_VLANDB_ENTRY_INFO]	= { .type = NLA_EXACT_LEN,
 					    .len = sizeof(struct bridge_vlan_info) },
 	[BRIDGE_VLANDB_ENTRY_RANGE]	= { .type = NLA_U16 },
+	[BRIDGE_VLANDB_ENTRY_STATE]	= { .type = NLA_U8 },
 };
 
 static int br_vlan_rtm_process_one(struct net_device *dev,
