@@ -243,6 +243,14 @@ struct RH_KABI_RENAME(switchdev_ops, rh_deprecated_switchdev_ops) {
 	RH_KABI_AUX_EMBED(switchdev_ops_extended)
 };
 
+struct switchdev_brport {
+	struct net_device *dev;
+	const void *ctx;
+	struct notifier_block *atomic_nb;
+	struct notifier_block *blocking_nb;
+	bool tx_fwd_offload;
+};
+
 enum switchdev_notifier_type {
 	SWITCHDEV_FDB_ADD_TO_BRIDGE = 1,
 	SWITCHDEV_FDB_DEL_TO_BRIDGE,
@@ -260,6 +268,9 @@ enum switchdev_notifier_type {
 	SWITCHDEV_VXLAN_FDB_ADD_TO_DEVICE,
 	SWITCHDEV_VXLAN_FDB_DEL_TO_DEVICE,
 	SWITCHDEV_VXLAN_FDB_OFFLOADED,
+
+	SWITCHDEV_BRPORT_OFFLOADED,
+	SWITCHDEV_BRPORT_UNOFFLOADED,
 };
 
 struct switchdev_notifier_info {
@@ -289,6 +300,11 @@ struct switchdev_notifier_port_attr_info {
 	bool handled;
 };
 
+struct switchdev_notifier_brport_info {
+	struct switchdev_notifier_info info; /* must be first */
+	const struct switchdev_brport brport;
+};
+
 static inline struct net_device *
 switchdev_notifier_info_to_dev(const struct switchdev_notifier_info *info)
 {
@@ -308,6 +324,17 @@ switchdev_fdb_is_dynamically_learned(const struct switchdev_notifier_fdb_info *f
 }
 
 #ifdef CONFIG_NET_SWITCHDEV
+
+int switchdev_bridge_port_offload(struct net_device *brport_dev,
+				  struct net_device *dev, const void *ctx,
+				  struct notifier_block *atomic_nb,
+				  struct notifier_block *blocking_nb,
+				  bool tx_fwd_offload,
+				  struct netlink_ext_ack *extack);
+void switchdev_bridge_port_unoffload(struct net_device *brport_dev,
+				     const void *ctx,
+				     struct notifier_block *atomic_nb,
+				     struct notifier_block *blocking_nb);
 
 void switchdev_deferred_process(void);
 int switchdev_port_attr_set(struct net_device *dev,
@@ -379,6 +406,25 @@ int switchdev_handle_port_attr_set(struct net_device *dev,
 				      const struct switchdev_attr *attr,
 				      struct netlink_ext_ack *extack));
 #else
+
+static inline int
+switchdev_bridge_port_offload(struct net_device *brport_dev,
+			      struct net_device *dev, const void *ctx,
+			      struct notifier_block *atomic_nb,
+			      struct notifier_block *blocking_nb,
+			      bool tx_fwd_offload,
+			      struct netlink_ext_ack *extack)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void
+switchdev_bridge_port_unoffload(struct net_device *brport_dev,
+				const void *ctx,
+				struct notifier_block *atomic_nb,
+				struct notifier_block *blocking_nb)
+{
+}
 
 static inline void switchdev_deferred_process(void)
 {
