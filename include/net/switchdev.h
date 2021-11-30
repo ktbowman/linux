@@ -31,9 +31,7 @@ enum switchdev_attr_id {
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_BRIDGE_VLAN_PROTOCOL)
 	SWITCHDEV_ATTR_ID_BRIDGE_MC_DISABLED,
 	SWITCHDEV_ATTR_ID_BRIDGE_MROUTER,
-#if IS_ENABLED(CONFIG_BRIDGE_MRP)
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_ATTR_ID_MRP_PORT_ROLE)
-#endif
 };
 
 struct switchdev_brport_flags {
@@ -72,9 +70,7 @@ struct switchdev_attr {
 		bool vlan_filtering;			/* BRIDGE_VLAN_FILTERING */
 		u16 vlan_protocol;			/* BRIDGE_VLAN_PROTOCOL */
 		bool mc_disabled;			/* MC_DISABLED */
-#if IS_ENABLED(CONFIG_BRIDGE_MRP)
 		u8 mrp_port_role;			/* MRP_PORT_ROLE */
-#endif
 		) /* RH_KABI_BROKEN_INSERT_BLOCK */
 	} u;
 };
@@ -84,7 +80,6 @@ enum switchdev_obj_id {
 	SWITCHDEV_OBJ_ID_PORT_VLAN,
 	SWITCHDEV_OBJ_ID_PORT_MDB,
 	SWITCHDEV_OBJ_ID_HOST_MDB,
-#if IS_ENABLED(CONFIG_BRIDGE_MRP)
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_MRP)
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_RING_TEST_MRP)
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_RING_ROLE_MRP)
@@ -92,8 +87,6 @@ enum switchdev_obj_id {
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_IN_TEST_MRP)
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_IN_ROLE_MRP)
 	RH_KABI_BROKEN_INSERT_ENUM(SWITCHDEV_OBJ_ID_IN_STATE_MRP)
-
-#endif
 };
 
 struct switchdev_obj {
@@ -130,7 +123,6 @@ struct switchdev_obj_port_mdb {
 	container_of((OBJ), struct switchdev_obj_port_mdb, obj)
 
 
-#if IS_ENABLED(CONFIG_BRIDGE_MRP)
 /* SWITCHDEV_OBJ_ID_MRP */
 struct switchdev_obj_mrp {
 	struct switchdev_obj obj;
@@ -209,8 +201,6 @@ struct switchdev_obj_in_state_mrp {
 
 #define SWITCHDEV_OBJ_IN_STATE_MRP(OBJ) \
 	container_of((OBJ), struct switchdev_obj_in_state_mrp, obj)
-
-#endif
 
 typedef int switchdev_obj_dump_cb_t(struct switchdev_obj *obj);
 
