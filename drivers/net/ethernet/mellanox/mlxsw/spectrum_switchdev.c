@@ -1215,23 +1215,20 @@ mlxsw_sp_br_ban_rif_pvid_change(struct mlxsw_sp *mlxsw_sp,
 				const struct switchdev_obj_port_vlan *vlan)
 {
 	u16 pvid;
-	u16 vid;
 
 	pvid = mlxsw_sp_rif_vid(mlxsw_sp, br_dev);
 	if (!pvid)
 		return 0;
 
-	for (vid = vlan->vid_begin; vid <= vlan->vid_end; ++vid) {
-		if (vlan->flags & BRIDGE_VLAN_INFO_PVID) {
-			if (vid != pvid) {
-				netdev_err(br_dev, "Can't change PVID, it's used by router interface\n");
-				return -EBUSY;
-			}
-		} else {
-			if (vid == pvid) {
-				netdev_err(br_dev, "Can't remove PVID, it's used by router interface\n");
-				return -EBUSY;
-			}
+	if (vlan->flags & BRIDGE_VLAN_INFO_PVID) {
+		if (vlan->vid != pvid) {
+			netdev_err(br_dev, "Can't change PVID, it's used by router interface\n");
+			return -EBUSY;
+		}
+	} else {
+		if (vlan->vid == pvid) {
+			netdev_err(br_dev, "Can't remove PVID, it's used by router interface\n");
+			return -EBUSY;
 		}
 	}
 
@@ -1248,7 +1245,6 @@ static int mlxsw_sp_port_vlans_add(struct mlxsw_sp_port *mlxsw_sp_port,
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	struct net_device *orig_dev = vlan->obj.orig_dev;
 	struct mlxsw_sp_bridge_port *bridge_port;
-	u16 vid;
 
 	if (netif_is_bridge_master(orig_dev)) {
 		int err = 0;
@@ -1273,17 +1269,9 @@ static int mlxsw_sp_port_vlans_add(struct mlxsw_sp_port *mlxsw_sp_port,
 	if (!bridge_port->bridge_device->vlan_enabled)
 		return 0;
 
-	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++) {
-		int err;
-
-		err = mlxsw_sp_bridge_port_vlan_add(mlxsw_sp_port, bridge_port,
-						    vid, flag_untagged,
-						    flag_pvid, extack);
-		if (err)
-			return err;
-	}
-
-	return 0;
+	return mlxsw_sp_bridge_port_vlan_add(mlxsw_sp_port, bridge_port,
+					     vlan->vid, flag_untagged,
+					     flag_pvid, extack);
 }
 
 static enum mlxsw_reg_sfdf_flush_type mlxsw_sp_fdb_flush_type(bool lagged)
@@ -1877,7 +1865,6 @@ static int mlxsw_sp_port_vlans_del(struct mlxsw_sp_port *mlxsw_sp_port,
 	struct mlxsw_sp *mlxsw_sp = mlxsw_sp_port->mlxsw_sp;
 	struct net_device *orig_dev = vlan->obj.orig_dev;
 	struct mlxsw_sp_bridge_port *bridge_port;
-	u16 vid;
 
 	if (netif_is_bridge_master(orig_dev))
 		return -EOPNOTSUPP;
@@ -1889,8 +1876,7 @@ static int mlxsw_sp_port_vlans_del(struct mlxsw_sp_port *mlxsw_sp_port,
 	if (!bridge_port->bridge_device->vlan_enabled)
 		return 0;
 
-	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++)
-		mlxsw_sp_bridge_port_vlan_del(mlxsw_sp_port, bridge_port, vid);
+	mlxsw_sp_bridge_port_vlan_del(mlxsw_sp_port, bridge_port, vlan->vid);
 
 	return 0;
 }
@@ -3463,7 +3449,6 @@ mlxsw_sp_switchdev_vxlan_vlans_add(struct net_device *vxlan_dev,
 	struct netlink_ext_ack *extack;
 	struct mlxsw_sp *mlxsw_sp;
 	struct net_device *br_dev;
-	u16 vid;
 
 	extack = switchdev_notifier_info_to_extack(&port_obj_info->info);
 	br_dev = netdev_master_upper_dev_get(vxlan_dev);
@@ -3486,18 +3471,10 @@ mlxsw_sp_switchdev_vxlan_vlans_add(struct net_device *vxlan_dev,
 	if (!bridge_device->vlan_enabled)
 		return 0;
 
-	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++) {
-		int err;
-
-		err = mlxsw_sp_switchdev_vxlan_vlan_add(mlxsw_sp, bridge_device,
-							vxlan_dev, vid,
-							flag_untagged,
-							flag_pvid, extack);
-		if (err)
-			return err;
-	}
-
-	return 0;
+	return mlxsw_sp_switchdev_vxlan_vlan_add(mlxsw_sp, bridge_device,
+						 vxlan_dev, vlan->vid,
+						 flag_untagged,
+						 flag_pvid, extack);
 }
 
 static void
@@ -3510,7 +3487,6 @@ mlxsw_sp_switchdev_vxlan_vlans_del(struct net_device *vxlan_dev,
 	struct mlxsw_sp_bridge_device *bridge_device;
 	struct mlxsw_sp *mlxsw_sp;
 	struct net_device *br_dev;
-	u16 vid;
 
 	br_dev = netdev_master_upper_dev_get(vxlan_dev);
 	if (!br_dev)
@@ -3529,9 +3505,8 @@ mlxsw_sp_switchdev_vxlan_vlans_del(struct net_device *vxlan_dev,
 	if (!bridge_device->vlan_enabled)
 		return;
 
-	for (vid = vlan->vid_begin; vid <= vlan->vid_end; vid++)
-		mlxsw_sp_switchdev_vxlan_vlan_del(mlxsw_sp, bridge_device,
-						  vxlan_dev, vid);
+	mlxsw_sp_switchdev_vxlan_vlan_del(mlxsw_sp, bridge_device, vxlan_dev,
+					  vlan->vid);
 }
 
 static int
