@@ -27,6 +27,7 @@ Contents:
    filter
    mptcp-sysctl
    statistics
+   switchdev
    tipc
    vxlan
 
