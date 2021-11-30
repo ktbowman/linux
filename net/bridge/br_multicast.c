@@ -148,7 +148,8 @@ struct net_bridge_mdb_entry *br_mdb_get(struct net_bridge_mcast *brmctx,
 	struct net_bridge *br = brmctx->br;
 	struct br_ip ip;
 
-	if (!br_opt_get(br, BROPT_MULTICAST_ENABLED))
+	if (!br_opt_get(br, BROPT_MULTICAST_ENABLED) ||
+	    br_multicast_ctx_vlan_global_disabled(brmctx))
 		return NULL;
 
 	if (BR_INPUT_SKB_CB(skb)->igmp)
@@ -229,6 +230,24 @@ br_multicast_pg_to_port_ctx(const struct net_bridge_port_group *pg)
 	rcu_read_unlock();
 out:
 	return pmctx;
+}
+
+/* when snooping we need to check if the contexts should be used
+ * in the following order:
+ * - if pmctx is non-NULL (port), check if it should be used
+ * - if pmctx is NULL (bridge), check if brmctx should be used
+ */
+static bool
+br_multicast_ctx_should_use(const struct net_bridge_mcast *brmctx,
+			    const struct net_bridge_mcast_port *pmctx)
+{
+	if (!netif_running(brmctx->br->dev))
+		return false;
+
+	if (pmctx)
+		return !br_multicast_port_ctx_state_disabled(pmctx);
+	else
+		return !br_multicast_ctx_vlan_disabled(brmctx);
 }
 
 static bool br_port_group_equal(struct net_bridge_port_group *p,
@@ -1312,8 +1331,7 @@ __br_multicast_add_group(struct net_bridge_mcast *brmctx,
 	struct net_bridge_mdb_entry *mp;
 	unsigned long now = jiffies;
 
-	if (!netif_running(brmctx->br->dev) ||
-	    (pmctx && pmctx->port->state == BR_STATE_DISABLED))
+	if (!br_multicast_ctx_should_use(brmctx, pmctx))
 		goto out;
 
 	mp = br_multicast_new_group(brmctx->br, group);
@@ -1533,6 +1551,7 @@ static void br_multicast_querier_expired(struct net_bridge_mcast *brmctx,
 {
 	spin_lock(&brmctx->br->multicast_lock);
 	if (!netif_running(brmctx->br->dev) ||
+	    br_multicast_ctx_vlan_global_disabled(brmctx) ||
 	    !br_opt_get(brmctx->br, BROPT_MULTICAST_ENABLED))
 		goto out;
 
@@ -1620,7 +1639,7 @@ static void br_multicast_send_query(struct net_bridge_mcast *brmctx,
 	struct br_ip br_group;
 	unsigned long time;
 
-	if (!netif_running(brmctx->br->dev) ||
+	if (!br_multicast_ctx_should_use(brmctx, pmctx) ||
 	    !br_opt_get(brmctx->br, BROPT_MULTICAST_ENABLED) ||
 	    !br_opt_get(brmctx->br, BROPT_MULTICAST_QUERIER))
 		return;
@@ -1656,16 +1675,16 @@ br_multicast_port_query_expired(struct net_bridge_mcast_port *pmctx,
 				struct bridge_mcast_own_query *query)
 {
 	struct net_bridge *br = pmctx->port->br;
+	struct net_bridge_mcast *brmctx;
 
 	spin_lock(&br->multicast_lock);
-	if (pmctx->port->state == BR_STATE_DISABLED ||
-	    pmctx->port->state == BR_STATE_BLOCKING)
+	if (br_multicast_port_ctx_state_stopped(pmctx))
 		goto out;
-
-	if (query->startup_sent < br->multicast_ctx.multicast_startup_query_count)
+	brmctx = br_multicast_port_ctx_get_global(pmctx);
+	if (query->startup_sent < brmctx->multicast_startup_query_count)
 		query->startup_sent++;
 
-	br_multicast_send_query(&br->multicast_ctx, pmctx, query);
+	br_multicast_send_query(brmctx, pmctx, query);
 
 out:
 	spin_unlock(&br->multicast_lock);
@@ -2583,6 +2602,9 @@ static int br_ip4_multicast_igmp3_report(struct net_bridge_mcast *brmctx,
 			continue;
 
 		spin_lock_bh(&brmctx->br->multicast_lock);
+		if (!br_multicast_ctx_should_use(brmctx, pmctx))
+			goto unlock_continue;
+
 		mdst = br_mdb_ip4_get(brmctx->br, group, vid);
 		if (!mdst)
 			goto unlock_continue;
@@ -2718,6 +2740,9 @@ static int br_ip6_multicast_mld2_report(struct net_bridge_mcast *brmctx,
 			continue;
 
 		spin_lock_bh(&brmctx->br->multicast_lock);
+		if (!br_multicast_ctx_should_use(brmctx, pmctx))
+			goto unlock_continue;
+
 		mdst = br_mdb_ip6_get(brmctx->br, &grec->grec_mca, vid);
 		if (!mdst)
 			goto unlock_continue;
@@ -2963,6 +2988,9 @@ static void br_multicast_mark_router(struct net_bridge_mcast *brmctx,
 {
 	unsigned long now = jiffies;
 
+	if (!br_multicast_ctx_should_use(brmctx, pmctx))
+		return;
+
 	if (!pmctx) {
 		if (brmctx->multicast_router == MDB_RTR_TYPE_TEMP_QUERY) {
 			if (!br_ip4_multicast_is_router(brmctx) &&
@@ -3061,8 +3089,7 @@ static void br_ip4_multicast_query(struct net_bridge_mcast *brmctx,
 	__be32 group;
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!netif_running(brmctx->br->dev) ||
-	    (pmctx && pmctx->port->state == BR_STATE_DISABLED))
+	if (!br_multicast_ctx_should_use(brmctx, pmctx))
 		goto out;
 
 	group = ih->group;
@@ -3145,8 +3172,7 @@ static int br_ip6_multicast_query(struct net_bridge_mcast *brmctx,
 	int err = 0;
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!netif_running(brmctx->br->dev) ||
-	    (pmctx && pmctx->port->state == BR_STATE_DISABLED))
+	if (!br_multicast_ctx_should_use(brmctx, pmctx))
 		goto out;
 
 	if (transport_len == sizeof(*mld)) {
@@ -3230,8 +3256,7 @@ br_multicast_leave_group(struct net_bridge_mcast *brmctx,
 	unsigned long time;
 
 	spin_lock(&brmctx->br->multicast_lock);
-	if (!netif_running(brmctx->br->dev) ||
-	    (pmctx && pmctx->port->state == BR_STATE_DISABLED))
+	if (!br_multicast_ctx_should_use(brmctx, pmctx))
 		goto out;
 
 	mp = br_mdb_ip_get(brmctx->br, group);
@@ -3610,11 +3635,15 @@ static void br_multicast_query_expired(struct net_bridge_mcast *brmctx,
 				       struct bridge_mcast_querier *querier)
 {
 	spin_lock(&brmctx->br->multicast_lock);
+	if (br_multicast_ctx_vlan_disabled(brmctx))
+		goto out;
+
 	if (query->startup_sent < brmctx->multicast_startup_query_count)
 		query->startup_sent++;
 
 	RCU_INIT_POINTER(querier->port, NULL);
 	br_multicast_send_query(brmctx, NULL, query);
+out:
 	spin_unlock(&brmctx->br->multicast_lock);
 }
 
