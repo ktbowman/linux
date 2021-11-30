@@ -1813,7 +1813,7 @@ static bool br_multicast_isinc_allow(struct net_bridge_port_group *pg, void *h_a
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (!ent) {
 			ent = br_multicast_new_group_src(pg, &src_ip);
@@ -1823,7 +1823,6 @@ static bool br_multicast_isinc_allow(struct net_bridge_port_group *pg, void *h_a
 
 		if (ent)
 			__grp_src_mod_timer(ent, now + br_multicast_gmi(br));
-		srcs += addr_size;
 	}
 
 	return changed;
@@ -1847,7 +1846,7 @@ static void __grp_src_isexc_incl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent)
 			ent->flags &= ~BR_SGRP_F_DELETE;
@@ -1855,7 +1854,6 @@ static void __grp_src_isexc_incl(struct net_bridge_port_group *pg, void *h_addr,
 			ent = br_multicast_new_group_src(pg, &src_ip);
 		if (ent)
 			br_multicast_fwd_src_handle(ent);
-		srcs += addr_size;
 	}
 
 	__grp_src_delete_marked(pg);
@@ -1883,7 +1881,7 @@ static bool __grp_src_isexc_excl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent) {
 			ent->flags &= ~BR_SGRP_F_DELETE;
@@ -1895,7 +1893,6 @@ static bool __grp_src_isexc_excl(struct net_bridge_port_group *pg, void *h_addr,
 				changed = true;
 			}
 		}
-		srcs += addr_size;
 	}
 
 	if (__grp_src_delete_marked(pg))
@@ -1947,7 +1944,7 @@ static bool __grp_src_toin_incl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent) {
 			ent->flags &= ~BR_SGRP_F_SEND;
@@ -1959,7 +1956,6 @@ static bool __grp_src_toin_incl(struct net_bridge_port_group *pg, void *h_addr,
 		}
 		if (ent)
 			__grp_src_mod_timer(ent, now + br_multicast_gmi(br));
-		srcs += addr_size;
 	}
 
 	if (to_send)
@@ -1990,7 +1986,7 @@ static bool __grp_src_toin_excl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent) {
 			if (timer_pending(&ent->timer)) {
@@ -2004,7 +2000,6 @@ static bool __grp_src_toin_excl(struct net_bridge_port_group *pg, void *h_addr,
 		}
 		if (ent)
 			__grp_src_mod_timer(ent, now + br_multicast_gmi(br));
-		srcs += addr_size;
 	}
 
 	if (to_send)
@@ -2051,7 +2046,7 @@ static void __grp_src_toex_incl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent) {
 			ent->flags = (ent->flags & ~BR_SGRP_F_DELETE) |
@@ -2062,7 +2057,6 @@ static void __grp_src_toex_incl(struct net_bridge_port_group *pg, void *h_addr,
 		}
 		if (ent)
 			br_multicast_fwd_src_handle(ent);
-		srcs += addr_size;
 	}
 
 	__grp_src_delete_marked(pg);
@@ -2091,7 +2085,7 @@ static bool __grp_src_toex_excl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent) {
 			ent->flags &= ~BR_SGRP_F_DELETE;
@@ -2106,7 +2100,6 @@ static bool __grp_src_toex_excl(struct net_bridge_port_group *pg, void *h_addr,
 			ent->flags |= BR_SGRP_F_SEND;
 			to_send++;
 		}
-		srcs += addr_size;
 	}
 
 	if (__grp_src_delete_marked(pg))
@@ -2157,13 +2150,12 @@ static bool __grp_src_block_incl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (ent) {
 			ent->flags |= BR_SGRP_F_SEND;
 			to_send++;
 		}
-		srcs += addr_size;
 	}
 
 	if (to_send)
@@ -2198,7 +2190,7 @@ static bool __grp_src_block_excl(struct net_bridge_port_group *pg, void *h_addr,
 	memset(&src_ip, 0, sizeof(src_ip));
 	src_ip.proto = pg->key.addr.proto;
 	for (src_idx = 0; src_idx < nsrcs; src_idx++) {
-		memcpy(&src_ip.src, srcs, addr_size);
+		memcpy(&src_ip.src, srcs + (src_idx * addr_size), addr_size);
 		ent = br_multicast_find_group_src(pg, &src_ip);
 		if (!ent) {
 			ent = br_multicast_new_group_src(pg, &src_ip);
@@ -2211,7 +2203,6 @@ static bool __grp_src_block_excl(struct net_bridge_port_group *pg, void *h_addr,
 			ent->flags |= BR_SGRP_F_SEND;
 			to_send++;
 		}
-		srcs += addr_size;
 	}
 
 	if (to_send)
