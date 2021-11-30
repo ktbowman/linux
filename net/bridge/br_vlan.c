@@ -273,7 +273,8 @@ static int __vlan_add(struct net_bridge_vlan *v, u16 flags,
 		}
 		v->brvlan = masterv;
 		if (br_opt_get(br, BROPT_VLAN_STATS_PER_PORT)) {
-			v->stats = netdev_alloc_pcpu_stats(struct br_vlan_stats);
+			v->stats =
+			     netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 			if (!v->stats) {
 				err = -ENOMEM;
 				goto out_filt;
@@ -424,7 +425,7 @@ struct sk_buff *br_handle_vlan(struct net_bridge *br,
 			       struct net_bridge_vlan_group *vg,
 			       struct sk_buff *skb)
 {
-	struct br_vlan_stats *stats;
+	struct pcpu_sw_netstats *stats;
 	struct net_bridge_vlan *v;
 	u16 vid;
 
@@ -477,7 +478,7 @@ static bool __allowed_ingress(const struct net_bridge *br,
 			      struct sk_buff *skb, u16 *vid,
 			      u8 *state)
 {
-	struct br_vlan_stats *stats;
+	struct pcpu_sw_netstats *stats;
 	struct net_bridge_vlan *v;
 	bool tagged;
 
@@ -711,7 +712,7 @@ int br_vlan_add(struct net_bridge *br, u16 vid, u16 flags, bool *changed,
 	if (!vlan)
 		return -ENOMEM;
 
-	vlan->stats = netdev_alloc_pcpu_stats(struct br_vlan_stats);
+	vlan->stats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!vlan->stats) {
 		kfree(vlan);
 		return -ENOMEM;
@@ -1277,14 +1278,14 @@ void nbp_vlan_flush(struct net_bridge_port *port)
 }
 
 void br_vlan_get_stats(const struct net_bridge_vlan *v,
-		       struct br_vlan_stats *stats)
+		       struct pcpu_sw_netstats *stats)
 {
 	int i;
 
 	memset(stats, 0, sizeof(*stats));
 	for_each_possible_cpu(i) {
 		u64 rxpackets, rxbytes, txpackets, txbytes;
-		struct br_vlan_stats *cpu_stats;
+		struct pcpu_sw_netstats *cpu_stats;
 		unsigned int start;
 
 		cpu_stats = per_cpu_ptr(v->stats, i);
@@ -1600,7 +1601,7 @@ void br_vlan_port_event(struct net_bridge_port *p, unsigned long event)
 static bool br_vlan_stats_fill(struct sk_buff *skb,
 			       const struct net_bridge_vlan *v)
 {
-	struct br_vlan_stats stats;
+	struct pcpu_sw_netstats stats;
 	struct nlattr *nest;
 
 	nest = nla_nest_start(skb, BRIDGE_VLANDB_ENTRY_STATS);
