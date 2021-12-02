@@ -1078,9 +1078,6 @@ enum dl_dev_state {
  * struct dev_links_info - Device data related to device links.
  * @suppliers: List of links to supplier devices.
  * @consumers: List of links to consumer devices.
- * @needs_suppliers: Hook to global list of devices waiting for suppliers.
- * @defer_hook: Hook to global list of devices that have deferred sync_state or
- *             deferred fw_devlink.
  * @status: Driver status information.
  */
 struct dev_links_info {
@@ -1104,7 +1101,7 @@ struct dev_links_info {
  * as above for the same reasons.
  *
  * upstream commit fc5a251d0fd7 (driver core: Add sync_state driver/bus
- * callback) * adds yet another entry: defer_hook.  Rinse and repeat.
+ * callback) * adds yet another entry: defer_sync.  Rinse and repeat.
  */
 
 struct device_extended_rh {
@@ -1297,9 +1294,10 @@ struct device {
 	RH_KABI_RESERVE(2)
 
 	/* NB: See the note for struct dev_links_info: */
-	RH_KABI_USE(3, 4, struct list_head links_needs_suppliers)
-	RH_KABI_USE(5, bool links_need_for_probe)
-	RH_KABI_USE(6, 7, struct list_head links_defer_hook)
+	RH_KABI_RESERVE(3)
+	RH_KABI_RESERVE(4)
+	RH_KABI_RESERVE(5)
+	RH_KABI_USE(6, 7, struct list_head links_defer_sync)
 
 	RH_KABI_RESERVE(8)
 	RH_KABI_RESERVE(9)
@@ -1368,6 +1366,18 @@ static inline const char *dev_name(const struct device *dev)
 		return dev->init_name;
 
 	return kobject_name(&dev->kobj);
+}
+
+/**
+ * dev_bus_name - Return a device's bus/class name, if at all possible
+ * @dev: struct device to get the bus/class name of
+ *
+ * Will return the name of the bus/class the device is attached to.  If it is
+ * not attached to a bus/class, an empty string will be returned.
+ */
+static inline const char *dev_bus_name(const struct device *dev)
+{
+	return dev->bus ? dev->bus->name : (dev->class ? dev->class->name : "");
 }
 
 extern __printf(2, 3)
