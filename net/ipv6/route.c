@@ -3184,8 +3184,7 @@ install_route:
 
 	return rt;
 out:
-	if (dev)
-		dev_put(dev);
+	dev_put(dev);
 	if (idev)
 		in6_dev_put(idev);
 
