@@ -116,4 +116,7 @@ bool ice_is_vsi_dflt_vsi(struct ice_sw *sw, struct ice_vsi *vsi);
 int ice_set_dflt_vsi(struct ice_sw *sw, struct ice_vsi *vsi);
 
 int ice_clear_dflt_vsi(struct ice_sw *sw);
+int ice_set_min_bw_limit(struct ice_vsi *vsi, u64 min_tx_rate);
+int ice_set_max_bw_limit(struct ice_vsi *vsi, u64 max_tx_rate);
+int ice_get_link_speed_mbps(struct ice_vsi *vsi);
 #endif /* !_ICE_LIB_H_ */
