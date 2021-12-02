@@ -94,7 +94,7 @@ static int i40iw_query_device(struct ib_device *ibdev,
  * @props: returning device attributes
  */
 static int i40iw_query_port(struct ib_device *ibdev,
-			    u8 port,
+			    u32 port,
 			    struct ib_port_attr *props)
 {
 	props->lid = 1;
@@ -758,7 +758,7 @@ error:
 }
 
 /**
- * i40iw_query - query qp attributes
+ * i40iw_query_qp - query qp attributes
  * @ibqp: qp pointer
  * @attr: attributes pointer
  * @attr_mask: Not used
@@ -1956,7 +1956,7 @@ static struct ib_mr *i40iw_get_dma_mr(struct ib_pd *pd, int acc)
 }
 
 /**
- * i40iw_del_mem_list - Deleting pbl list entries for CQ/QP
+ * i40iw_del_memlist - Deleting pbl list entries for CQ/QP
  * @iwmr: iwmr for IB's user page addresses
  * @ucontext: ptr to user context
  */
@@ -2065,7 +2065,7 @@ static ssize_t hw_rev_show(struct device *dev,
 		rdma_device_to_drv_device(dev, struct i40iw_ib_device, ibdev);
 	u32 hw_rev = iwibdev->iwdev->sc_dev.hw_rev;
 
-	return sprintf(buf, "%x\n", hw_rev);
+	return sysfs_emit(buf, "%x\n", hw_rev);
 }
 static DEVICE_ATTR_RO(hw_rev);
 
@@ -2075,7 +2075,7 @@ static DEVICE_ATTR_RO(hw_rev);
 static ssize_t hca_type_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "I40IW\n");
+	return sysfs_emit(buf, "I40IW\n");
 }
 static DEVICE_ATTR_RO(hca_type);
 
@@ -2085,7 +2085,7 @@ static DEVICE_ATTR_RO(hca_type);
 static ssize_t board_id_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%.*s\n", 32, "I40IW Board ID");
+	return sysfs_emit(buf, "%.*s\n", 32, "I40IW Board ID");
 }
 static DEVICE_ATTR_RO(board_id);
 
@@ -2456,7 +2456,7 @@ static int i40iw_req_notify_cq(struct ib_cq *ibcq,
  * @port_num: port number
  * @immutable: immutable data for the port return
  */
-static int i40iw_port_immutable(struct ib_device *ibdev, u8 port_num,
+static int i40iw_port_immutable(struct ib_device *ibdev, u32 port_num,
 				struct ib_port_immutable *immutable)
 {
 	struct ib_port_attr attr;
@@ -2550,12 +2550,12 @@ static void i40iw_get_dev_fw_str(struct ib_device *dev, char *str)
 }
 
 /**
- * i40iw_alloc_hw_stats - Allocate a hw stats structure
+ * i40iw_alloc_hw_port_stats - Allocate a hw stats structure
  * @ibdev: device pointer from stack
  * @port_num: port number
  */
-static struct rdma_hw_stats *i40iw_alloc_hw_stats(struct ib_device *ibdev,
-						  u8 port_num)
+static struct rdma_hw_stats *i40iw_alloc_hw_port_stats(struct ib_device *ibdev,
+				   u32 port_num)
 {
 	struct i40iw_device *iwdev = to_iwdev(ibdev);
 	struct i40iw_sc_dev *dev = &iwdev->sc_dev;
@@ -2577,6 +2577,16 @@ static struct rdma_hw_stats *i40iw_alloc_hw_stats(struct ib_device *ibdev,
 					  lifespan);
 }
 
+static struct rdma_hw_stats *
+i40iw_alloc_hw_device_stats(struct ib_device *ibdev)
+{
+       /*
+        * It is probably a bug that i40iw reports its port stats as device
+        * stats
+        */
+       return i40iw_alloc_hw_port_stats(ibdev, 0);
+}
+
 /**
  * i40iw_get_hw_stats - Populates the rdma_hw_stats structure
  * @ibdev: device pointer from stack
@@ -2586,7 +2596,7 @@ static struct rdma_hw_stats *i40iw_alloc_hw_stats(struct ib_device *ibdev,
  */
 static int i40iw_get_hw_stats(struct ib_device *ibdev,
 			      struct rdma_hw_stats *stats,
-			      u8 port_num, int index)
+			      u32 port_num, int index)
 {
 	struct i40iw_device *iwdev = to_iwdev(ibdev);
 	struct i40iw_sc_dev *dev = &iwdev->sc_dev;
@@ -2613,7 +2623,7 @@ static int i40iw_get_hw_stats(struct ib_device *ibdev,
  * @gid: Global ID
  */
 static int i40iw_query_gid(struct ib_device *ibdev,
-			   u8 port,
+			   u32 port,
 			   int index,
 			   union ib_gid *gid)
 {
@@ -2630,7 +2640,8 @@ static const struct ib_device_ops i40iw_dev_ops = {
 	/* NOTE: Older kernels wrongly use 0 for the uverbs_abi_ver */
 	.uverbs_abi_ver = I40IW_ABI_VER,
 
-	.alloc_hw_stats = i40iw_alloc_hw_stats,
+	.alloc_hw_device_stats = i40iw_alloc_hw_device_stats,
+	.alloc_hw_port_stats = i40iw_alloc_hw_port_stats,
 	.alloc_mr = i40iw_alloc_mr,
 	.alloc_pd = i40iw_alloc_pd,
 	.alloc_ucontext = i40iw_alloc_ucontext,
@@ -2641,6 +2652,7 @@ static const struct ib_device_ops i40iw_dev_ops = {
 	.dereg_mr = i40iw_dereg_mr,
 	.destroy_cq = i40iw_destroy_cq,
 	.destroy_qp = i40iw_destroy_qp,
+	.device_group = &i40iw_attr_group,
 	.drain_rq = i40iw_drain_rq,
 	.drain_sq = i40iw_drain_sq,
 	.get_dev_fw_str = i40iw_get_dev_fw_str,
@@ -2744,7 +2756,6 @@ int i40iw_register_rdma_device(struct i40iw_device *iwdev)
 	if (!iwdev->iwibdev)
 		return -ENOMEM;
 	iwibdev = iwdev->iwibdev;
-	rdma_set_device_sysfs_group(&iwibdev->ibdev, &i40iw_attr_group);
 	ret = ib_device_set_netdev(&iwibdev->ibdev, iwdev->netdev, 1);
 	if (ret)
 		goto error;
