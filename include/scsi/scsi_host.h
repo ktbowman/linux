@@ -722,14 +722,13 @@ struct Scsi_Host {
 	struct device *dma_dev;
 
 	RH_KABI_USE(1, unsigned nr_maps)
+	RH_KABI_USE(2, 3, struct list_head eh_abort_list)
 
 	/* FOR RH USE ONLY
 	 *
 	 * The following padding has been inserted before ABI freeze to
 	 * allow extending the structure while preserving ABI.
 	 */
-	RH_KABI_RESERVE(2)
-	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
 	RH_KABI_RESERVE(5)
 	RH_KABI_RESERVE(6)
