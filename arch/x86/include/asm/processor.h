@@ -879,6 +879,8 @@ static inline int mpx_disable_management(void)
 }
 #endif /* CONFIG_X86_INTEL_MPX */
 
+extern u16 get_llc_id(unsigned int cpu);
+
 #ifdef CONFIG_CPU_SUP_AMD
 extern u32 amd_get_nodes_per_socket(void);
 extern u32 amd_get_highest_perf(void);
