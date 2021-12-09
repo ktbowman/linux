@@ -49,7 +49,7 @@ noinline void tls_err_abort(struct sock *sk, int err)
 	WARN_ON_ONCE(err >= 0);
 	/* sk->sk_err should contain a positive error code. */
 	sk->sk_err = -err;
-	sk->sk_error_report(sk);
+	sk_error_report(sk);
 }
 
 static int __skb_nsg(struct sk_buff *skb, int offset, int len,
