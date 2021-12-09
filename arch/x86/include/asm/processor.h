@@ -88,6 +88,8 @@ struct cpuinfo_x86_extended_rh {
 	u16			cpu_die_id;
 	u16			logical_die_id;
 	int                     x86_cache_mbm_width_offset;
+	/*  Is SMT active on this core? */
+	bool			smt_active;
 #ifdef CONFIG_X86_VMX_FEATURE_NAMES
 	__u32			vmx_capability[NVMXINTS];
 #endif
