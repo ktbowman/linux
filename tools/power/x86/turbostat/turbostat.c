@@ -2270,7 +2270,7 @@ int amt_pkg_cstate_limits[16] = {PCLUNL, PCL__1, PCL__2, PCLRSV, PCLRSV, PCLRSV,
 int phi_pkg_cstate_limits[16] = {PCL__0, PCL__2, PCL_6N, PCL_6R, PCLRSV, PCLRSV, PCLRSV, PCLUNL, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV};
 int glm_pkg_cstate_limits[16] = {PCLUNL, PCL__1, PCL__3, PCL__6, PCL__7, PCL_7S, PCL__8, PCL__9, PCL_10, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV};
 int skx_pkg_cstate_limits[16] = {PCL__0, PCL__2, PCL_6N, PCL_6R, PCLRSV, PCLRSV, PCLRSV, PCLUNL, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV};
-
+int icx_pkg_cstate_limits[16] = {PCL__0, PCL__2, PCL__6, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLUNL, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV, PCLRSV};
 
 static void
 calculate_tsc_tweak()
@@ -2385,6 +2385,7 @@ int has_turbo_ratio_group_limits(int family, int model)
 	switch (model) {
 	case INTEL_FAM6_ATOM_GOLDMONT:
 	case INTEL_FAM6_SKYLAKE_X:
+	case INTEL_FAM6_ICELAKE_X:
 	case INTEL_FAM6_ATOM_GOLDMONT_D:
 	case INTEL_FAM6_ATOM_TREMONT_D:
 		return 1;
@@ -3625,6 +3626,10 @@ int probe_nhm_msrs(unsigned int family, unsigned int model)
 		pkg_cstate_limits = skx_pkg_cstate_limits;
 		has_misc_feature_control = 1;
 		break;
+	case INTEL_FAM6_ICELAKE_X:	/* ICX */
+		pkg_cstate_limits = icx_pkg_cstate_limits;
+		has_misc_feature_control = 1;
+		break;
 	case INTEL_FAM6_ATOM_SILVERMONT:	/* BYT */
 		no_MSR_MISC_PWR_MGMT = 1;
 	case INTEL_FAM6_ATOM_SILVERMONT_D:	/* AVN */
@@ -3713,6 +3718,20 @@ int is_skx(unsigned int family, unsigned int model)
 	}
 	return 0;
 }
+
+int is_icx(unsigned int family, unsigned int model)
+{
+
+	if (!genuine_intel)
+		return 0;
+
+	switch (model) {
+	case INTEL_FAM6_ICELAKE_X:
+		return 1;
+	}
+	return 0;
+}
+
 int is_ehl(unsigned int family, unsigned int model)
 {
 	if (!genuine_intel)
@@ -3815,6 +3834,7 @@ int has_glm_turbo_ratio_limit(unsigned int family, unsigned int model)
 	switch (model) {
 	case INTEL_FAM6_ATOM_GOLDMONT:
 	case INTEL_FAM6_SKYLAKE_X:
+	case INTEL_FAM6_ICELAKE_X:
 		return 1;
 	default:
 		return 0;
@@ -3840,6 +3860,7 @@ int has_config_tdp(unsigned int family, unsigned int model)
 	case INTEL_FAM6_SKYLAKE_L:	/* SKL */
 	case INTEL_FAM6_CANNONLAKE_L:	/* CNL */
 	case INTEL_FAM6_SKYLAKE_X:	/* SKX */
+	case INTEL_FAM6_ICELAKE_X:	/* ICX */
 
 	case INTEL_FAM6_XEON_PHI_KNL:	/* Knights Landing */
 		return 1;
@@ -4370,6 +4391,7 @@ void rapl_probe_intel(unsigned int family, unsigned int model)
 	case INTEL_FAM6_HASWELL_X:	/* HSX */
 	case INTEL_FAM6_BROADWELL_X:	/* BDX */
 	case INTEL_FAM6_SKYLAKE_X:	/* SKX */
+	case INTEL_FAM6_ICELAKE_X:	/* ICX */
 	case INTEL_FAM6_XEON_PHI_KNL:	/* KNL */
 		do_rapl = RAPL_PKG | RAPL_DRAM | RAPL_DRAM_POWER_INFO | RAPL_DRAM_PERF_STATUS | RAPL_PKG_PERF_STATUS | RAPL_PKG_POWER_INFO;
 		BIC_PRESENT(BIC_PKG__);
@@ -4526,7 +4548,8 @@ void perf_limit_reasons_probe(unsigned int family, unsigned int model)
 
 void automatic_cstate_conversion_probe(unsigned int family, unsigned int model)
 {
-	if (is_skx(family, model) || is_bdx(family, model))
+	if (is_skx(family, model) || is_bdx(family, model) ||
+	    is_icx(family, model))
 		has_automatic_cstate_conversion = 1;
 }
 
@@ -4741,6 +4764,7 @@ int has_snb_msrs(unsigned int family, unsigned int model)
 	case INTEL_FAM6_SKYLAKE_L:	/* SKL */
 	case INTEL_FAM6_CANNONLAKE_L:	/* CNL */
 	case INTEL_FAM6_SKYLAKE_X:	/* SKX */
+	case INTEL_FAM6_ICELAKE_X:	/* ICX */
 	case INTEL_FAM6_ATOM_GOLDMONT:	/* BXT */
 	case INTEL_FAM6_ATOM_GOLDMONT_PLUS:
 	case INTEL_FAM6_ATOM_GOLDMONT_D:	/* DNV */
@@ -5079,10 +5103,9 @@ unsigned int intel_model_duplicates(unsigned int model)
 	case INTEL_FAM6_ATOM_TREMONT_L:
 		return INTEL_FAM6_ATOM_TREMONT;
 
-	case INTEL_FAM6_ICELAKE_X:
 	case INTEL_FAM6_ICELAKE_D:
 	case INTEL_FAM6_SAPPHIRERAPIDS_X:
-		return INTEL_FAM6_SKYLAKE_X;
+		return INTEL_FAM6_ICELAKE_X;
 	}
 	return model;
 }
@@ -5205,8 +5228,9 @@ void process_cpuid()
 		__cpuid(0x80000007, eax, ebx, ecx, edx);
 		has_invariant_tsc = edx & (1 << 8);
 	}
-	if (genuine_intel)
+	if (genuine_intel) {
 		model = intel_model_duplicates(model);
+	}
 
 	/*
 	 * APERF/MPERF is advertised by CPUID.EAX=0x6: ECX.bit0
@@ -5371,7 +5395,7 @@ void process_cpuid()
 		BIC_NOT_PRESENT(BIC_Pkgpc7);
 		use_c1_residency_msr = 1;
 	}
-	if (is_skx(family, model)) {
+	if (is_skx(family, model) || is_icx(family, model)) {
 		BIC_NOT_PRESENT(BIC_CPU_c3);
 		BIC_NOT_PRESENT(BIC_Pkgpc3);
 		BIC_NOT_PRESENT(BIC_CPU_c7);
