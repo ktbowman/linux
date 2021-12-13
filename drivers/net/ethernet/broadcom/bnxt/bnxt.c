@@ -278,6 +278,7 @@ static const u16 bnxt_async_events_arr[] = {
 	ASYNC_EVENT_CMPL_EVENT_ID_RESET_NOTIFY,
 	ASYNC_EVENT_CMPL_EVENT_ID_ERROR_RECOVERY,
 	ASYNC_EVENT_CMPL_EVENT_ID_DEBUG_NOTIFICATION,
+	ASYNC_EVENT_CMPL_EVENT_ID_DEFERRED_RESPONSE,
 	ASYNC_EVENT_CMPL_EVENT_ID_RING_MONITOR_MSG,
 	ASYNC_EVENT_CMPL_EVENT_ID_ECHO_REQUEST,
 	ASYNC_EVENT_CMPL_EVENT_ID_PPS_TIMESTAMP,
@@ -2270,6 +2271,12 @@ static int bnxt_async_event_process(struct bnxt *bp,
 		bnxt_event_error_report(bp, data1, data2);
 		goto async_event_process_exit;
 	}
+	case ASYNC_EVENT_CMPL_EVENT_ID_DEFERRED_RESPONSE: {
+		u16 seq_id = le32_to_cpu(cmpl->event_data2) & 0xffff;
+
+		hwrm_update_token(bp, seq_id, BNXT_HWRM_DEFERRED);
+		goto async_event_process_exit;
+	}
 	default:
 		goto async_event_process_exit;
 	}
@@ -2289,10 +2296,7 @@ static int bnxt_hwrm_handler(struct bnxt *bp, struct tx_cmp *txcmp)
 	switch (cmpl_type) {
 	case CMPL_BASE_TYPE_HWRM_DONE:
 		seq_id = le16_to_cpu(h_cmpl->sequence_id);
-		if (seq_id == bp->hwrm_intr_seq_id)
-			bp->hwrm_intr_seq_id = (u16)~bp->hwrm_intr_seq_id;
-		else
-			netdev_err(bp->dev, "Invalid hwrm seq id %d\n", seq_id);
+		hwrm_update_token(bp, seq_id, BNXT_HWRM_COMPLETE);
 		break;
 
 	case CMPL_BASE_TYPE_HWRM_FWD_REQ:
@@ -3959,8 +3963,15 @@ out:
 
 static void bnxt_free_hwrm_resources(struct bnxt *bp)
 {
+	struct bnxt_hwrm_wait_token *token;
+
 	dma_pool_destroy(bp->hwrm_dma_pool);
 	bp->hwrm_dma_pool = NULL;
+
+	rcu_read_lock();
+	hlist_for_each_entry_rcu(token, &bp->hwrm_pending_list, node)
+		WRITE_ONCE(token->state, BNXT_HWRM_CANCELLED);
+	rcu_read_unlock();
 }
 
 static int bnxt_alloc_hwrm_resources(struct bnxt *bp)
@@ -3970,6 +3981,8 @@ static int bnxt_alloc_hwrm_resources(struct bnxt *bp)
 					    BNXT_HWRM_DMA_ALIGN, 0);
 	if (!bp->hwrm_dma_pool)
 		return -ENOMEM;
+
+	INIT_HLIST_HEAD(&bp->hwrm_pending_list);
 
 	return 0;
 }
