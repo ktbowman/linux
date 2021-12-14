@@ -418,9 +418,8 @@ static void ks8851_init_mac(struct ks8851_net *ks)
 	struct net_device *dev = ks->netdev;
 	const u8 *mac_addr;
 
-	mac_addr = of_get_mac_address(ks->spidev->dev.of_node);
+	mac_addr = of_get_mac_address(ks->spidev->dev.of_node, dev->dev_addr);
 	if (!IS_ERR(mac_addr)) {
-		ether_addr_copy(dev->dev_addr, mac_addr);
 		ks8851_write_mac_addr(dev);
 		return;
 	}
