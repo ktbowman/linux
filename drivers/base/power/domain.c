@@ -299,6 +299,18 @@ static int _genpd_reeval_performance_state(struct generic_pm_domain *genpd,
 	return state;
 }
 
+static int genpd_xlate_performance_state(struct generic_pm_domain *genpd,
+					 struct generic_pm_domain *parent,
+					 unsigned int pstate)
+{
+	if (!parent->set_performance_state)
+		return pstate;
+
+	return dev_pm_opp_xlate_performance_state(genpd->opp_table,
+						  parent->opp_table,
+						  pstate);
+}
+
 static int _genpd_set_performance_state(struct generic_pm_domain *genpd,
 					unsigned int state, int depth)
 {
@@ -313,13 +325,8 @@ static int _genpd_set_performance_state(struct generic_pm_domain *genpd,
 	list_for_each_entry(link, &genpd->child_links, child_node) {
 		parent = link->parent;
 
-		if (!parent->set_performance_state)
-			continue;
-
 		/* Find parent's performance state */
-		ret = dev_pm_opp_xlate_performance_state(genpd->opp_table,
-							 parent->opp_table,
-							 state);
+		ret = genpd_xlate_performance_state(genpd, parent, state);
 		if (unlikely(ret < 0))
 			goto err;
 
@@ -341,9 +348,11 @@ static int _genpd_set_performance_state(struct generic_pm_domain *genpd,
 			goto err;
 	}
 
-	ret = genpd->set_performance_state(genpd, state);
-	if (ret)
-		goto err;
+	if (genpd->set_performance_state) {
+		ret = genpd->set_performance_state(genpd, state);
+		if (ret)
+			goto err;
+	}
 
 	genpd->performance_state = state;
 	return 0;
@@ -353,9 +362,6 @@ err:
 	list_for_each_entry_continue_reverse(link, &genpd->child_links,
 					     child_node) {
 		parent = link->parent;
-
-		if (!parent->set_performance_state)
-			continue;
 
 		genpd_lock_nested(parent, depth + 1);
 
@@ -400,9 +406,6 @@ int dev_pm_genpd_set_performance_state(struct device *dev, unsigned int state)
 	genpd = dev_to_genpd(dev);
 	if (IS_ERR(genpd))
 		return -ENODEV;
-
-	if (unlikely(!genpd->set_performance_state))
-		return -EINVAL;
 
 	if (WARN_ON(!dev->power.subsys_data ||
 		     !dev->power.subsys_data->domain_data))
