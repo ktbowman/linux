@@ -80,6 +80,8 @@
 #include <linux/capability.h>
 #include <linux/user_namespace.h>
 
+#include "datagram.h"
+
 struct kmem_cache *skbuff_head_cache __ro_after_init;
 static struct kmem_cache *skbuff_fclone_cache __ro_after_init;
 #ifdef CONFIG_SKB_EXTENSIONS
@@ -1183,9 +1185,6 @@ void sock_zerocopy_put_abort(struct ubuf_info *uarg)
 	}
 }
 EXPORT_SYMBOL_GPL(sock_zerocopy_put_abort);
-
-extern int __zerocopy_sg_from_iter(struct sock *sk, struct sk_buff *skb,
-				   struct iov_iter *from, size_t length);
 
 int skb_zerocopy_iter_stream(struct sock *sk, struct sk_buff *skb,
 			     struct msghdr *msg, int len,

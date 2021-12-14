@@ -62,6 +62,8 @@
 #include <trace/events/skb.h>
 #include <net/busy_poll.h>
 
+#include "datagram.h"
+
 /*
  *	Is a socket 'connection oriented' ?
  */
