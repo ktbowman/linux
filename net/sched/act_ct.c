@@ -961,6 +961,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	tmpl = p->tmpl;
 
 	tcf_lastuse_update(&c->tcf_tm);
+	tcf_action_update_bstats(&c->common, skb);
 
 	if (clear) {
 		qdisc_skb_cb(skb)->post_ct = false;
@@ -1038,7 +1039,8 @@ do_nat:
 		/* This will take care of sending queued events
 		 * even if the connection is already confirmed.
 		 */
-		nf_conntrack_confirm(skb);
+		if (nf_conntrack_confirm(skb) != NF_ACCEPT)
+			goto drop;
 	}
 
 	if (!skip_add)
@@ -1049,7 +1051,6 @@ out_push:
 
 	qdisc_skb_cb(skb)->post_ct = true;
 out_clear:
-	tcf_action_update_bstats(&c->common, skb);
 	if (defrag)
 		qdisc_skb_cb(skb)->pkt_len = skb->len;
 	return retval;
