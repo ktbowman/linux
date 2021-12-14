@@ -753,6 +753,9 @@ struct sk_buff {
 			void		(*destructor)(struct sk_buff *skb);
 		};
 		struct list_head	tcp_tsorted_anchor;
+#ifdef CONFIG_NET_SOCK_MSG
+		RH_KABI_EXTEND(unsigned long		_sk_redir)
+#endif
 	};
 
 #ifdef CONFIG_XFRM
