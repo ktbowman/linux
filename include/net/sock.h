@@ -1247,7 +1247,7 @@ struct proto {
 
 	RH_KABI_USE(1, bool	(*bpf_bypass_getsockopt)(int level,
 							 int optname))
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE(2, int	(*psock_update_sk_prot)(struct sock *sk, bool restore))
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
 	RH_KABI_RESERVE(5)
