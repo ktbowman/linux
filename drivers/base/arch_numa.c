@@ -361,11 +361,12 @@ static int __init numa_register_nodes(void)
 	/* Check that valid nid is set to memblks */
 	for_each_memblock(memory, mblk) {
 		int mblk_nid = memblock_get_region_node(mblk);
+		phys_addr_t start = mblk->base;
+		phys_addr_t end = mblk->base + mblk->size - 1;
 
 		if (mblk_nid == NUMA_NO_NODE || mblk_nid >= MAX_NUMNODES) {
-			pr_warn("Warning: invalid memblk node %d [mem %#010Lx-%#010Lx]\n",
-				mblk_nid, mblk->base,
-				mblk->base + mblk->size - 1);
+			pr_warn("Warning: invalid memblk node %d [mem %pap-%pap]\n",
+				mblk_nid, &start, &end);
 			return -EINVAL;
 		}
 	}
