@@ -5833,7 +5833,7 @@ static void build_zonelists(pg_data_t *pgdat)
 		 */
 		if (node_distance(local_node, node) !=
 		    node_distance(local_node, prev_node))
-			node_load[node] = load;
+			node_load[node] += load;
 
 		node_order[nr_nodes++] = node;
 		prev_node = node;
@@ -7626,7 +7626,7 @@ void adjust_managed_page_count(struct page *page, long count)
 }
 EXPORT_SYMBOL(adjust_managed_page_count);
 
-unsigned long free_reserved_area(void *start, void *end, int poison, char *s)
+unsigned long free_reserved_area(void *start, void *end, int poison, const char *s)
 {
 	void *pos;
 	unsigned long pages = 0;
