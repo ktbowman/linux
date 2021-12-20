@@ -586,15 +586,6 @@ static int tx2_uncore_event_init(struct perf_event *event)
 	if (is_sampling_event(event) || event->attach_state & PERF_ATTACH_TASK)
 		return -EINVAL;
 
-	/* We have no filtering of any kind */
-	if (event->attr.exclude_user	||
-	    event->attr.exclude_kernel	||
-	    event->attr.exclude_hv	||
-	    event->attr.exclude_idle	||
-	    event->attr.exclude_host	||
-	    event->attr.exclude_guest)
-		return -EINVAL;
-
 	if (event->cpu < 0)
 		return -EINVAL;
 
@@ -746,6 +737,7 @@ static int tx2_uncore_pmu_register(
 		.start		= tx2_uncore_event_start,
 		.stop		= tx2_uncore_event_stop,
 		.read		= tx2_uncore_event_read,
+		.capabilities	= PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
 	tx2_pmu->pmu.name = devm_kasprintf(dev, GFP_KERNEL,
@@ -813,19 +805,20 @@ static struct tx2_uncore_pmu *tx2_uncore_pmu_init_dev(struct device *dev,
 	list_for_each_entry(rentry, &list, node) {
 		if (resource_type(rentry->res) == IORESOURCE_MEM) {
 			res = *rentry->res;
+			rentry = NULL;
 			break;
 		}
 	}
-
-	if (!rentry->res)
-		return NULL;
-
 	acpi_dev_free_resource_list(&list);
-	base = devm_ioremap_resource(dev, &res);
-	if (IS_ERR(base)) {
-		dev_err(dev, "PMU type %d: Fail to map resource\n", type);
+
+	if (rentry) {
+		dev_err(dev, "PMU type %d: Fail to find resource\n", type);
 		return NULL;
 	}
+
+	base = devm_ioremap_resource(dev, &res);
+	if (IS_ERR(base))
+		return NULL;
 
 	tx2_pmu = devm_kzalloc(dev, sizeof(*tx2_pmu), GFP_KERNEL);
 	if (!tx2_pmu)
@@ -1025,6 +1018,7 @@ static struct platform_driver tx2_uncore_driver = {
 	.driver = {
 		.name		= "tx2-uncore-pmu",
 		.acpi_match_table = ACPI_PTR(tx2_uncore_acpi_match),
+		.suppress_bind_attrs = true,
 	},
 	.probe = tx2_uncore_probe,
 	.remove = tx2_uncore_remove,
