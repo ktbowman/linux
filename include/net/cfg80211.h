@@ -3520,7 +3520,10 @@ struct cfg80211_pmsr_result {
  *		 If neither @trigger_based nor @non_trigger_based is set,
  *		 EDCA based ranging will be used.
  * @lmr_feedback: negotiate for I2R LMR feedback. Only valid if either
- *	@trigger_based or @non_trigger_based is set.
+ *		 @trigger_based or @non_trigger_based is set.
+ * @bss_color: the bss color of the responder. Optional. Set to zero to
+ *	indicate the driver should set the BSS color. Only valid if
+ *	@non_trigger_based or @trigger_based is set.
  *
  * See also nl80211 for the respective attribute documentation.
  */
@@ -3538,6 +3541,7 @@ struct cfg80211_pmsr_ftm_request_peer {
 	u8 burst_duration;
 	u8 ftms_per_burst;
 	u8 ftmr_retries;
+	u8 bss_color;
 };
 
 /**
