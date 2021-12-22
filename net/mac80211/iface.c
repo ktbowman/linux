@@ -1457,7 +1457,10 @@ static void ieee80211_iface_work(struct work_struct *work)
 	/* first process frames */
 	while ((skb = skb_dequeue(&sdata->skb_queue))) {
 
-		ieee80211_iface_process_skb(local, sdata, skb);
+		if (skb->protocol == cpu_to_be16(ETH_P_TDLS))
+			ieee80211_process_tdls_channel_switch(sdata, skb);
+		else
+			ieee80211_iface_process_skb(local, sdata, skb);
 
 		kfree_skb(skb);
 	}
