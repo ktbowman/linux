@@ -541,6 +541,22 @@ struct qed_iscsi_pf_params {
 	u8 bdq_pbl_num_entries[3];
 };
 
+struct qed_nvmetcp_pf_params {
+	u64 glbl_q_params_addr;
+	u16 cq_num_entries;
+	u16 num_cons;
+	u16 num_tasks;
+	u8 num_sq_pages_in_ring;
+	u8 num_r2tq_pages_in_ring;
+	u8 num_uhq_pages_in_ring;
+	u8 num_queues;
+	u8 gl_rq_pi;
+	u8 gl_cmd_pi;
+	u8 debug_mode;
+	u8 ll2_ooo_queue_id;
+	u16 min_rto;
+};
+
 struct qed_rdma_pf_params {
 	/* Supplied to QED during resource allocation (may affect the ILT and
 	 * the doorbell BAR).
@@ -559,6 +575,7 @@ struct qed_pf_params {
 	struct qed_eth_pf_params eth_pf_params;
 	struct qed_fcoe_pf_params fcoe_pf_params;
 	struct qed_iscsi_pf_params iscsi_pf_params;
+	struct qed_nvmetcp_pf_params nvmetcp_pf_params;
 	struct qed_rdma_pf_params rdma_pf_params;
 };
 
@@ -661,6 +678,7 @@ enum qed_sb_type {
 enum qed_protocol {
 	QED_PROTOCOL_ETH,
 	QED_PROTOCOL_ISCSI,
+	QED_PROTOCOL_NVMETCP = QED_PROTOCOL_ISCSI,
 	QED_PROTOCOL_FCOE,
 };
 
@@ -851,10 +869,9 @@ struct qed_common_ops {
 	struct qed_dev*	(*probe)(struct pci_dev *dev,
 				 struct qed_probe_params *params);
 
-	void		(*remove)(struct qed_dev *cdev);
+	void (*remove)(struct qed_dev *cdev);
 
-	int		(*set_power_state)(struct qed_dev *cdev,
-					   pci_power_t state);
+	int (*set_power_state)(struct qed_dev *cdev, pci_power_t state);
 
 	void (*set_name) (struct qed_dev *cdev, char name[]);
 
@@ -862,50 +879,48 @@ struct qed_common_ops {
 	 * PF params required for the call before slowpath_start is
 	 * documented within the qed_pf_params structure definition.
 	 */
-	void		(*update_pf_params)(struct qed_dev *cdev,
-					    struct qed_pf_params *params);
-	int		(*slowpath_start)(struct qed_dev *cdev,
-					  struct qed_slowpath_params *params);
+	void (*update_pf_params)(struct qed_dev *cdev,
+				 struct qed_pf_params *params);
 
-	int		(*slowpath_stop)(struct qed_dev *cdev);
+	int (*slowpath_start)(struct qed_dev *cdev,
+			      struct qed_slowpath_params *params);
+
+	int (*slowpath_stop)(struct qed_dev *cdev);
 
 	/* Requests to use `cnt' interrupts for fastpath.
 	 * upon success, returns number of interrupts allocated for fastpath.
 	 */
-	int		(*set_fp_int)(struct qed_dev *cdev,
-				      u16 cnt);
+	int (*set_fp_int)(struct qed_dev *cdev, u16 cnt);
 
 	/* Fills `info' with pointers required for utilizing interrupts */
-	int		(*get_fp_int)(struct qed_dev *cdev,
-				      struct qed_int_info *info);
+	int (*get_fp_int)(struct qed_dev *cdev, struct qed_int_info *info);
 
-	u32		(*sb_init)(struct qed_dev *cdev,
-				   struct qed_sb_info *sb_info,
-				   void *sb_virt_addr,
-				   dma_addr_t sb_phy_addr,
-				   u16 sb_id,
-				   enum qed_sb_type type);
+	u32 (*sb_init)(struct qed_dev *cdev,
+		       struct qed_sb_info *sb_info,
+		       void *sb_virt_addr,
+		       dma_addr_t sb_phy_addr,
+		       u16 sb_id,
+		       enum qed_sb_type type);
 
-	u32		(*sb_release)(struct qed_dev *cdev,
-				      struct qed_sb_info *sb_info,
-				      u16 sb_id,
-				      enum qed_sb_type type);
+	u32 (*sb_release)(struct qed_dev *cdev,
+			  struct qed_sb_info *sb_info,
+			  u16 sb_id,
+			  enum qed_sb_type type);
 
-	void		(*simd_handler_config)(struct qed_dev *cdev,
-					       void *token,
-					       int index,
-					       void (*handler)(void *));
+	void (*simd_handler_config)(struct qed_dev *cdev,
+				    void *token,
+				    int index,
+				    void (*handler)(void *));
 
-	void		(*simd_handler_clean)(struct qed_dev *cdev,
-					      int index);
-	int (*dbg_grc)(struct qed_dev *cdev,
-		       void *buffer, u32 *num_dumped_bytes);
+	void (*simd_handler_clean)(struct qed_dev *cdev, int index);
+
+	int (*dbg_grc)(struct qed_dev *cdev, void *buffer, u32 *num_dumped_bytes);
 
 	int (*dbg_grc_size)(struct qed_dev *cdev);
 
-	int (*dbg_all_data) (struct qed_dev *cdev, void *buffer);
+	int (*dbg_all_data)(struct qed_dev *cdev, void *buffer);
 
-	int (*dbg_all_data_size) (struct qed_dev *cdev);
+	int (*dbg_all_data_size)(struct qed_dev *cdev);
 
 	int (*report_fatal_error)(struct devlink *devlink,
 				  enum qed_hw_err_type err_type);
