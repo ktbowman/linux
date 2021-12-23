@@ -1,7 +1,13 @@
+.. SPDX-License-Identifier: GPL-2.0
+.. include:: <isonum.txt>
+
+===============================================
 Ethernet switch device driver model (switchdev)
 ===============================================
-Copyright (c) 2014 Jiri Pirko <jiri@resnulli.us>
-Copyright (c) 2014-2015 Scott Feldman <sfeldma@gmail.com>
+
+Copyright |copy| 2014 Jiri Pirko <jiri@resnulli.us>
+
+Copyright |copy| 2014-2015 Scott Feldman <sfeldma@gmail.com>
 
 
 The Ethernet switch device driver model (switchdev) is an in-kernel driver
@@ -12,53 +18,57 @@ Figure 1 is a block diagram showing the components of the switchdev model for
 an example setup using a data-center-class switch ASIC chip.  Other setups
 with SR-IOV or soft switches, such as OVS, are possible.
 
+::
 
-                             User-space tools
+
+			     User-space tools
 
        user space                   |
       +-------------------------------------------------------------------+
        kernel                       | Netlink
-                                    |
-                     +--------------+-------------------------------+
-                     |         Network stack                        |
-                     |           (Linux)                            |
-                     |                                              |
-                     +----------------------------------------------+
+				    |
+		     +--------------+-------------------------------+
+		     |         Network stack                        |
+		     |           (Linux)                            |
+		     |                                              |
+		     +----------------------------------------------+
 
-                           sw1p2     sw1p4     sw1p6
-                      sw1p1  +  sw1p3  +  sw1p5  +          eth1
-                        +    |    +    |    +    |            +
-                        |    |    |    |    |    |            |
-                     +--+----+----+----+----+----+---+  +-----+-----+
-                     |         Switch driver         |  |    mgmt   |
-                     |        (this document)        |  |   driver  |
-                     |                               |  |           |
-                     +--------------+----------------+  +-----------+
-                                    |
+			   sw1p2     sw1p4     sw1p6
+		      sw1p1  +  sw1p3  +  sw1p5  +          eth1
+			+    |    +    |    +    |            +
+			|    |    |    |    |    |            |
+		     +--+----+----+----+----+----+---+  +-----+-----+
+		     |         Switch driver         |  |    mgmt   |
+		     |        (this document)        |  |   driver  |
+		     |                               |  |           |
+		     +--------------+----------------+  +-----------+
+				    |
        kernel                       | HW bus (eg PCI)
       +-------------------------------------------------------------------+
        hardware                     |
-                     +--------------+----------------+
-                     |         Switch device (sw1)   |
-                     |  +----+                       +--------+
-                     |  |    v offloaded data path   | mgmt port
-                     |  |    |                       |
-                     +--|----|----+----+----+----+---+
-                        |    |    |    |    |    |
-                        +    +    +    +    +    +
-                       p1   p2   p3   p4   p5   p6
+		     +--------------+----------------+
+		     |         Switch device (sw1)   |
+		     |  +----+                       +--------+
+		     |  |    v offloaded data path   | mgmt port
+		     |  |    |                       |
+		     +--|----|----+----+----+----+---+
+			|    |    |    |    |    |
+			+    +    +    +    +    +
+		       p1   p2   p3   p4   p5   p6
 
-                             front-panel ports
+			     front-panel ports
 
 
-                                    Fig 1.
+				    Fig 1.
 
 
 Include Files
 -------------
 
-#include <linux/netdevice.h>
-#include <net/switchdev.h>
+::
+
+    #include <linux/netdevice.h>
+    #include <net/switchdev.h>
 
 
 Configuration
@@ -114,10 +124,10 @@ Using port PHYS name (ndo_get_phys_port_name) for the key is particularly
 useful for dynamically-named ports where the device names its ports based on
 external configuration.  For example, if a physical 40G port is split logically
 into 4 10G ports, resulting in 4 port netdevs, the device can give a unique
-name for each port using port PHYS name.  The udev rule would be:
+name for each port using port PHYS name.  The udev rule would be::
 
-SUBSYSTEM=="net", ACTION=="add", ATTR{phys_switch_id}=="<phys_switch_id>", \
-	ATTR{phys_port_name}!="", NAME="swX$attr{phys_port_name}"
+    SUBSYSTEM=="net", ACTION=="add", ATTR{phys_switch_id}=="<phys_switch_id>", \
+	    ATTR{phys_port_name}!="", NAME="swX$attr{phys_port_name}"
 
 Suggested naming convention is "swXpYsZ", where X is the switch name or ID, Y
 is the port name or ID, and Z is the sub-port name or ID.  For example, sw1p1s0
@@ -171,21 +181,44 @@ To offloading L2 bridging, the switchdev driver/device should support:
 Static FDB Entries
 ^^^^^^^^^^^^^^^^^^
 
-The switchdev driver should implement ndo_fdb_add, ndo_fdb_del and ndo_fdb_dump
-to support static FDB entries installed to the device.  Static bridge FDB
-entries are installed, for example, using iproute2 bridge cmd:
+A driver which implements the ``ndo_fdb_add``, ``ndo_fdb_del`` and
+``ndo_fdb_dump`` operations is able to support the command below, which adds a
+static bridge FDB entry::
 
-	bridge fdb add ADDR dev DEV [vlan VID] [self]
+        bridge fdb add dev DEV ADDRESS [vlan VID] [self] static
 
-The driver should use the helper switchdev_port_fdb_xxx ops for ndo_fdb_xxx
-ops, and handle add/delete/dump of SWITCHDEV_OBJ_ID_PORT_FDB object using
-switchdev_port_obj_xxx ops.
+(the "static" keyword is non-optional: if not specified, the entry defaults to
+being "local", which means that it should not be forwarded)
 
-XXX: what should be done if offloading this rule to hardware fails (for
-example, due to full capacity in hardware tables) ?
+The "self" keyword (optional because it is implicit) has the role of
+instructing the kernel to fulfill the operation through the ``ndo_fdb_add``
+implementation of the ``DEV`` device itself. If ``DEV`` is a bridge port, this
+will bypass the bridge and therefore leave the software database out of sync
+with the hardware one.
+
+To avoid this, the "master" keyword can be used::
+
+        bridge fdb add dev DEV ADDRESS [vlan VID] master static
+
+The above command instructs the kernel to search for a master interface of
+``DEV`` and fulfill the operation through the ``ndo_fdb_add`` method of that.
+This time, the bridge generates a ``SWITCHDEV_FDB_ADD_TO_DEVICE`` notification
+which the port driver can handle and use it to program its hardware table. This
+way, the software and the hardware database will both contain this static FDB
+entry.
+
+Note: for new switchdev drivers that offload the Linux bridge, implementing the
+``ndo_fdb_add`` and ``ndo_fdb_del`` bridge bypass methods is strongly
+discouraged: all static FDB entries should be added on a bridge port using the
+"master" flag. The ``ndo_fdb_dump`` is an exception and can be implemented to
+visualize the hardware tables, if the device does not have an interrupt for
+notifying the operating system of newly learned/forgotten dynamic FDB
+addresses. In that case, the hardware FDB might end up having entries that the
+software FDB does not, and implementing ``ndo_fdb_dump`` is the only way to see
+them.
 
 Note: by default, the bridge does not filter on VLAN and only bridges untagged
-traffic.  To enable VLAN support, turn on VLAN filtering:
+traffic.  To enable VLAN support, turn on VLAN filtering::
 
 	echo 1 >/sys/class/net/<bridge>/bridge/vlan_filtering
 
@@ -194,7 +227,7 @@ Notification of Learned/Forgotten Source MAC/VLANs
 
 The switch device will learn/forget source MAC address/VLAN on ingress packets
 and notify the switch driver of the mac/vlan/port tuples.  The switch driver,
-in turn, will notify the bridge driver using the switchdev notifier call:
+in turn, will notify the bridge driver using the switchdev notifier call::
 
 	err = call_switchdev_notifiers(val, dev, info, extack);
 
@@ -202,7 +235,7 @@ Where val is SWITCHDEV_FDB_ADD when learning and SWITCHDEV_FDB_DEL when
 forgetting, and info points to a struct switchdev_notifier_fdb_info.  On
 SWITCHDEV_FDB_ADD, the bridge driver will install the FDB entry into the
 bridge's FDB and mark the entry as NTF_EXT_LEARNED.  The iproute2 bridge
-command will label these entries "offload":
+command will label these entries "offload"::
 
 	$ bridge fdb
 	52:54:00:12:35:01 dev sw1p1 master br0 permanent
@@ -219,11 +252,11 @@ command will label these entries "offload":
 	01:00:5e:00:00:01 dev br0 self permanent
 	33:33:ff:12:35:01 dev br0 self permanent
 
-Learning on the port should be disabled on the bridge using the bridge command:
+Learning on the port should be disabled on the bridge using the bridge command::
 
 	bridge link set dev DEV learning off
 
-Learning on the device port should be enabled, as well as learning_sync:
+Learning on the device port should be enabled, as well as learning_sync::
 
 	bridge link set dev DEV learning on self
 	bridge link set dev DEV learning_sync on self
@@ -314,12 +347,16 @@ forwards the packet to the matching FIB entry's nexthop(s) egress ports.
 
 To program the device, the driver has to register a FIB notifier handler
 using register_fib_notifier. The following events are available:
-FIB_EVENT_ENTRY_ADD: used for both adding a new FIB entry to the device,
-                     or modifying an existing entry on the device.
-FIB_EVENT_ENTRY_DEL: used for removing a FIB entry
-FIB_EVENT_RULE_ADD, FIB_EVENT_RULE_DEL: used to propagate FIB rule changes
 
-FIB_EVENT_ENTRY_ADD and FIB_EVENT_ENTRY_DEL events pass:
+===================  ===================================================
+FIB_EVENT_ENTRY_ADD  used for both adding a new FIB entry to the device,
+		     or modifying an existing entry on the device.
+FIB_EVENT_ENTRY_DEL  used for removing a FIB entry
+FIB_EVENT_RULE_ADD,
+FIB_EVENT_RULE_DEL   used to propagate FIB rule changes
+===================  ===================================================
+
+FIB_EVENT_ENTRY_ADD and FIB_EVENT_ENTRY_DEL events pass::
 
 	struct fib_entry_notifier_info {
 		struct fib_notifier_info info; /* must be first */
@@ -332,12 +369,12 @@ FIB_EVENT_ENTRY_ADD and FIB_EVENT_ENTRY_DEL events pass:
 		u32 nlflags;
 	};
 
-to add/modify/delete IPv4 dst/dest_len prefix on table tb_id.  The *fi
-structure holds details on the route and route's nexthops.  *dev is one of the
-port netdevs mentioned in the route's next hop list.
+to add/modify/delete IPv4 dst/dest_len prefix on table tb_id.  The ``*fi``
+structure holds details on the route and route's nexthops.  ``*dev`` is one
+of the port netdevs mentioned in the route's next hop list.
 
 Routes offloaded to the device are labeled with "offload" in the ip route
-listing:
+listing::
 
 	$ ip route show
 	default via 192.168.0.2 dev eth0
@@ -372,21 +409,155 @@ NETEVENT_NEIGH_UPDATE.  The device can be programmed with resolved nexthops
 for the routes as arp_tbl updates.  The driver implements ndo_neigh_destroy
 to know when arp_tbl neighbor entries are purged from the port.
 
-Transaction item queue
-^^^^^^^^^^^^^^^^^^^^^^
+Device driver expected behavior
+-------------------------------
 
-For switchdev ops attr_set and obj_add, there is a 2 phase transaction model
-used. First phase is to "prepare" anything needed, including various checks,
-memory allocation, etc. The goal is to handle the stuff that is not unlikely
-to fail here. The second phase is to "commit" the actual changes.
+Below is a set of defined behavior that switchdev enabled network devices must
+adhere to.
 
-Switchdev provides an infrastructure for sharing items (for example memory
-allocations) between the two phases.
+Configuration-less state
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-The object created by a driver in "prepare" phase and it is queued up by:
-switchdev_trans_item_enqueue()
-During the "commit" phase, the driver gets the object by:
-switchdev_trans_item_dequeue()
+Upon driver bring up, the network devices must be fully operational, and the
+backing driver must configure the network device such that it is possible to
+send and receive traffic to this network device and it is properly separated
+from other network devices/ports (e.g.: as is frequent with a switch ASIC). How
+this is achieved is heavily hardware dependent, but a simple solution can be to
+use per-port VLAN identifiers unless a better mechanism is available
+(proprietary metadata for each network port for instance).
 
-If a transaction is aborted during "prepare" phase, switchdev code will handle
-cleanup of the queued-up objects.
+The network device must be capable of running a full IP protocol stack
+including multicast, DHCP, IPv4/6, etc. If necessary, it should program the
+appropriate filters for VLAN, multicast, unicast etc. The underlying device
+driver must effectively be configured in a similar fashion to what it would do
+when IGMP snooping is enabled for IP multicast over these switchdev network
+devices and unsolicited multicast must be filtered as early as possible in
+the hardware.
+
+When configuring VLANs on top of the network device, all VLANs must be working,
+irrespective of the state of other network devices (e.g.: other ports being part
+of a VLAN-aware bridge doing ingress VID checking). See below for details.
+
+If the device implements e.g.: VLAN filtering, putting the interface in
+promiscuous mode should allow the reception of all VLAN tags (including those
+not present in the filter(s)).
+
+Bridged switch ports
+^^^^^^^^^^^^^^^^^^^^
+
+When a switchdev enabled network device is added as a bridge member, it should
+not disrupt any functionality of non-bridged network devices and they
+should continue to behave as normal network devices. Depending on the bridge
+configuration knobs below, the expected behavior is documented.
+
+Bridge VLAN filtering
+^^^^^^^^^^^^^^^^^^^^^
+
+The Linux bridge allows the configuration of a VLAN filtering mode (statically,
+at device creation time, and dynamically, during run time) which must be
+observed by the underlying switchdev network device/hardware:
+
+- with VLAN filtering turned off: the bridge is strictly VLAN unaware and its
+  data path will process all Ethernet frames as if they are VLAN-untagged.
+  The bridge VLAN database can still be modified, but the modifications should
+  have no effect while VLAN filtering is turned off. Frames ingressing the
+  device with a VID that is not programmed into the bridge/switch's VLAN table
+  must be forwarded and may be processed using a VLAN device (see below).
+
+- with VLAN filtering turned on: the bridge is VLAN-aware and frames ingressing
+  the device with a VID that is not programmed into the bridges/switch's VLAN
+  table must be dropped (strict VID checking).
+
+When there is a VLAN device (e.g: sw0p1.100) configured on top of a switchdev
+network device which is a bridge port member, the behavior of the software
+network stack must be preserved, or the configuration must be refused if that
+is not possible.
+
+- with VLAN filtering turned off, the bridge will process all ingress traffic
+  for the port, except for the traffic tagged with a VLAN ID destined for a
+  VLAN upper. The VLAN upper interface (which consumes the VLAN tag) can even
+  be added to a second bridge, which includes other switch ports or software
+  interfaces. Some approaches to ensure that the forwarding domain for traffic
+  belonging to the VLAN upper interfaces are managed properly:
+
+    * If forwarding destinations can be managed per VLAN, the hardware could be
+      configured to map all traffic, except the packets tagged with a VID
+      belonging to a VLAN upper interface, to an internal VID corresponding to
+      untagged packets. This internal VID spans all ports of the VLAN-unaware
+      bridge. The VID corresponding to the VLAN upper interface spans the
+      physical port of that VLAN interface, as well as the other ports that
+      might be bridged with it.
+    * Treat bridge ports with VLAN upper interfaces as standalone, and let
+      forwarding be handled in the software data path.
+
+- with VLAN filtering turned on, these VLAN devices can be created as long as
+  the bridge does not have an existing VLAN entry with the same VID on any
+  bridge port. These VLAN devices cannot be enslaved into the bridge since they
+  duplicate functionality/use case with the bridge's VLAN data path processing.
+
+Non-bridged network ports of the same switch fabric must not be disturbed in any
+way by the enabling of VLAN filtering on the bridge device(s). If the VLAN
+filtering setting is global to the entire chip, then the standalone ports
+should indicate to the network stack that VLAN filtering is required by setting
+'rx-vlan-filter: on [fixed]' in the ethtool features.
+
+Because VLAN filtering can be turned on/off at runtime, the switchdev driver
+must be able to reconfigure the underlying hardware on the fly to honor the
+toggling of that option and behave appropriately. If that is not possible, the
+switchdev driver can also refuse to support dynamic toggling of the VLAN
+filtering knob at runtime and require a destruction of the bridge device(s) and
+creation of new bridge device(s) with a different VLAN filtering value to
+ensure VLAN awareness is pushed down to the hardware.
+
+Even when VLAN filtering in the bridge is turned off, the underlying switch
+hardware and driver may still configure itself in a VLAN-aware mode provided
+that the behavior described above is observed.
+
+The VLAN protocol of the bridge plays a role in deciding whether a packet is
+treated as tagged or not: a bridge using the 802.1ad protocol must treat both
+VLAN-untagged packets, as well as packets tagged with 802.1Q headers, as
+untagged.
+
+The 802.1p (VID 0) tagged packets must be treated in the same way by the device
+as untagged packets, since the bridge device does not allow the manipulation of
+VID 0 in its database.
+
+When the bridge has VLAN filtering enabled and a PVID is not configured on the
+ingress port, untagged and 802.1p tagged packets must be dropped. When the bridge
+has VLAN filtering enabled and a PVID exists on the ingress port, untagged and
+priority-tagged packets must be accepted and forwarded according to the
+bridge's port membership of the PVID VLAN. When the bridge has VLAN filtering
+disabled, the presence/lack of a PVID should not influence the packet
+forwarding decision.
+
+Bridge IGMP snooping
+^^^^^^^^^^^^^^^^^^^^
+
+The Linux bridge allows the configuration of IGMP snooping (statically, at
+interface creation time, or dynamically, during runtime) which must be observed
+by the underlying switchdev network device/hardware in the following way:
+
+- when IGMP snooping is turned off, multicast traffic must be flooded to all
+  ports within the same bridge that have mcast_flood=true. The CPU/management
+  port should ideally not be flooded (unless the ingress interface has
+  IFF_ALLMULTI or IFF_PROMISC) and continue to learn multicast traffic through
+  the network stack notifications. If the hardware is not capable of doing that
+  then the CPU/management port must also be flooded and multicast filtering
+  happens in software.
+
+- when IGMP snooping is turned on, multicast traffic must selectively flow
+  to the appropriate network ports (including CPU/management port). Flooding of
+  unknown multicast should be only towards the ports connected to a multicast
+  router (the local device may also act as a multicast router).
+
+The switch must adhere to RFC 4541 and flood multicast traffic accordingly
+since that is what the Linux bridge implementation does.
+
+Because IGMP snooping can be turned on/off at runtime, the switchdev driver
+must be able to reconfigure the underlying hardware on the fly to honor the
+toggling of that option and behave appropriately.
+
+A switchdev driver can also refuse to support dynamic toggling of the multicast
+snooping knob at runtime and require the destruction of the bridge device(s)
+and creation of a new bridge device(s) with a different multicast snooping
+value.
