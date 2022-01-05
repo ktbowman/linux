@@ -22,4 +22,6 @@ void intel_fdi_init_hook(struct drm_i915_private *dev_priv);
 void hsw_fdi_link_train(struct intel_encoder *encoder,
 			const struct intel_crtc_state *crtc_state);
 
+void intel_fdi_link_train(struct intel_crtc *crtc,
+			  const struct intel_crtc_state *crtc_state);
 #endif
