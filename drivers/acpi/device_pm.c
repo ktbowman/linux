@@ -26,6 +26,7 @@
 #include <linux/pm_runtime.h>
 #include <linux/suspend.h>
 
+#include "fan.h"
 #include "internal.h"
 
 #define _COMPONENT	ACPI_POWER_COMPONENT
@@ -1145,17 +1146,46 @@ static int acpi_subsys_resume_noirq(struct device *dev)
  *
  * Use ACPI to put the given device into the full-power state and carry out the
  * generic early resume procedure for it during system transition into the
- * working state.
+ * working state, but only do that if device either defines early resume
+ * handler, or does not define power operations at all. Otherwise powering up
+ * of the device is postponed to the normal resume phase.
  */
 static int acpi_subsys_resume_early(struct device *dev)
 {
+	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
 	int ret;
 
 	if (dev_pm_skip_resume(dev))
 		return 0;
 
+	if (pm && !pm->resume_early) {
+		dev_dbg(dev, "postponing D0 transition to normal resume stage\n");
+		return 0;
+	}
+
 	ret = acpi_dev_resume(dev);
 	return ret ? ret : pm_generic_resume_early(dev);
+}
+
+/**
+ * acpi_subsys_resume - Resume device using ACPI.
+ * @dev: Device to Resume.
+ *
+ * Use ACPI to put the given device into the full-power state if it has not been
+ * powered up during early resume phase, and carry out the generic resume
+ * procedure for it during system transition into the working state.
+ */
+static int acpi_subsys_resume(struct device *dev)
+{
+	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
+	int ret = 0;
+
+	if (!dev_pm_skip_resume(dev) && pm && !pm->resume_early) {
+		dev_dbg(dev, "executing postponed D0 transition\n");
+		ret = acpi_dev_resume(dev);
+	}
+
+	return ret ? ret : pm_generic_resume(dev);
 }
 
 /**
@@ -1251,6 +1281,7 @@ static struct dev_pm_domain acpi_general_pm_domain = {
 		.prepare = acpi_subsys_prepare,
 		.complete = acpi_subsys_complete,
 		.suspend = acpi_subsys_suspend,
+		.resume = acpi_subsys_resume,
 		.suspend_late = acpi_subsys_suspend_late,
 		.suspend_noirq = acpi_subsys_suspend_noirq,
 		.resume_noirq = acpi_subsys_resume_noirq,
@@ -1322,10 +1353,7 @@ int acpi_dev_pm_attach(struct device *dev, bool power_on)
 	 * with the generic ACPI PM domain.
 	 */
 	static const struct acpi_device_id special_pm_ids[] = {
-		{"PNP0C0B", }, /* Generic ACPI fan */
-		{"INT3404", }, /* Fan */
-		{"INTC1044", }, /* Fan for Tiger Lake generation */
-		{"INTC1048", }, /* Fan for Alder Lake generation */
+		ACPI_FAN_DEVICE_IDS,
 		{}
 	};
 	struct acpi_device *adev = ACPI_COMPANION(dev);
@@ -1371,6 +1399,9 @@ bool acpi_storage_d3(struct device *dev)
 {
 	struct acpi_device *adev = ACPI_COMPANION(dev);
 	u8 val;
+
+	if (force_storage_d3())
+		return true;
 
 	if (!adev)
 		return false;
