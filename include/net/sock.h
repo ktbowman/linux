@@ -1112,6 +1112,7 @@ struct inet_hashinfo;
 struct raw_hashinfo;
 struct smc_hashinfo;
 struct module;
+struct sk_psock;
 
 /*
  * caches using SLAB_TYPESAFE_BY_RCU should let .next pointer from nulls nodes
@@ -1247,7 +1248,9 @@ struct proto {
 
 	RH_KABI_USE(1, bool	(*bpf_bypass_getsockopt)(int level,
 							 int optname))
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE(2, int	(*psock_update_sk_prot)(struct sock *sk,
+							struct sk_psock *psock,
+							bool restore))
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
 	RH_KABI_RESERVE(5)
