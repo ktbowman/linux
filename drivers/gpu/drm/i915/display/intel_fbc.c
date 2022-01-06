@@ -727,7 +727,7 @@ static void intel_fbc_update_state_cache(struct intel_crtc *crtc,
 	cache->fb.modifier = fb->modifier;
 
 	/* FIXME is this correct? */
-	cache->fb.stride = plane_state->view.color_plane[0].stride;
+	cache->fb.stride = plane_state->view.color_plane[0].mapping_stride;
 	if (drm_rotation_90_or_270(plane_state->hw.rotation))
 		cache->fb.stride *= fb->format->cpp[0];
 
