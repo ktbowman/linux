@@ -2132,7 +2132,7 @@ static s64 get_kvmclock_base_ns(void)
 static s64 get_kvmclock_base_ns(void)
 {
 	/* Master clock not used, so we can just use CLOCK_BOOTTIME.  */
-	return ktime_get_boot_ns();
+	return ktime_get_boottime_ns();
 }
 #endif
 
@@ -11090,7 +11090,7 @@ int kvm_arch_hardware_enable(void)
 	 * before any KVM threads can be running.  Unfortunately, we can't
 	 * bring the TSCs fully up to date with real time, as we aren't yet far
 	 * enough into CPU bringup that we know how much real time has actually
-	 * elapsed; our helper function, ktime_get_boot_ns() will be using boot
+	 * elapsed; our helper function, ktime_get_boottime_ns() will be using boot
 	 * variables that haven't been updated yet.
 	 *
 	 * So we simply find the maximum observed TSC above, then record the
