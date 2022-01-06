@@ -88,6 +88,8 @@ struct cpuinfo_x86_extended_rh {
 	u16			cpu_die_id;
 	u16			logical_die_id;
 	int                     x86_cache_mbm_width_offset;
+	/*  Is SMT active on this core? */
+	bool			smt_active;
 #ifdef CONFIG_X86_VMX_FEATURE_NAMES
 	__u32			vmx_capability[NVMXINTS];
 #endif
@@ -876,6 +878,8 @@ static inline int mpx_disable_management(void)
 	return -EINVAL;
 }
 #endif /* CONFIG_X86_INTEL_MPX */
+
+extern u16 get_llc_id(unsigned int cpu);
 
 #ifdef CONFIG_CPU_SUP_AMD
 extern u32 amd_get_nodes_per_socket(void);
