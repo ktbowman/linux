@@ -981,7 +981,7 @@ static int soc_tplg_denum_create(struct soc_tplg *tplg, unsigned int count,
 					ec->hdr.name);
 				goto err_denum;
 			}
-			/* fall through */
+			fallthrough;
 		case SND_SOC_TPLG_CTL_ENUM:
 		case SND_SOC_TPLG_DAPM_CTL_ENUM_DOUBLE:
 		case SND_SOC_TPLG_DAPM_CTL_ENUM_VIRT:

@@ -569,7 +569,7 @@ static int snd_byt_cht_es8316_mc_probe(struct platform_device *pdev)
 			break;
 		default:
 			dev_err(dev, "get speaker GPIO failed: %d\n", ret);
-			/* fall through */
+			fallthrough;
 		case -EPROBE_DEFER:
 			goto err_put_codec;
 		}
