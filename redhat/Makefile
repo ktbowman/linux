@@ -168,7 +168,7 @@ rh-clean-kabi-dw:
 	rm -rf $(KABIDW)/base/$(CURARCH)
 
 rh-clean-mock:
-	mock -r mock.cfg --scrub=all
+	[ ! -e mock.cfg ] || mock -r mock.cfg --scrub=all
 	rm -f mock.cfg
 
 rh-clean: rh-clean-sources rh-clean-configs rh-clean-rpmdirs rh-clean-kabi-dw rh-clean-mock
