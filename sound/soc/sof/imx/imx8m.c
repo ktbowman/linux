@@ -317,5 +317,4 @@ struct snd_sof_dsp_ops sof_imx8m_ops = {
 };
 EXPORT_SYMBOL(sof_imx8m_ops);
 
-MODULE_IMPORT_NS(SND_SOC_SOF_XTENSA);
 MODULE_LICENSE("Dual BSD/GPL");
