@@ -516,7 +516,7 @@ struct sock {
 	RH_KABI_USE(2, struct sk_buff                  *sk_tx_skb_cache)
 	RH_KABI_USE_SPLIT(3, u8			sk_prefer_busy_poll,
 			     u16		sk_busy_poll_budget)
-	RH_KABI_RESERVE(4)
+	RH_KABI_USE(4, spinlock_t		sk_peer_lock)
 	RH_KABI_RESERVE(5)
 	RH_KABI_RESERVE(6)
 	RH_KABI_RESERVE(7)
