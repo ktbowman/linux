@@ -3039,7 +3039,10 @@ static int ice_vc_cfg_promiscuous_mode_msg(struct ice_vf *vf, u8 *msg)
 
 	if (vsi->num_vlan || vf->port_vlan_info) {
 
-		ret = ice_cfg_vlan_pruning(vsi, true, !rm_promisc);
+		if (rm_promisc)
+			ret = ice_cfg_vlan_pruning(vsi, true);
+		else
+			ret = ice_cfg_vlan_pruning(vsi, false);
 		if (ret) {
 			dev_err(dev, "Failed to configure VLAN pruning in promiscuous mode\n");
 			v_ret = VIRTCHNL_STATUS_ERR_PARAM;
@@ -3354,7 +3357,7 @@ static int ice_vc_dis_qs_msg(struct ice_vf *vf, u8 *msg)
 		q_map = vqs->tx_queues;
 
 		for_each_set_bit(vf_q_id, &q_map, ICE_MAX_RSS_QS_PER_VF) {
-			struct ice_ring *ring = vsi->tx_rings[vf_q_id];
+			struct ice_tx_ring *ring = vsi->tx_rings[vf_q_id];
 			struct ice_txq_meta txq_meta = { 0 };
 
 			if (!ice_vc_isvalid_q_id(vf, vqs->vsi_id, vf_q_id)) {
@@ -4239,7 +4242,7 @@ static int ice_vc_process_vlan_msg(struct ice_vf *vf, u8 *msg, bool add_v)
 			/* Enable VLAN pruning when non-zero VLAN is added */
 			if (!vlan_promisc && vid &&
 			    !ice_vsi_is_vlan_pruning_ena(vsi)) {
-				status = ice_cfg_vlan_pruning(vsi, true, false);
+				status = ice_cfg_vlan_pruning(vsi, true);
 				if (status) {
 					v_ret = VIRTCHNL_STATUS_ERR_PARAM;
 					dev_err(dev, "Enable VLAN pruning on VLAN ID: %d failed error-%d\n",
@@ -4293,7 +4296,7 @@ static int ice_vc_process_vlan_msg(struct ice_vf *vf, u8 *msg, bool add_v)
 			/* Disable VLAN pruning when only VLAN 0 is left */
 			if (vsi->num_vlan == 1 &&
 			    ice_vsi_is_vlan_pruning_ena(vsi))
-				ice_cfg_vlan_pruning(vsi, false, false);
+				ice_cfg_vlan_pruning(vsi, false);
 
 			/* Disable Unicast/Multicast VLAN promiscuous mode */
 			if (vlan_promisc) {
