@@ -1013,6 +1013,7 @@ struct device_dma_parameters {
 	 */
 	unsigned int max_segment_size;
 	unsigned long segment_boundary_mask;
+	RH_KABI_EXTEND(unsigned int min_align_mask)
 };
 
 typedef void *(*devcon_match_fn_t)(struct fwnode_handle *fwnode, const char *id,
@@ -1153,12 +1154,13 @@ struct device_extended_rh {
  * 		such descriptors.
  * @bus_dma_limit: Limit of an upstream bridge or bus which imposes a smaller
  *		DMA limit than the device itself supports.
- * @dma_pfn_offset: offset of DMA memory range relatively of RAM
+ * @dma_range_map: map for DMA memory ranges relative to that of RAM
  * @dma_parms:	A low level driver may set these to teach IOMMU code about
  * 		segment limitations.
  * @dma_pools:	Dma pools (if dma'ble device).
  * @dma_mem:	Internal for coherent mem override.
  * @cma_area:	Contiguous memory area for dma allocations
+ * @dma_io_tlb_mem: Pointer to the swiotlb pool used.  Not for driver use.
  * @archdata:	For arch-specific additions.
  * @of_node:	Associated device tree node.
  * @fwnode:	Associated device node supplied by platform firmware.
@@ -1246,7 +1248,7 @@ struct device {
 					     allocations such descriptors. */
 	u64		RH_KABI_RENAME(bus_dma_mask,
 					bus_dma_limit); /* upstream dma constraint */
-	unsigned long	dma_pfn_offset;
+	RH_KABI_BROKEN_REPLACE(unsigned long	dma_pfn_offset, const struct bus_dma_region *dma_range_map)
 
 	struct device_dma_parameters *dma_parms;
 
@@ -1294,7 +1296,11 @@ struct device {
 	/* Use device_extended after all RESERVE fields used */
 
 	RH_KABI_USE(1, struct dev_iommu *iommu)
+#ifdef CONFIG_SWIOTLB
+	RH_KABI_USE(2, struct io_tlb_mem *dma_io_tlb_mem)
+#else
 	RH_KABI_RESERVE(2)
+#endif
 
 	/* NB: See the note for struct dev_links_info: */
 	RH_KABI_RESERVE(3)

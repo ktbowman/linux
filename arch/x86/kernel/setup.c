@@ -69,12 +69,14 @@
 
 #include <linux/percpu.h>
 #include <linux/crash_dump.h>
+#include <linux/dma-contiguous.h>
 #include <linux/tboot.h>
 #include <linux/jiffies.h>
 #include <linux/mem_encrypt.h>
 #include <linux/sizes.h>
 
 #include <linux/usb/xhci-dbgp.h>
+#include <linux/swiotlb.h>
 #include <video/edid.h>
 
 #include <asm/mtrr.h>
