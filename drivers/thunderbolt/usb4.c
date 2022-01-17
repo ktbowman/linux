@@ -260,7 +260,7 @@ int usb4_switch_setup(struct tb_switch *sw)
 	parent = tb_switch_parent(sw);
 	downstream_port = tb_port_at(tb_route(sw), parent);
 	sw->link_usb4 = link_is_usb4(downstream_port);
-	tb_sw_dbg(sw, "link: %s\n", sw->link_usb4 ? "USB4" : "TBT3");
+	tb_sw_dbg(sw, "link: %s\n", sw->link_usb4 ? "USB4" : "TBT");
 
 	xhci = val & ROUTER_CS_6_HCI;
 	tbt3 = !(val & ROUTER_CS_6_TNS);
@@ -547,8 +547,17 @@ int usb4_switch_nvm_read(struct tb_switch *sw, unsigned int address, void *buf,
 				usb4_switch_nvm_read_block, sw);
 }
 
-static int usb4_switch_nvm_set_offset(struct tb_switch *sw,
-				      unsigned int address)
+/**
+ * usb4_switch_nvm_set_offset() - Set NVM write offset
+ * @sw: USB4 router
+ * @address: Start offset
+ *
+ * Explicitly sets NVM write offset. Normally when writing to NVM this
+ * is done automatically by usb4_switch_nvm_write().
+ *
+ * Returns %0 in success and negative errno if there was a failure.
+ */
+int usb4_switch_nvm_set_offset(struct tb_switch *sw, unsigned int address)
 {
 	u32 metadata, dwaddress;
 	u8 status = 0;
@@ -986,6 +995,60 @@ struct tb_port *usb4_switch_map_usb3_down(struct tb_switch *sw,
 }
 
 /**
+ * usb4_switch_add_ports() - Add USB4 ports for this router
+ * @sw: USB4 router
+ *
+ * For USB4 router finds all USB4 ports and registers devices for each.
+ * Can be called to any router.
+ *
+ * Return %0 in case of success and negative errno in case of failure.
+ */
+int usb4_switch_add_ports(struct tb_switch *sw)
+{
+	struct tb_port *port;
+
+	if (tb_switch_is_icm(sw) || !tb_switch_is_usb4(sw))
+		return 0;
+
+	tb_switch_for_each_port(sw, port) {
+		struct usb4_port *usb4;
+
+		if (!tb_port_is_null(port))
+			continue;
+		if (!port->cap_usb4)
+			continue;
+
+		usb4 = usb4_port_device_add(port);
+		if (IS_ERR(usb4)) {
+			usb4_switch_remove_ports(sw);
+			return PTR_ERR(usb4);
+		}
+
+		port->usb4 = usb4;
+	}
+
+	return 0;
+}
+
+/**
+ * usb4_switch_remove_ports() - Removes USB4 ports from this router
+ * @sw: USB4 router
+ *
+ * Unregisters previously registered USB4 ports.
+ */
+void usb4_switch_remove_ports(struct tb_switch *sw)
+{
+	struct tb_port *port;
+
+	tb_switch_for_each_port(sw, port) {
+		if (port->usb4) {
+			usb4_port_device_remove(port->usb4);
+			port->usb4 = NULL;
+		}
+	}
+}
+
+/**
  * usb4_port_unlock() - Unlock USB4 downstream port
  * @port: USB4 port to unlock
  *
@@ -1264,6 +1327,48 @@ static int usb4_port_sb_op(struct tb_port *port, enum usb4_sb_target target,
 	return -ETIMEDOUT;
 }
 
+static int usb4_port_set_router_offline(struct tb_port *port, bool offline)
+{
+	u32 val = !offline;
+	int ret;
+
+	ret = usb4_port_sb_write(port, USB4_SB_TARGET_ROUTER, 0,
+				  USB4_SB_METADATA, &val, sizeof(val));
+	if (ret)
+		return ret;
+
+	val = USB4_SB_OPCODE_ROUTER_OFFLINE;
+	return usb4_port_sb_write(port, USB4_SB_TARGET_ROUTER, 0,
+				  USB4_SB_OPCODE, &val, sizeof(val));
+}
+
+/**
+ * usb4_port_router_offline() - Put the USB4 port to offline mode
+ * @port: USB4 port
+ *
+ * This function puts the USB4 port into offline mode. In this mode the
+ * port does not react on hotplug events anymore. This needs to be
+ * called before retimer access is done when the USB4 links is not up.
+ *
+ * Returns %0 in case of success and negative errno if there was an
+ * error.
+ */
+int usb4_port_router_offline(struct tb_port *port)
+{
+	return usb4_port_set_router_offline(port, true);
+}
+
+/**
+ * usb4_port_router_online() - Put the USB4 port back to online
+ * @port: USB4 port
+ *
+ * Makes the USB4 port functional again.
+ */
+int usb4_port_router_online(struct tb_port *port)
+{
+	return usb4_port_set_router_offline(port, false);
+}
+
 /**
  * usb4_port_enumerate_retimers() - Send RT broadcast transaction
  * @port: USB4 port
@@ -1287,6 +1392,33 @@ static inline int usb4_port_retimer_op(struct tb_port *port, u8 index,
 {
 	return usb4_port_sb_op(port, USB4_SB_TARGET_RETIMER, index, opcode,
 			       timeout_msec);
+}
+
+/**
+ * usb4_port_retimer_set_inbound_sbtx() - Enable sideband channel transactions
+ * @port: USB4 port
+ * @index: Retimer index
+ *
+ * Enables sideband channel transations on SBTX. Can be used when USB4
+ * link does not go up, for example if there is no device connected.
+ */
+int usb4_port_retimer_set_inbound_sbtx(struct tb_port *port, u8 index)
+{
+	int ret;
+
+	ret = usb4_port_retimer_op(port, index, USB4_SB_OPCODE_SET_INBOUND_SBTX,
+				   500);
+
+	if (ret != -ENODEV)
+		return ret;
+
+	/*
+	 * Per the USB4 retimer spec, the retimer is not required to
+	 * send an RT (Retimer Transaction) response for the first
+	 * SET_INBOUND_SBTX command
+	 */
+	return usb4_port_retimer_op(port, index, USB4_SB_OPCODE_SET_INBOUND_SBTX,
+				    500);
 }
 
 /**
@@ -1381,8 +1513,19 @@ int usb4_port_retimer_nvm_sector_size(struct tb_port *port, u8 index)
 	return ret ? ret : metadata & USB4_NVM_SECTOR_SIZE_MASK;
 }
 
-static int usb4_port_retimer_nvm_set_offset(struct tb_port *port, u8 index,
-					    unsigned int address)
+/**
+ * usb4_port_retimer_nvm_set_offset() - Set NVM write offset
+ * @port: USB4 port
+ * @index: Retimer index
+ * @address: Start offset
+ *
+ * Exlicitly sets NVM write offset. Normally when writing to NVM this is
+ * done automatically by usb4_port_retimer_nvm_write().
+ *
+ * Returns %0 in success and negative errno if there was a failure.
+ */
+int usb4_port_retimer_nvm_set_offset(struct tb_port *port, u8 index,
+				     unsigned int address)
 {
 	u32 metadata, dwaddress;
 	int ret;
