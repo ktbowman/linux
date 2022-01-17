@@ -1032,7 +1032,7 @@ static int ethoc_probe(struct platform_device *pdev)
 	struct ethoc_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	u32 eth_clkfreq = pdata ? pdata->eth_clkfreq : 0;
 
-	mark_hardware_unsupported("OpenCores Ethernet MAC driver");
+	mark_hardware_unmaintained(dev_driver_string(&pdev->dev), "%s %s", dev_name(&pdev->dev));
 
 	/* allocate networking device */
 	netdev = alloc_etherdev(sizeof(struct ethoc));
