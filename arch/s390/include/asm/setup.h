@@ -37,6 +37,7 @@
 #define MACHINE_FLAG_NX		_BITUL(15)
 #define MACHINE_FLAG_GS		_BITUL(16)
 #define MACHINE_FLAG_SCC	_BITUL(17)
+#define MACHINE_FLAG_PCI_MIO	_BITUL(18)
 
 #define LPP_MAGIC		_BITUL(31)
 #define LPP_PID_MASK		_AC(0xffffffff, UL)
@@ -109,6 +110,7 @@ extern unsigned long __swsusp_reset_dma;
 #define MACHINE_HAS_NX		(S390_lowcore.machine_flags & MACHINE_FLAG_NX)
 #define MACHINE_HAS_GS		(S390_lowcore.machine_flags & MACHINE_FLAG_GS)
 #define MACHINE_HAS_SCC		(S390_lowcore.machine_flags & MACHINE_FLAG_SCC)
+#define MACHINE_HAS_PCI_MIO	(S390_lowcore.machine_flags & MACHINE_FLAG_PCI_MIO)
 
 /*
  * Console mode. Override with conmode=
