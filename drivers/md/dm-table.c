@@ -1808,7 +1808,7 @@ static int device_requires_stable_pages(struct dm_target *ti,
 {
 	struct request_queue *q = bdev_get_queue(dev->bdev);
 
-	return bdi_cap_stable_pages_required(q->backing_dev_info);
+	return q && blk_queue_stable_writes(q);
 }
 
 void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
@@ -1880,9 +1880,9 @@ void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 	 * don't want error, zero, etc to require stable pages.
 	 */
 	if (dm_table_any_dev_attr(t, device_requires_stable_pages, NULL))
-		q->backing_dev_info->capabilities |= BDI_CAP_STABLE_WRITES;
+		blk_queue_flag_set(QUEUE_FLAG_STABLE_WRITES, q);
 	else
-		q->backing_dev_info->capabilities &= ~BDI_CAP_STABLE_WRITES;
+		blk_queue_flag_clear(QUEUE_FLAG_STABLE_WRITES, q);
 
 	/*
 	 * Determine whether or not this queue's I/O timings contribute
