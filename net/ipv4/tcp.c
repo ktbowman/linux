@@ -3701,7 +3701,11 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 			return -EFAULT;
 		if (len < offsetofend(struct tcp_zerocopy_receive, length))
 			return -EINVAL;
-		if (len > sizeof(zc)) {
+		if (unlikely(len > sizeof(zc))) {
+			err = check_zeroed_user(optval + sizeof(zc),
+						len - sizeof(zc));
+			if (err < 1)
+				return err == 0 ? -EINVAL : err;
 			len = sizeof(zc);
 			if (put_user(len, optlen))
 				return -EFAULT;
