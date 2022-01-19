@@ -83,6 +83,7 @@ static DEFINE_PER_CPU(u64, wd_timer_tb);
 /* SMP checker bits */
 static unsigned long __wd_smp_lock;
 static unsigned long __wd_reporting;
+static unsigned long __wd_nmi_output;
 static cpumask_t wd_smp_cpus_pending;
 static cpumask_t wd_smp_cpus_stuck;
 static u64 wd_smp_last_reset_tb;
@@ -150,6 +151,23 @@ static void wd_lockup_ipi(struct pt_regs *regs)
 		show_regs(regs);
 	else
 		dump_stack();
+
+	/*
+	 * __wd_nmi_output must be set after we printk from NMI context.
+	 *
+	 * printk from NMI context defers printing to the console to irq_work.
+	 * If that NMI was taken in some code that is hard-locked, then irqs
+	 * are disabled so irq_work will never fire. That can result in the
+	 * hard lockup messages being delayed (indefinitely, until something
+	 * else kicks the console drivers).
+	 *
+	 * Setting __wd_nmi_output will cause another CPU to notice and kick
+	 * the console drivers for us.
+	 *
+	 * xchg is not needed here (it could be a smp_mb and store), but xchg
+	 * gives the memory ordering and atomicity required.
+	 */
+	xchg(&__wd_nmi_output, 1);
 
 	/* Do not panic from here because that can recurse into NMI IPI layer */
 }
@@ -221,11 +239,6 @@ static void watchdog_smp_panic(int cpu)
 		}
 	}
 
-	printk_safe_flush();
-	/*
-	 * printk_safe_flush() seems to require another print
-	 * before anything actually goes out to console.
-	 */
 	if (sysctl_hardlockup_all_cpu_backtrace) {
 		trigger_allbutself_cpu_backtrace();
 		cpumask_clear(&wd_smp_cpus_ipi);
@@ -335,6 +348,17 @@ static void watchdog_timer_interrupt(int cpu)
 
 	if ((s64)(tb - wd_smp_last_reset_tb) >= (s64)wd_smp_panic_timeout_tb)
 		watchdog_smp_panic(cpu);
+
+	if (__wd_nmi_output && xchg(&__wd_nmi_output, 0)) {
+		/*
+		 * Something has called printk from NMI context. It might be
+		 * stuck, so this this triggers a flush that will get that
+		 * printk output to the console.
+		 *
+		 * See wd_lockup_ipi.
+		 */
+		printk_safe_flush();
+	}
 }
 
 void soft_nmi_interrupt(struct pt_regs *regs)
@@ -382,6 +406,8 @@ void soft_nmi_interrupt(struct pt_regs *regs)
 		print_modules();
 		print_irqtrace_events(current);
 		show_regs(regs);
+
+		xchg(&__wd_nmi_output, 1); // see wd_lockup_ipi
 
 		if (sysctl_hardlockup_all_cpu_backtrace)
 			trigger_allbutself_cpu_backtrace();
