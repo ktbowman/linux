@@ -1789,6 +1789,7 @@ static int tcp_zerocopy_receive(struct sock *sk,
 	struct vm_area_struct *vma;
 	struct sk_buff *skb = NULL;
 	struct tcp_sock *tp;
+	int inq = tcp_inq(sk);
 	int ret;
 
 	if (address & (PAGE_SIZE - 1) || address != zc->address)
@@ -1798,6 +1799,14 @@ static int tcp_zerocopy_receive(struct sock *sk,
 		return -ENOTCONN;
 
 	sock_rps_record_flow(sk);
+
+	if (inq < PAGE_SIZE) {
+		zc->length = 0;
+		zc->recv_skip_hint = inq;
+		if (!inq && sock_flag(sk, SOCK_DONE))
+			return -EIO;
+		return 0;
+	}
 
 	mmap_read_lock(current->mm);
 
