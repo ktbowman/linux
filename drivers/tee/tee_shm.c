@@ -13,7 +13,7 @@
 
 static void tee_shm_release(struct tee_shm *shm)
 {
-	struct tee_device *teedev = shm->teedev;
+	struct tee_device *teedev = shm->ctx->teedev;
 
 	mutex_lock(&teedev->mutex);
 	idr_remove(&teedev->idr, shm->id);
@@ -42,8 +42,7 @@ static void tee_shm_release(struct tee_shm *shm)
 		kfree(shm->pages);
 	}
 
-	if (shm->ctx)
-		teedev_ctx_put(shm->ctx);
+	teedev_ctx_put(shm->ctx);
 
 	kfree(shm);
 
@@ -130,7 +129,6 @@ static struct tee_shm *__tee_shm_alloc(struct tee_context *ctx,
 	}
 
 	shm->flags = flags | TEE_SHM_POOL;
-	shm->teedev = teedev;
 	shm->ctx = ctx;
 	if (flags & TEE_SHM_DMA_BUF)
 		poolm = teedev->pool->dma_buf_mgr;
@@ -239,7 +237,6 @@ struct tee_shm *tee_shm_register(struct tee_context *ctx, unsigned long addr,
 	}
 
 	shm->flags = flags | TEE_SHM_REGISTER;
-	shm->teedev = teedev;
 	shm->ctx = ctx;
 	shm->id = -1;
 	addr = untagged_addr(addr);
