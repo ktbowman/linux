@@ -120,6 +120,7 @@ static int bnxt_re_setup_chip_ctx(struct bnxt_re_dev *rdev, u8 wqe_mode)
 	if (!chip_ctx)
 		return -ENOMEM;
 	chip_ctx->chip_num = bp->chip_num;
+	chip_ctx->hw_stats_size = bp->hw_ring_stats_size;
 
 	rdev->chip_ctx = chip_ctx;
 	/* rest members to follow eventually */
@@ -128,6 +129,9 @@ static int bnxt_re_setup_chip_ctx(struct bnxt_re_dev *rdev, u8 wqe_mode)
 	rdev->rcfw.res = &rdev->qplib_res;
 
 	bnxt_re_set_drv_mode(rdev, wqe_mode);
+	if (bnxt_qplib_determine_atomics(en_dev->pdev))
+		ibdev_info(&rdev->ibdev,
+			   "platform doesn't support global atomics.");
 	return 0;
 }
 
@@ -547,6 +551,7 @@ static int bnxt_re_net_stats_ctx_alloc(struct bnxt_re_dev *rdev,
 				       dma_addr_t dma_map,
 				       u32 *fw_stats_ctx_id)
 {
+	struct bnxt_qplib_chip_ctx *chip_ctx = rdev->chip_ctx;
 	struct hwrm_stat_ctx_alloc_output resp = {0};
 	struct hwrm_stat_ctx_alloc_input req = {0};
 	struct bnxt_en_dev *en_dev = rdev->en_dev;
@@ -563,7 +568,7 @@ static int bnxt_re_net_stats_ctx_alloc(struct bnxt_re_dev *rdev,
 	bnxt_re_init_hwrm_hdr(rdev, (void *)&req, HWRM_STAT_CTX_ALLOC, -1, -1);
 	req.update_period_ms = cpu_to_le32(1000);
 	req.stats_dma_addr = cpu_to_le64(dma_map);
-	req.stats_dma_length = cpu_to_le16(sizeof(struct ctx_hw_stats_ext));
+	req.stats_dma_length = cpu_to_le16(chip_ctx->hw_stats_size);
 	req.stat_ctx_flags = STAT_CTX_ALLOC_REQ_STAT_CTX_FLAGS_ROCE;
 	bnxt_re_fill_fw_msg(&fw_msg, (void *)&req, sizeof(req), (void *)&resp,
 			    sizeof(resp), DFLT_HWRM_CMD_TIMEOUT);
@@ -885,12 +890,6 @@ static int bnxt_re_srqn_handler(struct bnxt_qplib_nq *nq,
 	struct ib_event ib_event;
 	int rc = 0;
 
-	if (!srq) {
-		ibdev_err(NULL, "%s: SRQ is NULL, SRQN not handled",
-			  ROCE_DRV_MODULE_NAME);
-		rc = -EINVAL;
-		goto done;
-	}
 	ib_event.device = &srq->rdev->ibdev;
 	ib_event.element.srq = &srq->ib_srq;
 	if (event == NQ_SRQ_EVENT_EVENT_SRQ_THRESHOLD_EVENT)
@@ -903,7 +902,6 @@ static int bnxt_re_srqn_handler(struct bnxt_qplib_nq *nq,
 		(*srq->ib_srq.event_handler)(&ib_event,
 					     srq->ib_srq.srq_context);
 	}
-done:
 	return rc;
 }
 
@@ -913,11 +911,6 @@ static int bnxt_re_cqn_handler(struct bnxt_qplib_nq *nq,
 	struct bnxt_re_cq *cq = container_of(handle, struct bnxt_re_cq,
 					     qplib_cq);
 
-	if (!cq) {
-		ibdev_err(NULL, "%s: CQ is NULL, CQN not handled",
-			  ROCE_DRV_MODULE_NAME);
-		return -EINVAL;
-	}
 	if (cq->ib_cq.comp_handler) {
 		/* Lock comp_handler? */
 		(*cq->ib_cq.comp_handler)(&cq->ib_cq, cq->ib_cq.cq_context);
@@ -1404,7 +1397,6 @@ static int bnxt_re_dev_init(struct bnxt_re_dev *rdev, u8 wqe_mode)
 	memset(&rattr, 0, sizeof(rattr));
 	rc = bnxt_re_register_netdev(rdev);
 	if (rc) {
-		rtnl_unlock();
 		ibdev_err(&rdev->ibdev,
 			  "Failed to register with netedev: %#x\n", rc);
 		return -EINVAL;
