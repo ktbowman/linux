@@ -49,7 +49,7 @@ function merge_configs()
 	else
 		echo "# $arch" > $name
 	fi
-	sort config-merging >> $name
+	LC_ALL=C sort config-merging >> $name
 	rm -f config-merged config-merging
 	echo "done"
 }
