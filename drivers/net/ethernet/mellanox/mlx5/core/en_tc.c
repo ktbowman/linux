@@ -5021,6 +5021,8 @@ int mlx5e_tc_esw_init(struct rhashtable *tc_ht)
 					       MLX5_FLOW_NAMESPACE_FDB,
 					       uplink_priv->post_act);
 
+	uplink_priv->int_port_priv = mlx5e_tc_int_port_init(netdev_priv(priv->netdev));
+
 #if IS_ENABLED(CONFIG_MLX5_TC_SAMPLE)
 	uplink_priv->tc_psample = mlx5e_tc_sample_init(esw, uplink_priv->post_act);
 #endif
@@ -5070,6 +5072,7 @@ err_tun_mapping:
 #if IS_ENABLED(CONFIG_MLX5_TC_SAMPLE)
 	mlx5e_tc_sample_cleanup(uplink_priv->tc_psample);
 #endif
+	mlx5e_tc_int_port_cleanup(uplink_priv->int_port_priv);
 	mlx5_tc_ct_clean(uplink_priv->ct_priv);
 	netdev_warn(priv->netdev,
 		    "Failed to initialize tc (eswitch), err: %d", err);
@@ -5092,6 +5095,7 @@ void mlx5e_tc_esw_cleanup(struct rhashtable *tc_ht)
 #if IS_ENABLED(CONFIG_MLX5_TC_SAMPLE)
 	mlx5e_tc_sample_cleanup(uplink_priv->tc_psample);
 #endif
+	mlx5e_tc_int_port_cleanup(uplink_priv->int_port_priv);
 	mlx5_tc_ct_clean(uplink_priv->ct_priv);
 	mlx5e_tc_post_act_destroy(uplink_priv->post_act);
 }
