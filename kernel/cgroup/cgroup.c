@@ -59,7 +59,7 @@
 #include <linux/psi.h>
 #include <net/sock.h>
 
-#include <linux/rh_features.h>
+#include <linux/rh_flags.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/cgroup.h>
@@ -6355,7 +6355,7 @@ int cgroup_bpf_attach(struct cgroup *cgrp,
 {
 	int ret;
 
-	rh_mark_used_feature("eBPF/cgroup");
+	rh_add_flag("eBPF/cgroup");
 
 	mutex_lock(&cgroup_mutex);
 	ret = __cgroup_bpf_attach(cgrp, prog, replace_prog, link, type, flags);
