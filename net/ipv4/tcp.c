@@ -1789,6 +1789,7 @@ static int tcp_zerocopy_receive(struct sock *sk,
 	struct vm_area_struct *vma;
 	struct sk_buff *skb = NULL;
 	struct tcp_sock *tp;
+	int inq = tcp_inq(sk);
 	int ret;
 
 	if (address & (PAGE_SIZE - 1) || address != zc->address)
@@ -1798,6 +1799,14 @@ static int tcp_zerocopy_receive(struct sock *sk,
 		return -ENOTCONN;
 
 	sock_rps_record_flow(sk);
+
+	if (inq < PAGE_SIZE) {
+		zc->length = 0;
+		zc->recv_skip_hint = inq;
+		if (!inq && sock_flag(sk, SOCK_DONE))
+			return -EIO;
+		return 0;
+	}
 
 	mmap_read_lock(current->mm);
 
@@ -3699,8 +3708,18 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 
 		if (get_user(len, optlen))
 			return -EFAULT;
-		if (len != sizeof(zc))
+		if (len < 0 ||
+		    len < offsetofend(struct tcp_zerocopy_receive, length))
 			return -EINVAL;
+		if (unlikely(len > sizeof(zc))) {
+			err = check_zeroed_user(optval + sizeof(zc),
+						len - sizeof(zc));
+			if (err < 1)
+				return err == 0 ? -EINVAL : err;
+			len = sizeof(zc);
+			if (put_user(len, optlen))
+				return -EFAULT;
+		}
 		if (copy_from_user(&zc, optval, len))
 			return -EFAULT;
 		lock_sock(sk);
