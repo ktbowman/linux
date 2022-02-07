@@ -1371,6 +1371,11 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 
 	memcpy(mm, oldmm, sizeof(*mm));
 
+	/* RHEL8: Reset mm_rh to point to the right mm_struct_rh structure */
+	mm->mm_rh = (struct mm_struct_rh *)((unsigned long)mm +
+					    sizeof(struct mm_struct) +
+					    cpumask_size());
+
 	if (!mm_init(mm, tsk, mm->user_ns))
 		goto fail_nomem;
 
