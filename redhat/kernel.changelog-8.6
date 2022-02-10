@@ -1,3 +1,105 @@
+* Thu Feb 10 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-367.el8]
+- tee: optee: Fix incorrect page free bug (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: handle lookup of shm with reference count 0 (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: smc_abi.c: add missing #include <linux/mm.h> (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: isolate smc abi (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: refactor driver with internal callbacks (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: simplify optee_release() (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: Fix missing devices unregister during optee_remove (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee/optee/shm_pool: fix application of sizeof to pointer (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: Correct inappropriate usage of TEE_SHM_DMA_BUF flag (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: add tee_shm_alloc_kernel_buf() (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: Clear stale cache entries during initialization (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: fix tee out of memory failure seen during kexec reboot (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: Refuse to load the driver under the kdump kernel (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: Fix memory leak when failing to register shm pages (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: use export_uuid() to copy client UUID (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: do not check memref size on return from Secure World (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: fix build error caused by recent optee tracepoints feature (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: add invoke_fn tracepoints (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: simplify i2c access (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: remove need_resched() before cond_resched() (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: sync OP-TEE headers (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: replace might_sleep with cond_resched (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- drivers: optee: fix i2c build issue (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: convert get_user_pages() --> pin_user_pages() (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- drivers: optee: allow op-tee to access devices on the i2c bus (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- driver: tee: Handle NULL pointer indication from client (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: enable support for multi-stage bus enumeration (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: use uuid for sysfs driver entry (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: Add support for session login client UUID generation (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: enable support to register kernel memory (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: remove unnecessary NULL check in tee_shm_alloc() (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: don't assign shm id for private shms (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: remove unused tee_shm_priv_alloc() (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: tee_shm_op_mmap(): use TEE_SHM_USER_MAPPED (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: remove redundant teedev in struct tee_shm (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: remove linked list of struct tee_shm (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: Fix multi page dynamic shm pool alloc (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: model OP-TEE as a platform device/driver (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: fix device enumeration error handling (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: Fix dynamic shm pool allocations (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee/shm: untag user pointers in tee_shm_register (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: add might_sleep for RPC requests (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- treewide: Replace GPLv2 boilerplate/reference with SPDX - rule 282 (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- optee: allow to work without static shared memory (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: update optee_msg.h and optee_smc.h to dual license (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: add missing of_node_put after of_device_is_available (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: Fix unsigned comparison with less than zero (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: fix possible error pointer ctx dereferencing (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: Initialize some structs using memset instead of braces (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: add TEE bus device enumeration support (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: add supp_nowait flag in tee_context struct (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: log message if dynamic shm is enabled (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: add kernel internal client interface (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: take DT status property into account (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- tee: optee: making OPTEE_SHM_NUM_PRIV_PAGES configurable via Kconfig (Chris von Recklinghausen) [2030755] {CVE-2021-44733}
+- x86/mce: Add Xeon Sapphire Rapids to list of CPUs that support PPIN (David Arcari) [2035286]
+- regset: kill ->get() (Prarit Bhargava) [2032854]
+- arm64: switch to ->regset_get() (Prarit Bhargava) [2032854]
+- arm64: take fetching compat reg out of pt_regs into a new helper (Prarit Bhargava) [2032854]
+- powerpc: switch to ->regset_get() (Prarit Bhargava) [2032854]
+- s390: switch to ->regset_get() (Prarit Bhargava) [2032854]
+- introduction of regset ->get() wrappers, switching ELF coredumps to those (Prarit Bhargava) [2032854]
+- mm/page_alloc.c: do not warn allocation failure on zone DMA if no managed pages (Baoquan He) [2024011]
+- dma/pool: create dma atomic pool only if dma zone has managed pages (Baoquan He) [2024011]
+- mm_zone: add function to check if managed dma zone exists (Baoquan He) [2024011]
+- tipc: discard MSG_CRYPTO msgs when key_exchange_enabled is not set (Xin Long) [2043825]
+- tipc: delete the unlikely branch in tipc_aead_encrypt (Xin Long) [2043825]
+- tipc: check for null after calling kmemdup (Xin Long) [2043825]
+- tipc: only accept encrypted MSG_CRYPTO msgs (Xin Long) [2043825]
+- powerpc/pseries: use slab context cpumask allocation in CPU hotplug init (Waiman Long) [2048220]
+- powerpc/pseries: Fix build error when NUMA=n (Waiman Long) [2048220]
+- lpfc: Add new messaging (Ewan D. Milne) [1841323]
+- cpu/hotplug: Cure the cpusets trainwreck (Phil Auld) [1904593]
+- scsi: ses: Fix unsigned comparison with less than zero (Tomas Henzl) [1995086]
+- scsi: ses: Retry failed Send/Receive Diagnostic commands (Tomas Henzl) [1995086]
+- serial: exar: Fix GPIO configuration for Sealevel cards based on XR17V35X (John W. Linville) [2022906]
+- PCI: vmd: Add indirection layer to vmd irq lists (Scott Wood) [2048202]
+- redhat/configs: Enable CONFIG_PCI_HYPERV on Aarch64 (Vitaly Kuznetsov) [2024853]
+- PCI: hv: Add arm64 Hyper-V vPCI support (Vitaly Kuznetsov) [2024853]
+- PCI: hv: Make the code arch neutral by adding arch specific interfaces (Vitaly Kuznetsov) [2024853]
+- PCI: hv: Remove unnecessary use of hx (Vitaly Kuznetsov) [2024853]
+- nvme-rdma: fix possible use-after-free in transport error_recovery work (Chris Leech) [1988361]
+- nvme-tcp: fix possible use-after-free in transport error_recovery work (Chris Leech) [1988361]
+- nvme: fix a possible use-after-free in controller reset during load (Chris Leech) [1988361]
+- ipv6: check return value of ipv6_skip_exthdr (Sabrina Dubroca) [2046234]
+- selftests: Calculate udpgso segment count without header adjustment (Xin Long) [2044133]
+- udp: using datalen to cap ipv6 udp max gso segments (Xin Long) [2044133]
+- inet_diag: fix kernel-infoleak for UDP sockets (Xin Long) [2044133]
+- udp: using datalen to cap max gso segments (Xin Long) [2044133]
+- [s390] s390/cpumf: Support for CPU Measurement Facility CSVN 7 (Mete Durlu) [2048980]
+- [s390] s390/cpumf: Support for CPU Measurement Sampling Facility LS bit (Mete Durlu) [2048980]
+- tools/power/x86/intel-speed-select: v1.10 release (Prarit Bhargava) [2023909]
+- tools/power/x86/intel-speed-select: Fix uncore memory frequency display (Prarit Bhargava) [2023909]
+- platform/x86: ISST: Account for increased timeout in some cases (Prarit Bhargava) [2023909]
+- tools/power/x86/intel-speed-select: Add options to force online (Prarit Bhargava) [2023909]
+- tools/power/x86/intel-speed-select: Drop __DATE__ and __TIME__ macros (Prarit Bhargava) [2023909]
+- tools/power/x86/intel-speed-select: v1.9 release (Prarit Bhargava) [2023909]
+- tools/power/x86/intel-speed-select: Process mailbox read error for core-power (Prarit Bhargava) [2023909]
+- tools/power/x86/intel-speed-select: Increase string size (Prarit Bhargava) [2023909]
+- qla2xxx: Add new messaging (Ewan D. Milne) [1900072]
+
 * Wed Feb 09 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-366.el8]
 - platform/x86: amd-pmc: only use callbacks for suspend (David Arcari) [2016039]
 - platform/x86: amd-pmc: Add support for AMD Smart Trace Buffer (David Arcari) [2016039]
