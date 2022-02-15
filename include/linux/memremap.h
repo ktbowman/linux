@@ -111,7 +111,6 @@ struct dev_pagemap_ops {
 /**
  * struct dev_pagemap - metadata for ZONE_DEVICE mappings
  * @altmap: pre-allocated/reserved memory for vmemmap allocations
- * @range: physical address range covered by @ref
  * @ref: reference count that pins the devm_memremap_pages() mapping
  * @internal_ref: internal reference if @ref is not provided by the caller
  * @done: completion for @internal_ref
@@ -121,6 +120,9 @@ struct dev_pagemap_ops {
  * @owner: an opaque pointer identifying the entity that manages this
  *	instance.  Used by various helpers to make sure that no
  *	foreign ZONE_DEVICE memory is accessed.
+ * @nr_range: number of ranges to be mapped
+ * @range: range to be mapped when nr_range == 1
+ * @ranges: array of ranges to be mapped when nr_range > 1
  */
 struct dev_pagemap {
 	RH_KABI_DEPRECATE(dev_page_fault_t, page_fault)
@@ -138,7 +140,13 @@ struct dev_pagemap {
 	RH_KABI_EXTEND(struct percpu_ref internal_ref)
 	RH_KABI_EXTEND(struct completion done)
 	RH_KABI_EXTEND(void *owner)
-	RH_KABI_EXTEND(struct range range)
+	RH_KABI_EXTEND(int nr_range)
+	RH_KABI_BROKEN_INSERT_BLOCK(
+	union {
+		struct range range;
+		struct range ranges[0];
+	};
+	) /* RH_KABI_BROKEN_INSERT_BLOCK */
 };
 
 static inline struct vmem_altmap *pgmap_altmap(struct dev_pagemap *pgmap)
