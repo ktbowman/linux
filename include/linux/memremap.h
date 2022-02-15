@@ -132,7 +132,7 @@ struct dev_pagemap {
 	RH_KABI_DEPRECATE(struct device *, dev)
 	RH_KABI_DEPRECATE(void *, data)
 	enum memory_type type;
-	u64 pci_p2pdma_bus_offset;
+	RH_KABI_DEPRECATE(u64, pci_p2pdma_bus_offset)
 	RH_KABI_EXTEND(const struct dev_pagemap_ops *ops)
 	RH_KABI_EXTEND(unsigned int flags)
 	RH_KABI_EXTEND(struct percpu_ref internal_ref)
