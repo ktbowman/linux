@@ -49,14 +49,21 @@ struct dax_region {
  * @target_node: effective numa node if dev_dax memory range is onlined
  * @dev - device core
  * @pgmap - pgmap for memmap setup / lifetime (driver owned)
+ * @range: resource range for the instance
  */
 struct dev_dax {
 	struct dax_region *region;
 	struct dax_device *dax_dev;
 	int target_node;
 	struct device dev;
-	struct dev_pagemap pgmap;
+	struct dev_pagemap *pgmap;
+	struct range range;
 };
+
+static inline u64 range_len(struct range *range)
+{
+	return range->end - range->start + 1;
+}
 
 static inline struct dev_dax *to_dev_dax(struct device *dev)
 {
