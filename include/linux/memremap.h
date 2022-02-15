@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _LINUX_MEMREMAP_H_
 #define _LINUX_MEMREMAP_H_
+#include <linux/range.h>
 #include <linux/ioport.h>
 #include <linux/percpu-refcount.h>
 #include <linux/mm_types.h>  /* needed in RHEL8 for dev_pagemap & vm_fault_t */
@@ -110,7 +111,7 @@ struct dev_pagemap_ops {
 /**
  * struct dev_pagemap - metadata for ZONE_DEVICE mappings
  * @altmap: pre-allocated/reserved memory for vmemmap allocations
- * @res: physical address range covered by @ref
+ * @range: physical address range covered by @ref
  * @ref: reference count that pins the devm_memremap_pages() mapping
  * @internal_ref: internal reference if @ref is not provided by the caller
  * @done: completion for @internal_ref
@@ -126,7 +127,7 @@ struct dev_pagemap {
 	RH_KABI_DEPRECATE(dev_page_free_t, page_free)
 	struct vmem_altmap altmap;
 	RH_KABI_DEPRECATE(bool, altmap_valid)
-	struct resource res;
+	RH_KABI_DEPRECATE(struct resource, res)
 	struct percpu_ref *ref;
 	RH_KABI_DEPRECATE(struct device *, dev)
 	RH_KABI_DEPRECATE(void *, data)
@@ -137,6 +138,7 @@ struct dev_pagemap {
 	RH_KABI_EXTEND(struct percpu_ref internal_ref)
 	RH_KABI_EXTEND(struct completion done)
 	RH_KABI_EXTEND(void *owner)
+	RH_KABI_EXTEND(struct range range)
 };
 
 static inline struct vmem_altmap *pgmap_altmap(struct dev_pagemap *pgmap)
