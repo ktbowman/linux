@@ -25,7 +25,7 @@
 #define WINDOW_RANGE_MASK		GENMASK(18, 0)
 
 #define TCSR_SOC_HW_VERSION		0x0224
-#define TCSR_SOC_HW_VERSION_MAJOR_MASK	GENMASK(16, 8)
+#define TCSR_SOC_HW_VERSION_MAJOR_MASK	GENMASK(11, 8)
 #define TCSR_SOC_HW_VERSION_MINOR_MASK	GENMASK(7, 0)
 
 /* BAR0 + 4k is always accessible, and no
@@ -1219,6 +1219,15 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		goto err_free_core;
 	}
 
+	ath11k_dbg(ab, ATH11K_DBG_BOOT, "pci probe %04x:%04x %04x:%04x\n",
+		   pdev->vendor, pdev->device,
+		   pdev->subsystem_vendor, pdev->subsystem_device);
+
+	ab->id.vendor = pdev->vendor;
+	ab->id.device = pdev->device;
+	ab->id.subsystem_vendor = pdev->subsystem_vendor;
+	ab->id.subsystem_device = pdev->subsystem_device;
+
 	switch (pci_dev->device) {
 	case QCA6390_DEVICE_ID:
 		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
@@ -1241,13 +1250,26 @@ static int ath11k_pci_probe(struct pci_dev *pdev,
 		ab->hw_rev = ATH11K_HW_QCN9074_HW10;
 		break;
 	case WCN6855_DEVICE_ID:
+		ab->id.bdf_search = ATH11K_BDF_SEARCH_BUS_AND_BOARD;
 		ath11k_pci_read_hw_version(ab, &soc_hw_version_major,
 					   &soc_hw_version_minor);
 		switch (soc_hw_version_major) {
 		case 2:
-			ab->hw_rev = ATH11K_HW_WCN6855_HW20;
+			switch (soc_hw_version_minor) {
+			case 0x00:
+			case 0x01:
+				ab->hw_rev = ATH11K_HW_WCN6855_HW20;
+				break;
+			case 0x10:
+			case 0x11:
+				ab->hw_rev = ATH11K_HW_WCN6855_HW21;
+				break;
+			default:
+				goto unsupported_wcn6855_soc;
+			}
 			break;
 		default:
+unsupported_wcn6855_soc:
 			dev_err(&pdev->dev, "Unsupported WCN6855 SOC hardware version: %d %d\n",
 				soc_hw_version_major, soc_hw_version_minor);
 			ret = -EOPNOTSUPP;
