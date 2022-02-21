@@ -473,7 +473,7 @@ static int tcp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 
 		if (!sock_owned_by_user(sk)) {
 			sk->sk_err = err;
-			sk->sk_error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
+			sk_error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
 
 			tcp_done(sk);
 		} else
@@ -483,7 +483,7 @@ static int tcp_v6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 
 	if (!sock_owned_by_user(sk) && np->recverr) {
 		sk->sk_err = err;
-		sk->sk_error_report(sk);
+		sk_error_report(sk);
 	} else
 		sk->sk_err_soft = err;
 
@@ -1757,6 +1757,13 @@ static struct timewait_sock_ops tcp6_timewait_sock_ops = {
 	.twsk_destructor = tcp_twsk_destructor,
 };
 
+INDIRECT_CALLABLE_SCOPE void tcp_v6_send_check(struct sock *sk, struct sk_buff *skb)
+{
+	struct ipv6_pinfo *np = inet6_sk(sk);
+
+	__tcp_v6_send_check(skb, &np->saddr, &sk->sk_v6_daddr);
+}
+
 const struct inet_connection_sock_af_ops ipv6_specific = {
 	.queue_xmit	   = inet6_csk_xmit,
 	.send_check	   = tcp_v6_send_check,
@@ -2044,6 +2051,9 @@ struct proto tcpv6_prot = {
 	.hash			= inet6_hash,
 	.unhash			= inet_unhash,
 	.get_port		= inet_csk_get_port,
+#ifdef CONFIG_BPF_SYSCALL
+	.psock_update_sk_prot	= tcp_bpf_update_proto,
+#endif
 	.enter_memory_pressure	= tcp_enter_memory_pressure,
 	.leave_memory_pressure	= tcp_leave_memory_pressure,
 	.stream_memory_free	= tcp_stream_memory_free,

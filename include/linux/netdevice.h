@@ -1646,6 +1646,8 @@ struct net_device_ops {
  * @IFF_FAILOVER: device is a failover master device
  * @IFF_FAILOVER_SLAVE: device is lower dev of a failover master device
  * @IFF_L3MDEV_RX_HANDLER: only invoke the rx handler of L3 master device
+ * @IFF_TX_SKB_NO_LINEAR: device/driver is capable of xmitting frames with
+ *	skb_headlen(skb) == 0 (data starts from frag0)
  */
 enum netdev_priv_flags {
 	IFF_802_1Q_VLAN			= 1<<0,
@@ -1678,6 +1680,7 @@ enum netdev_priv_flags {
 	IFF_FAILOVER			= 1<<27,
 	IFF_FAILOVER_SLAVE		= 1<<28,
 	IFF_L3MDEV_RX_HANDLER		= 1<<29,
+	IFF_TX_SKB_NO_LINEAR		= 1<<31,
 };
 
 #define IFF_802_1Q_VLAN			IFF_802_1Q_VLAN
@@ -1704,11 +1707,13 @@ enum netdev_priv_flags {
 #define IFF_L3MDEV_SLAVE		IFF_L3MDEV_SLAVE
 #define IFF_TEAM			IFF_TEAM
 #define IFF_RXFH_CONFIGURED		IFF_RXFH_CONFIGURED
+#define IFF_PHONY_HEADROOM		IFF_PHONY_HEADROOM
 #define IFF_MACSEC			IFF_MACSEC
 #define IFF_NO_RX_HANDLER		IFF_NO_RX_HANDLER
 #define IFF_FAILOVER			IFF_FAILOVER
 #define IFF_FAILOVER_SLAVE		IFF_FAILOVER_SLAVE
 #define IFF_L3MDEV_RX_HANDLER		IFF_L3MDEV_RX_HANDLER
+#define IFF_TX_SKB_NO_LINEAR		IFF_TX_SKB_NO_LINEAR
 
 struct net_device_extended_rh {
 };
@@ -4100,7 +4105,9 @@ void netdev_run_todo(void);
  */
 static inline void dev_put(struct net_device *dev)
 {
-	this_cpu_dec(*dev->pcpu_refcnt);
+	if (dev) {
+		this_cpu_dec(*dev->pcpu_refcnt);
+	}
 }
 
 /**
@@ -4111,7 +4118,9 @@ static inline void dev_put(struct net_device *dev)
  */
 static inline void dev_hold(struct net_device *dev)
 {
-	this_cpu_inc(*dev->pcpu_refcnt);
+	if (dev) {
+		this_cpu_inc(*dev->pcpu_refcnt);
+	}
 }
 
 /* Carrier loss detection, dial on demand. The functions netif_carrier_on
@@ -4554,6 +4563,24 @@ void __hw_addr_unsync_dev(struct netdev_hw_addr_list *list,
 void __hw_addr_init(struct netdev_hw_addr_list *list);
 
 /* Functions used for device addresses handling */
+static inline void
+__dev_addr_set(struct net_device *dev, const u8 *addr, size_t len)
+{
+	memcpy(dev->dev_addr, addr, len);
+}
+
+static inline void dev_addr_set(struct net_device *dev, const u8 *addr)
+{
+	__dev_addr_set(dev, addr, dev->addr_len);
+}
+
+static inline void
+dev_addr_mod(struct net_device *dev, unsigned int offset,
+	     const u8 *addr, size_t len)
+{
+	memcpy(&dev->dev_addr[offset], addr, len);
+}
+
 int dev_addr_add(struct net_device *dev, const unsigned char *addr,
 		 unsigned char addr_type);
 int dev_addr_del(struct net_device *dev, const unsigned char *addr,
@@ -4833,9 +4860,10 @@ static inline bool can_checksum_protocol(netdev_features_t features,
 }
 
 #ifdef CONFIG_BUG
-void netdev_rx_csum_fault(struct net_device *dev);
+void netdev_rx_csum_fault(struct net_device *dev, struct sk_buff *skb);
 #else
-static inline void netdev_rx_csum_fault(struct net_device *dev)
+static inline void netdev_rx_csum_fault(struct net_device *dev,
+					struct sk_buff *skb)
 {
 }
 #endif

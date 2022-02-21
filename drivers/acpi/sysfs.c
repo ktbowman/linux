@@ -5,10 +5,11 @@
 
 #define pr_fmt(fmt) "ACPI: " fmt
 
+#include <linux/acpi.h>
+#include <linux/bitmap.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/moduleparam.h>
-#include <linux/acpi.h>
 
 #include "internal.h"
 
@@ -261,16 +262,12 @@ static int param_get_trace_state(char *buffer, const struct kernel_param *kp)
 {
 	if (!(acpi_gbl_trace_flags & ACPI_TRACE_ENABLED))
 		return sprintf(buffer, "disable\n");
-	else {
-		if (acpi_gbl_trace_method_name) {
-			if (acpi_gbl_trace_flags & ACPI_TRACE_ONESHOT)
-				return sprintf(buffer, "method-once\n");
-			else
-				return sprintf(buffer, "method\n");
-		} else
-			return sprintf(buffer, "enable\n");
-	}
-	return 0;
+	if (!acpi_gbl_trace_method_name)
+		return sprintf(buffer, "enable\n");
+	if (acpi_gbl_trace_flags & ACPI_TRACE_ONESHOT)
+		return sprintf(buffer, "method-once\n");
+	else
+		return sprintf(buffer, "method\n");
 }
 
 module_param_call(trace_state, param_set_trace_state, param_get_trace_state,
@@ -366,8 +363,7 @@ static int acpi_table_attr_init(struct kobject *tables_obj,
 	}
 	table_attr->instance++;
 	if (table_attr->instance > ACPI_MAX_TABLE_INSTANCES) {
-		pr_warn("%4.4s: too many table instances\n",
-			table_attr->name);
+		pr_warn("%4.4s: too many table instances\n", table_attr->name);
 		return -ERANGE;
 	}
 
@@ -395,8 +391,7 @@ acpi_status acpi_sysfs_table_handler(u32 event, void *table, void *context)
 
 	switch (event) {
 	case ACPI_TABLE_EVENT_INSTALL:
-		table_attr =
-		    kzalloc(sizeof(struct acpi_table_attr), GFP_KERNEL);
+		table_attr = kzalloc(sizeof(*table_attr), GFP_KERNEL);
 		if (!table_attr)
 			return AE_NO_MEMORY;
 
@@ -427,7 +422,7 @@ static ssize_t acpi_data_show(struct file *filp, struct kobject *kobj,
 			      loff_t offset, size_t count)
 {
 	struct acpi_data_attr *data_attr;
-	void __iomem *base;
+	void *base;
 	ssize_t rc;
 
 	data_attr = container_of(bin_attr, struct acpi_data_attr, attr);
@@ -589,8 +584,6 @@ static void delete_gpe_attr_array(void)
 		kfree(counter_attrs);
 	}
 	kfree(all_attrs);
-
-	return;
 }
 
 static void gpe_count(u32 gpe_number)
@@ -605,8 +598,6 @@ static void gpe_count(u32 gpe_number)
 	else
 		all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS +
 			     COUNT_ERROR].count++;
-
-	return;
 }
 
 static void fixed_event_count(u32 event_number)
@@ -619,8 +610,6 @@ static void fixed_event_count(u32 event_number)
 	else
 		all_counters[num_gpes + ACPI_NUM_FIXED_EVENTS +
 			     COUNT_ERROR].count++;
-
-	return;
 }
 
 static void acpi_global_event_handler(u32 event_type, acpi_handle device,
@@ -744,8 +733,7 @@ static ssize_t counter_set(struct kobject *kobj,
 		goto end;
 
 	if (!(status & ACPI_EVENT_FLAG_HAS_HANDLER)) {
-		printk(KERN_WARNING PREFIX
-		       "Can not change Invalid GPE/Fixed Event status\n");
+		pr_warn("Can not change Invalid GPE/Fixed Event status\n");
 		return -EINVAL;
 	}
 
@@ -803,6 +791,7 @@ end:
  * the GPE flooding for GPE 00, they need to specify the following boot
  * parameter:
  *   acpi_mask_gpe=0x00
+ * Note, the parameter can be a list (see bitmap_parselist() for the details).
  * The masking status can be modified by the following runtime controlling
  * interface:
  *   echo unmask > /sys/firmware/acpi/interrupts/gpe00
@@ -812,11 +801,16 @@ static DECLARE_BITMAP(acpi_masked_gpes_map, ACPI_MASKABLE_GPE_MAX) __initdata;
 
 static int __init acpi_gpe_set_masked_gpes(char *val)
 {
+	int ret;
 	u8 gpe;
 
-	if (kstrtou8(val, 0, &gpe))
-		return -EINVAL;
-	set_bit(gpe, acpi_masked_gpes_map);
+	ret = kstrtou8(val, 0, &gpe);
+	if (ret) {
+		ret = bitmap_parselist(val, acpi_masked_gpes_map, ACPI_MASKABLE_GPE_MAX);
+		if (ret)
+			return ret;
+	} else
+		set_bit(gpe, acpi_masked_gpes_map);
 
 	return 1;
 }
@@ -848,13 +842,11 @@ void acpi_irq_stats_init(void)
 	num_gpes = acpi_current_gpe_count;
 	num_counters = num_gpes + ACPI_NUM_FIXED_EVENTS + NUM_COUNTERS_EXTRA;
 
-	all_attrs = kcalloc(num_counters + 1, sizeof(struct attribute *),
-			    GFP_KERNEL);
+	all_attrs = kcalloc(num_counters + 1, sizeof(*all_attrs), GFP_KERNEL);
 	if (all_attrs == NULL)
 		return;
 
-	all_counters = kcalloc(num_counters, sizeof(struct event_counter),
-			       GFP_KERNEL);
+	all_counters = kcalloc(num_counters, sizeof(*all_counters), GFP_KERNEL);
 	if (all_counters == NULL)
 		goto fail;
 
@@ -862,8 +854,7 @@ void acpi_irq_stats_init(void)
 	if (ACPI_FAILURE(status))
 		goto fail;
 
-	counter_attrs = kcalloc(num_counters, sizeof(struct kobj_attribute),
-				GFP_KERNEL);
+	counter_attrs = kcalloc(num_counters, sizeof(*counter_attrs), GFP_KERNEL);
 	if (counter_attrs == NULL)
 		goto fail;
 
@@ -913,7 +904,6 @@ void acpi_irq_stats_init(void)
 
 fail:
 	delete_gpe_attr_array();
-	return;
 }
 
 static void __exit interrupt_stats_exit(void)
@@ -921,31 +911,24 @@ static void __exit interrupt_stats_exit(void)
 	sysfs_remove_group(acpi_kobj, &interrupt_stats_attr_group);
 
 	delete_gpe_attr_array();
-
-	return;
 }
 
-static ssize_t
-acpi_show_profile(struct kobject *kobj, struct kobj_attribute *attr,
-		  char *buf)
+static ssize_t pm_profile_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	return sprintf(buf, "%d\n", acpi_gbl_FADT.preferred_profile);
 }
 
-static const struct kobj_attribute pm_profile_attr =
-	__ATTR(pm_profile, S_IRUGO, acpi_show_profile, NULL);
+static const struct kobj_attribute pm_profile_attr = __ATTR_RO(pm_profile);
 
-static ssize_t hotplug_enabled_show(struct kobject *kobj,
-				    struct kobj_attribute *attr, char *buf)
+static ssize_t enabled_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	struct acpi_hotplug_profile *hotplug = to_acpi_hotplug_profile(kobj);
 
 	return sprintf(buf, "%d\n", hotplug->enabled);
 }
 
-static ssize_t hotplug_enabled_store(struct kobject *kobj,
-				     struct kobj_attribute *attr,
-				     const char *buf, size_t size)
+static ssize_t enabled_store(struct kobject *kobj, struct kobj_attribute *attr,
+			     const char *buf, size_t size)
 {
 	struct acpi_hotplug_profile *hotplug = to_acpi_hotplug_profile(kobj);
 	unsigned int val;
@@ -957,9 +940,7 @@ static ssize_t hotplug_enabled_store(struct kobject *kobj,
 	return size;
 }
 
-static struct kobj_attribute hotplug_enabled_attr =
-	__ATTR(enabled, S_IRUGO | S_IWUSR, hotplug_enabled_show,
-		hotplug_enabled_store);
+static struct kobj_attribute hotplug_enabled_attr = __ATTR_RW(enabled);
 
 static struct attribute *hotplug_profile_attrs[] = {
 	&hotplug_enabled_attr.attr,
@@ -990,7 +971,7 @@ void acpi_sysfs_add_hotplug_profile(struct acpi_hotplug_profile *hotplug,
 	return;
 
  err_out:
-	pr_err(PREFIX "Unable to add hotplug profile '%s'\n", name);
+	pr_err("Unable to add hotplug profile '%s'\n", name);
 }
 
 static ssize_t force_remove_show(struct kobject *kobj,
@@ -1017,9 +998,7 @@ static ssize_t force_remove_store(struct kobject *kobj,
 	return size;
 }
 
-static const struct kobj_attribute force_remove_attr =
-	__ATTR(force_remove, S_IRUGO | S_IWUSR, force_remove_show,
-	       force_remove_store);
+static const struct kobj_attribute force_remove_attr = __ATTR_RW(force_remove);
 
 int __init acpi_sysfs_init(void)
 {

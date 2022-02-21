@@ -526,7 +526,6 @@ struct serv_parm {	/* Structure is in Big Endian format */
 		struct {
 			uint32_t vid;
 #define LPFC_VV_EMLX_ID	0x454d4c58	/* EMLX */
-#define LPFC_VV_BRCD_ID	0x42524344	/* BRCD */
 			uint32_t flags;
 #define LPFC_VV_SUPPRESS_RSP	1
 		} vv;
@@ -3717,7 +3716,7 @@ typedef struct {
 #define IOERR_ILLEGAL_COMMAND         0x06
 #define IOERR_XCHG_DROPPED            0x07
 #define IOERR_ILLEGAL_FIELD           0x08
-#define IOERR_BAD_CONTINUE            0x09
+#define IOERR_RPI_SUSPENDED           0x09
 #define IOERR_TOO_MANY_BUFFERS        0x0A
 #define IOERR_RCV_BUFFER_WAITING      0x0B
 #define IOERR_NO_CONNECTION           0x0C

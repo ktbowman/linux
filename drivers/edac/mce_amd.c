@@ -9,14 +9,7 @@ static struct amd_decoder_ops fam_ops;
 
 static u8 xec_mask	 = 0xf;
 
-static bool report_gart_errors;
 static void (*decode_dram_ecc)(int node_id, struct mce *m);
-
-void amd_report_gart_errors(bool v)
-{
-	report_gart_errors = v;
-}
-EXPORT_SYMBOL_GPL(amd_report_gart_errors);
 
 void amd_register_ecc_decoder(void (*f)(int, struct mce *))
 {
@@ -216,6 +209,11 @@ static const char * const smca_if_mce_desc[] = {
 	"L2 BTB Multi-Match Error",
 	"L2 Cache Response Poison Error",
 	"System Read Data Error",
+	"Hardware Assertion Error",
+	"L1-TLB Multi-Hit",
+	"L2-TLB Multi-Hit",
+	"BSR Parity Error",
+	"CT MCE",
 };
 
 static const char * const smca_l2_mce_desc[] = {
@@ -234,7 +232,8 @@ static const char * const smca_de_mce_desc[] = {
 	"Fetch address FIFO parity error",
 	"Patch RAM data parity error",
 	"Patch RAM sequencer parity error",
-	"Micro-op buffer parity error"
+	"Micro-op buffer parity error",
+	"Hardware Assertion MCA Error",
 };
 
 static const char * const smca_ex_mce_desc[] = {
@@ -250,6 +249,8 @@ static const char * const smca_ex_mce_desc[] = {
 	"Scheduling queue parity error",
 	"Branch buffer queue parity error",
 	"Hardware Assertion error",
+	"Spec Map parity error",
+	"Retire Map parity error",
 };
 
 static const char * const smca_fp_mce_desc[] = {
@@ -381,6 +382,7 @@ static const char * const smca_smu2_mce_desc[] = {
 	"Instruction Tag Cache Bank A ECC or parity error",
 	"Instruction Tag Cache Bank B ECC or parity error",
 	"System Hub Read Buffer ECC or parity error",
+	"PHY RAM ECC error",
 };
 
 static const char * const smca_mp5_mce_desc[] = {
@@ -1097,20 +1099,6 @@ static inline void amd_decode_err_code(u16 ec)
 	pr_cont("\n");
 }
 
-/*
- * Filter out unwanted MCE signatures here.
- */
-static bool ignore_mce(struct mce *m)
-{
-	/*
-	 * NB GART TLB error reporting is disabled by default.
-	 */
-	if (m->bank == 4 && XEC(m->status, 0x1f) == 0x5 && !report_gart_errors)
-		return true;
-
-	return false;
-}
-
 static const char *decode_error_status(struct mce *m)
 {
 	if (m->status & MCI_STATUS_UC) {
@@ -1133,9 +1121,6 @@ amd_decode_mce(struct notifier_block *nb, unsigned long val, void *data)
 	struct mce *m = (struct mce *)data;
 	unsigned int fam = x86_family(m->cpuid);
 	int ecc;
-
-	if (ignore_mce(m))
-		return NOTIFY_STOP;
 
 	pr_emerg(HW_ERR "%s\n", decode_error_status(m));
 
@@ -1253,6 +1238,9 @@ static int __init mce_amd_init(void)
 	struct cpuinfo_x86 *c = &boot_cpu_data;
 
 	if (c->x86_vendor != X86_VENDOR_AMD)
+		return -ENODEV;
+
+	if (cpu_feature_enabled(X86_FEATURE_HYPERVISOR))
 		return -ENODEV;
 
 	if (boot_cpu_has(X86_FEATURE_SMCA)) {

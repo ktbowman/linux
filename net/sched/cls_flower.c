@@ -21,10 +21,11 @@
 #include <linux/ip.h>
 #include <linux/mpls.h>
 
-#include <linux/rh_features.h>
+#include <linux/rh_flags.h>
 
 #include <net/sch_generic.h>
 #include <net/pkt_cls.h>
+#include <net/pkt_sched.h>
 #include <net/ip.h>
 #include <net/flow_dissector.h>
 #include <net/geneve.h>
@@ -315,7 +316,8 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		       struct tcf_result *res)
 {
 	struct cls_fl_head *head = rcu_dereference_bh(tp->root);
-	bool post_ct = qdisc_skb_cb(skb)->post_ct;
+	bool post_ct = tc_skb_cb(skb)->post_ct;
+	u16 zone = tc_skb_cb(skb)->zone;
 	struct fl_flow_key skb_key;
 	struct fl_flow_mask *mask;
 	struct cls_fl_filter *f;
@@ -333,7 +335,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		skb_flow_dissect_ct(skb, &mask->dissector, &skb_key,
 				    fl_ct_info_to_flower_map,
 				    ARRAY_SIZE(fl_ct_info_to_flower_map),
-				    post_ct);
+				    post_ct, zone);
 		skb_flow_dissect_hash(skb, &mask->dissector, &skb_key);
 		skb_flow_dissect(skb, &mask->dissector, &skb_key, 0);
 
@@ -947,7 +949,7 @@ static int fl_set_key_mpls(struct nlattr **tb,
 			return -EBADMSG;
 		}
 
-		rh_mark_used_feature("flower/mpls_multilabel");
+		rh_add_flag("flower/mpls_multilabel");
 
 		return fl_set_key_mpls_opts(tb[TCA_FLOWER_KEY_MPLS_OPTS],
 					    key_val, key_mask, extack);
@@ -2196,18 +2198,24 @@ static void fl_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 
 	arg->count = arg->skip;
 
+	rcu_read_lock();
 	idr_for_each_entry_continue_ul(&head->handle_idr, f, tmp, id) {
 		/* don't return filters that are being deleted */
 		if (!refcount_inc_not_zero(&f->refcnt))
 			continue;
+		rcu_read_unlock();
+
 		if (arg->fn(tp, f, arg) < 0) {
 			__fl_put(f);
 			arg->stop = 1;
+			rcu_read_lock();
 			break;
 		}
 		__fl_put(f);
 		arg->count++;
+		rcu_read_lock();
 	}
+	rcu_read_unlock();
 	arg->cookie = id;
 }
 

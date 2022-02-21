@@ -93,6 +93,7 @@
 #include <linux/livepatch.h>
 #include <linux/thread_info.h>
 #include <linux/scs.h>
+#include <linux/kasan.h>
 
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
@@ -222,6 +223,9 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 		if (!s)
 			continue;
 
+		/* Mark stack accessible for KASAN. */
+		kasan_unpoison_range(s->addr, THREAD_SIZE);
+
 		/* Clear stale pointers from reused stack. */
 		memset(s->addr, 0, THREAD_SIZE);
 
@@ -256,7 +260,7 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 					     THREAD_SIZE_ORDER);
 
 	if (likely(page)) {
-		tsk->stack = page_address(page);
+		tsk->stack = kasan_reset_tag(page_address(page));
 		return tsk->stack;
 	}
 	return NULL;
@@ -297,6 +301,7 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk,
 {
 	unsigned long *stack;
 	stack = kmem_cache_alloc_node(thread_stack_cache, THREADINFO_GFP, node);
+	stack = kasan_reset_tag(stack);
 	tsk->stack = stack;
 	return stack;
 }
@@ -669,7 +674,7 @@ void __mmdrop(struct mm_struct *mm)
 	WARN_ON_ONCE(mm == current->active_mm);
 	mm_free_pgd(mm);
 	destroy_context(mm);
-	mmu_notifier_mm_destroy(mm);
+	mmu_notifier_subscriptions_destroy(mm);
 	check_mm(mm);
 	put_user_ns(mm->user_ns);
 	free_mm(mm);
@@ -1035,7 +1040,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	mm_init_aio(mm);
 	mm_init_owner(mm, p);
 	RCU_INIT_POINTER(mm->exe_file, NULL);
-	mmu_notifier_mm_init(mm);
+	mmu_notifier_subscriptions_init(mm);
 	init_tlb_flush_pending(mm);
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && !USE_SPLIT_PMD_PTLOCKS
 	mm->pmd_huge_pte = NULL;
@@ -1078,6 +1083,8 @@ struct mm_struct *mm_alloc(void)
 		return NULL;
 
 	memset(mm, 0, sizeof(*mm));
+	mm->mm_rh = (struct mm_struct_rh *)((unsigned long)mm + sizeof(struct mm_struct) +
+					    cpumask_size());
 	return mm_init(mm, current, current_user_ns());
 }
 
@@ -1363,6 +1370,11 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 		goto fail_nomem;
 
 	memcpy(mm, oldmm, sizeof(*mm));
+
+	/* RHEL8: Reset mm_rh to point to the right mm_struct_rh structure */
+	mm->mm_rh = (struct mm_struct_rh *)((unsigned long)mm +
+					    sizeof(struct mm_struct) +
+					    cpumask_size());
 
 	if (!mm_init(mm, tsk, mm->user_ns))
 		goto fail_nomem;
@@ -2549,13 +2561,14 @@ void __init proc_caches_init(void)
 	 * dynamically sized based on the maximum CPU number this system
 	 * can have, taking hotplug into account (nr_cpu_ids).
 	 */
-	mm_size = sizeof(struct mm_struct) + cpumask_size();
+	mm_size = sizeof(struct mm_struct) + cpumask_size() + sizeof(struct mm_struct_rh);
 
 	mm_cachep = kmem_cache_create_usercopy("mm_struct",
 			mm_size, ARCH_MIN_MMSTRUCT_ALIGN,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
-			offsetof(struct mm_struct, saved_auxv),
-			sizeof_field(struct mm_struct, saved_auxv),
+			sizeof(struct mm_struct) + cpumask_size() +
+				offsetof(struct mm_struct_rh, saved_auxv),
+			sizeof_field(struct mm_struct_rh, saved_auxv),
 			NULL);
 	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
 	mmap_init();

@@ -103,6 +103,7 @@
 #include <net/busy_poll.h>
 #include <linux/rtnetlink.h>
 #include <linux/stat.h>
+#include RH_KABI_HIDE_INCLUDE(<net/dsa.h>)
 #include <net/dst.h>
 #include <net/dst_metadata.h>
 #include <net/pkt_sched.h>
@@ -153,7 +154,7 @@
 
 #include "net-sysfs.h"
 
-#include <linux/rh_features.h>
+#include <linux/rh_flags.h>
 
 /* Instead of increasing this, you should create a hash table. */
 #define MAX_GRO_SKBS 8
@@ -913,8 +914,7 @@ struct net_device *dev_get_by_name(struct net *net, const char *name)
 
 	rcu_read_lock();
 	dev = dev_get_by_name_rcu(net, name);
-	if (dev)
-		dev_hold(dev);
+	dev_hold(dev);
 	rcu_read_unlock();
 	return dev;
 }
@@ -987,8 +987,7 @@ struct net_device *dev_get_by_index(struct net *net, int ifindex)
 
 	rcu_read_lock();
 	dev = dev_get_by_index_rcu(net, ifindex);
-	if (dev)
-		dev_hold(dev);
+	dev_hold(dev);
 	rcu_read_unlock();
 	return dev;
 }
@@ -3174,6 +3173,12 @@ static u16 skb_tx_hash(const struct net_device *dev,
 
 		qoffset = sb_dev->tc_to_txq[tc].offset;
 		qcount = sb_dev->tc_to_txq[tc].count;
+		if (unlikely(!qcount)) {
+			net_warn_ratelimited("%s: invalid qcount, qoffset %u for tc %u\n",
+					     sb_dev->name, qoffset, tc);
+			qoffset = 0;
+			qcount = dev->real_num_tx_queues;
+		}
 	}
 
 	if (skb_rx_queue_recorded(skb)) {
@@ -3203,12 +3208,10 @@ static void skb_warn_bad_offload(const struct sk_buff *skb)
 		else
 			name = netdev_name(dev);
 	}
-	WARN(1, "%s: caps=(%pNF, %pNF) len=%d data_len=%d gso_size=%d "
-	     "gso_type=%d ip_summed=%d\n",
+	skb_dump(KERN_WARNING, skb, false);
+	WARN(1, "%s: caps=(%pNF, %pNF)\n",
 	     name, dev ? &dev->features : &null_features,
-	     skb->sk ? &skb->sk->sk_route_caps : &null_features,
-	     skb->len, skb->data_len, skb_shinfo(skb)->gso_size,
-	     skb_shinfo(skb)->gso_type, skb->ip_summed);
+	     skb->sk ? &skb->sk->sk_route_caps : &null_features);
 }
 
 /*
@@ -3423,10 +3426,11 @@ EXPORT_SYMBOL(__skb_gso_segment);
 
 /* Take action when hardware reception checksum errors are detected. */
 #ifdef CONFIG_BUG
-void netdev_rx_csum_fault(struct net_device *dev)
+void netdev_rx_csum_fault(struct net_device *dev, struct sk_buff *skb)
 {
 	if (net_ratelimit()) {
 		pr_err("%s: hw csum failure\n", dev ? dev->name : "<unknown>");
+		skb_dump(KERN_ERR, skb, true);
 		dump_stack();
 	}
 }
@@ -3889,8 +3893,8 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 		return skb;
 
 	/* qdisc_skb_cb(skb)->pkt_len was already set by the caller. */
-	qdisc_skb_cb(skb)->mru = 0;
-	qdisc_skb_cb(skb)->post_ct = false;
+	tc_skb_cb(skb)->mru = 0;
+	tc_skb_cb(skb)->post_ct = false;
 	mini_qdisc_bstats_cpu_update(miniq, skb);
 
 	switch (tcf_classify(skb, miniq->block, miniq->filter_list, &cl_res, false)) {
@@ -4643,10 +4647,10 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	void *orig_data, *orig_data_end, *hard_start;
 	struct netdev_rx_queue *rxqueue;
 	u32 metalen, act = XDP_DROP;
+	bool orig_bcast, orig_host;
 	u32 mac_len, frame_sz;
 	__be16 orig_eth_type;
 	struct ethhdr *eth;
-	bool orig_bcast;
 	int off;
 
 	/* Reinjected packets coming from act_mirred or similar should
@@ -4693,6 +4697,7 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	orig_data_end = xdp->data_end;
 	orig_data = xdp->data;
 	eth = (struct ethhdr *)xdp->data;
+	orig_host = ether_addr_equal_64bits(eth->h_dest, skb->dev->dev_addr);
 	orig_bcast = is_multicast_ether_addr_64bits(eth->h_dest);
 	orig_eth_type = eth->h_proto;
 
@@ -4720,8 +4725,11 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	/* check if XDP changed eth hdr such SKB needs update */
 	eth = (struct ethhdr *)xdp->data;
 	if ((orig_eth_type != eth->h_proto) ||
+	    (orig_host != ether_addr_equal_64bits(eth->h_dest,
+						  skb->dev->dev_addr)) ||
 	    (orig_bcast != is_multicast_ether_addr_64bits(eth->h_dest))) {
 		__skb_push(skb, ETH_HLEN);
+		skb->pkt_type = PACKET_HOST;
 		skb->protocol = eth_type_trans(skb, skb->dev);
 	}
 
@@ -5008,8 +5016,8 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 	}
 
 	qdisc_skb_cb(skb)->pkt_len = skb->len;
-	qdisc_skb_cb(skb)->mru = 0;
-	qdisc_skb_cb(skb)->post_ct = false;
+	tc_skb_cb(skb)->mru = 0;
+	tc_skb_cb(skb)->post_ct = false;
 	skb->tc_at_ingress = 1;
 	mini_qdisc_bstats_cpu_update(miniq, skb);
 
@@ -5187,9 +5195,9 @@ another_round:
 	if (static_branch_unlikely(&generic_xdp_needed_key)) {
 		int ret2;
 
-		preempt_disable();
+		migrate_disable();
 		ret2 = do_xdp_generic(rcu_dereference(skb->dev->xdp_prog), skb);
-		preempt_enable();
+		migrate_enable();
 
 		if (ret2 != XDP_PASS)
 			return NET_RX_DROP;
@@ -5274,7 +5282,7 @@ skip_classify:
 		}
 	}
 
-	if (unlikely(skb_vlan_tag_present(skb))) {
+	if (unlikely(skb_vlan_tag_present(skb)) && !netdev_uses_dsa(skb->dev)) {
 		if (skb_vlan_tag_get_id(skb))
 			skb->pkt_type = PACKET_OTHERHOST;
 		/* Note: we might in the future use prio bits
@@ -5663,6 +5671,9 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 #ifdef CONFIG_SKB_EXTENSIONS
 			   skb->active_extensions ||
 #endif
+#ifdef CONFIG_XFRM
+			   skb->sp ||
+#endif
 			   skb_get_nfct(skb));
 
 	list_for_each_entry(p, &napi->gro_list, list) {
@@ -5717,7 +5728,7 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 	}
 }
 
-static void skb_gro_reset_offset(struct sk_buff *skb)
+static inline void skb_gro_reset_offset(struct sk_buff *skb, u32 nhoff)
 {
 	const struct skb_shared_info *pinfo = skb_shinfo(skb);
 	const skb_frag_t *frag0 = &pinfo->frags[0];
@@ -5726,9 +5737,9 @@ static void skb_gro_reset_offset(struct sk_buff *skb)
 	NAPI_GRO_CB(skb)->frag0 = NULL;
 	NAPI_GRO_CB(skb)->frag0_len = 0;
 
-	if (skb_mac_header(skb) == skb_tail_pointer(skb) &&
-	    pinfo->nr_frags &&
-	    !PageHighMem(skb_frag_page(frag0))) {
+	if (!skb_headlen(skb) && pinfo->nr_frags &&
+	    !PageHighMem(skb_frag_page(frag0)) &&
+	    (!NET_IP_ALIGN || !((skb_frag_off(frag0) + nhoff) & 3))) {
 		NAPI_GRO_CB(skb)->frag0 = skb_frag_address(frag0);
 		NAPI_GRO_CB(skb)->frag0_len = min_t(unsigned int,
 						    skb_frag_size(frag0),
@@ -5747,7 +5758,7 @@ static void gro_pull_from_frag0(struct sk_buff *skb, int grow)
 	skb->data_len -= grow;
 	skb->tail += grow;
 
-	pinfo->frags[0].page_offset += grow;
+	skb_frag_off_add(&pinfo->frags[0], grow);
 	skb_frag_size_sub(&pinfo->frags[0], grow);
 
 	if (unlikely(!skb_frag_size(&pinfo->frags[0]))) {
@@ -5939,7 +5950,7 @@ gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 	skb_mark_napi_id(skb, napi);
 	trace_napi_gro_receive_entry(skb);
 
-	skb_gro_reset_offset(skb);
+	skb_gro_reset_offset(skb, 0);
 
 	return napi_skb_finish(dev_gro_receive(napi, skb), skb);
 }
@@ -6034,7 +6045,7 @@ static struct sk_buff *napi_frags_skb(struct napi_struct *napi)
 	napi->skb = NULL;
 
 	skb_reset_mac_header(skb);
-	skb_gro_reset_offset(skb);
+	skb_gro_reset_offset(skb, hlen);
 
 	if (unlikely(skb_gro_header_hard(skb, hlen))) {
 		eth = skb_gro_header_slow(skb, hlen, 0);
@@ -6090,7 +6101,7 @@ __sum16 __skb_gro_checksum_complete(struct sk_buff *skb)
 	if (likely(!sum)) {
 		if (unlikely(skb->ip_summed == CHECKSUM_COMPLETE) &&
 		    !skb->csum_complete_sw)
-			netdev_rx_csum_fault(skb->dev);
+			netdev_rx_csum_fault(skb->dev, skb);
 	}
 
 	NAPI_GRO_CB(skb)->csum = wsum;
@@ -6647,12 +6658,16 @@ EXPORT_SYMBOL(napi_disable);
  */
 void napi_enable(struct napi_struct *n)
 {
-	BUG_ON(!test_bit(NAPI_STATE_SCHED, &n->state));
-	smp_mb__before_atomic();
-	clear_bit(NAPI_STATE_SCHED, &n->state);
-	clear_bit(NAPI_STATE_NPSVC, &n->state);
-	if (n->dev->threaded && n->thread)
-		set_bit(NAPI_STATE_THREADED, &n->state);
+	unsigned long val, new;
+
+	do {
+		val = READ_ONCE(n->state);
+		BUG_ON(!test_bit(NAPI_STATE_SCHED, &val));
+
+		new = val & ~(NAPIF_STATE_SCHED | NAPIF_STATE_NPSVC);
+		if (n->dev->threaded && n->thread)
+			new |= NAPIF_STATE_THREADED;
+	} while (cmpxchg(&n->state, val, new) != val);
 }
 EXPORT_SYMBOL(napi_enable);
 
@@ -9070,7 +9085,7 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 
 	ASSERT_RTNL();
 
-	rh_mark_used_feature("eBPF/xdp");
+	rh_add_flag("eBPF/xdp");
 
 	/* either link or prog attachment, never both */
 	if (link && (new_prog || old_prog))
@@ -10726,6 +10741,7 @@ EXPORT_SYMBOL(unregister_netdev);
 
 int dev_change_net_namespace(struct net_device *dev, struct net *net, const char *pat)
 {
+	struct net *net_old = dev_net(dev);
 	int err, new_nsid, new_ifindex;
 
 	ASSERT_RTNL();
@@ -10741,7 +10757,7 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net, const char
 
 	/* Get out if there is nothing todo */
 	err = 0;
-	if (net_eq(dev_net(dev), net))
+	if (net_eq(net_old, net))
 		goto out;
 
 	/* Pick the destination device name, and ensure
@@ -10815,6 +10831,12 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net, const char
 
 	/* Fixup kobjects */
 	err = device_rename(&dev->dev, dev->name);
+	WARN_ON(err);
+
+	/* Adapt owner in case owning user namespace of target network
+	 * namespace is different from the original one.
+	 */
+	err = netdev_change_owner(dev, net_old, net);
 	WARN_ON(err);
 
 	/* Add the device back in the hashes */

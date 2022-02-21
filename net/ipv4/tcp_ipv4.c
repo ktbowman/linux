@@ -584,7 +584,7 @@ int tcp_v4_err(struct sk_buff *icmp_skb, u32 info)
 		if (!sock_owned_by_user(sk)) {
 			sk->sk_err = err;
 
-			sk->sk_error_report(sk);
+			sk_error_report(sk);
 
 			tcp_done(sk);
 		} else {
@@ -612,7 +612,7 @@ int tcp_v4_err(struct sk_buff *icmp_skb, u32 info)
 	inet = inet_sk(sk);
 	if (!sock_owned_by_user(sk) && inet->recverr) {
 		sk->sk_err = err;
-		sk->sk_error_report(sk);
+		sk_error_report(sk);
 	} else	{ /* Only an error on timeout */
 		sk->sk_err_soft = err;
 	}
@@ -2709,6 +2709,9 @@ struct proto tcp_prot = {
 	.hash			= inet_hash,
 	.unhash			= inet_unhash,
 	.get_port		= inet_csk_get_port,
+#ifdef CONFIG_BPF_SYSCALL
+	.psock_update_sk_prot	= tcp_bpf_update_proto,
+#endif
 	.enter_memory_pressure	= tcp_enter_memory_pressure,
 	.leave_memory_pressure	= tcp_leave_memory_pressure,
 	.stream_memory_free	= tcp_stream_memory_free,

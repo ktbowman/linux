@@ -3045,7 +3045,10 @@ int unregister_console(struct console *console)
 		}
 	}
 
-	if (!res && (console->flags & CON_EXTENDED))
+	if (res)
+		goto out_disable_unlock;
+
+	if (console->flags & CON_EXTENDED)
 		nr_ext_console_drivers--;
 
 	/*
@@ -3058,6 +3061,16 @@ int unregister_console(struct console *console)
 	console->flags &= ~CON_ENABLED;
 	console_unlock();
 	console_sysfs_notify();
+
+	if (console->exit)
+		res = console->exit(console);
+
+	return res;
+
+out_disable_unlock:
+	console->flags &= ~CON_ENABLED;
+	console_unlock();
+
 	return res;
 }
 EXPORT_SYMBOL(unregister_console);

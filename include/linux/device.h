@@ -573,6 +573,9 @@ struct class_rh {
  * @shutdown_pre: Called at shut-down time before driver shutdown.
  * @ns_type:	Callbacks so sysfs can detemine namespaces.
  * @namespace:	Namespace of the device belongs to this class.
+ * @get_ownership: Allows class to specify uid/gid of the sysfs directories
+ *		for the devices belonging to the class. Usually tied to
+ *		device's namespace.
  * @pm:		The default device power management operations of this class.
  * @p:		The private data of the driver core, no one other than the
  *		driver core can touch this.
@@ -606,7 +609,7 @@ struct class {
 
 	struct subsys_private *p;
 
-	RH_KABI_RESERVE(1)
+	RH_KABI_USE(1, void (*get_ownership)(struct device *dev, kuid_t *uid, kgid_t *gid))
 	RH_KABI_RESERVE(2)
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
@@ -1010,6 +1013,7 @@ struct device_dma_parameters {
 	 */
 	unsigned int max_segment_size;
 	unsigned long segment_boundary_mask;
+	RH_KABI_EXTEND(unsigned int min_align_mask)
 };
 
 typedef void *(*devcon_match_fn_t)(struct fwnode_handle *fwnode, const char *id,
@@ -1050,6 +1054,7 @@ enum device_link_state {
  * AUTOPROBE_CONSUMER: Probe consumer driver automatically after supplier binds.
  * MANAGED: The core tracks presence of supplier/consumer drivers (internal).
  * SYNC_STATE_ONLY: Link only affects sync_state() behavior.
+ * INFERRED: Inferred from data (eg: firmware) and not from driver actions.
  */
 #define DL_FLAG_STATELESS		BIT(0)
 #define DL_FLAG_AUTOREMOVE_CONSUMER	BIT(1)
@@ -1059,6 +1064,7 @@ enum device_link_state {
 #define DL_FLAG_AUTOPROBE_CONSUMER	BIT(5)
 #define DL_FLAG_MANAGED			BIT(6)
 #define DL_FLAG_SYNC_STATE_ONLY		BIT(7)
+#define DL_FLAG_INFERRED		BIT(8)
 
 /**
  * enum dl_dev_state - Device driver presence tracking information.
@@ -1075,12 +1081,25 @@ enum dl_dev_state {
 };
 
 /**
+ * enum device_removable - Whether the device is removable. The criteria for a
+ * device to be classified as removable is determined by its subsystem or bus.
+ * @DEVICE_REMOVABLE_NOT_SUPPORTED: This attribute is not supported for this
+ *				    device (default).
+ * @DEVICE_REMOVABLE_UNKNOWN:  Device location is Unknown.
+ * @DEVICE_FIXED: Device is not removable by the user.
+ * @DEVICE_REMOVABLE: Device is removable by the user.
+ */
+enum device_removable {
+	DEVICE_REMOVABLE_NOT_SUPPORTED = 0, /* must be 0 */
+	DEVICE_REMOVABLE_UNKNOWN,
+	DEVICE_FIXED,
+	DEVICE_REMOVABLE,
+};
+
+/**
  * struct dev_links_info - Device data related to device links.
  * @suppliers: List of links to supplier devices.
  * @consumers: List of links to consumer devices.
- * @needs_suppliers: Hook to global list of devices waiting for suppliers.
- * @defer_hook: Hook to global list of devices that have deferred sync_state or
- *             deferred fw_devlink.
  * @status: Driver status information.
  */
 struct dev_links_info {
@@ -1104,7 +1123,7 @@ struct dev_links_info {
  * as above for the same reasons.
  *
  * upstream commit fc5a251d0fd7 (driver core: Add sync_state driver/bus
- * callback) * adds yet another entry: defer_hook.  Rinse and repeat.
+ * callback) * adds yet another entry: defer_sync.  Rinse and repeat.
  */
 
 struct device_extended_rh {
@@ -1153,12 +1172,13 @@ struct device_extended_rh {
  * 		such descriptors.
  * @bus_dma_limit: Limit of an upstream bridge or bus which imposes a smaller
  *		DMA limit than the device itself supports.
- * @dma_pfn_offset: offset of DMA memory range relatively of RAM
+ * @dma_range_map: map for DMA memory ranges relative to that of RAM
  * @dma_parms:	A low level driver may set these to teach IOMMU code about
  * 		segment limitations.
  * @dma_pools:	Dma pools (if dma'ble device).
  * @dma_mem:	Internal for coherent mem override.
  * @cma_area:	Contiguous memory area for dma allocations
+ * @dma_io_tlb_mem: Pointer to the swiotlb pool used.  Not for driver use.
  * @archdata:	For arch-specific additions.
  * @of_node:	Associated device tree node.
  * @fwnode:	Associated device node supplied by platform firmware.
@@ -1174,6 +1194,9 @@ struct device_extended_rh {
  * 		device (i.e. the bus driver that discovered the device).
  * @iommu_group: IOMMU group the device belongs to.
  * @iommu:	Per device generic IOMMU runtime data
+ * @removable:  Whether the device can be removed from the system. This
+ *              should be set by the subsystem / bus driver that discovered
+ *              the device.
  *
  * @offline_disabled: If set, the device is permanently online.
  * @offline:	Set after successful invocation of bus type's .offline().
@@ -1246,7 +1269,7 @@ struct device {
 					     allocations such descriptors. */
 	u64		RH_KABI_RENAME(bus_dma_mask,
 					bus_dma_limit); /* upstream dma constraint */
-	unsigned long	dma_pfn_offset;
+	RH_KABI_BROKEN_REPLACE(unsigned long	dma_pfn_offset, const struct bus_dma_region *dma_range_map)
 
 	struct device_dma_parameters *dma_parms;
 
@@ -1294,14 +1317,19 @@ struct device {
 	/* Use device_extended after all RESERVE fields used */
 
 	RH_KABI_USE(1, struct dev_iommu *iommu)
+#ifdef CONFIG_SWIOTLB
+	RH_KABI_USE(2, struct io_tlb_mem *dma_io_tlb_mem)
+#else
 	RH_KABI_RESERVE(2)
+#endif
 
 	/* NB: See the note for struct dev_links_info: */
-	RH_KABI_USE(3, 4, struct list_head links_needs_suppliers)
-	RH_KABI_USE(5, bool links_need_for_probe)
-	RH_KABI_USE(6, 7, struct list_head links_defer_hook)
+	RH_KABI_RESERVE(3)
+	RH_KABI_RESERVE(4)
+	RH_KABI_RESERVE(5)
+	RH_KABI_USE(6, 7, struct list_head links_defer_sync)
 
-	RH_KABI_RESERVE(8)
+	RH_KABI_USE(8, enum device_removable   removable)
 	RH_KABI_RESERVE(9)
 	RH_KABI_RESERVE(10)
 	RH_KABI_RESERVE(11)
@@ -1368,6 +1396,18 @@ static inline const char *dev_name(const struct device *dev)
 		return dev->init_name;
 
 	return kobject_name(&dev->kobj);
+}
+
+/**
+ * dev_bus_name - Return a device's bus/class name, if at all possible
+ * @dev: struct device to get the bus/class name of
+ *
+ * Will return the name of the bus/class the device is attached to.  If it is
+ * not attached to a bus/class, an empty string will be returned.
+ */
+static inline const char *dev_bus_name(const struct device *dev)
+{
+	return dev->bus ? dev->bus->name : (dev->class ? dev->class->name : "");
 }
 
 extern __printf(2, 3)
@@ -1527,6 +1567,22 @@ static inline bool dev_has_sync_state(struct device *dev)
 	return false;
 }
 
+static inline void dev_set_removable(struct device *dev,
+				     enum device_removable removable)
+{
+	dev->removable = removable;
+}
+
+static inline bool dev_is_removable(struct device *dev)
+{
+	return dev->removable == DEVICE_REMOVABLE;
+}
+
+static inline bool dev_removable_is_valid(struct device *dev)
+{
+	return dev->removable != DEVICE_REMOVABLE_NOT_SUPPORTED;
+}
+
 /*
  * High level routines for use by the bus drivers
  */
@@ -1544,6 +1600,7 @@ extern struct device *device_find_child(struct device *dev, void *data,
 extern int device_rename(struct device *dev, const char *new_name);
 extern int device_move(struct device *dev, struct device *new_parent,
 		       enum dpm_order dpm_order);
+extern int device_change_owner(struct device *dev, kuid_t kuid, kgid_t kgid);
 extern const char *device_get_devnode(struct device *dev,
 				      umode_t *mode, kuid_t *uid, kgid_t *gid,
 				      const char **tmp);

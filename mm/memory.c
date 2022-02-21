@@ -64,7 +64,6 @@
 #include <linux/gfp.h>
 #include <linux/migrate.h>
 #include <linux/string.h>
-#include <linux/dma-debug.h>
 #include <linux/debugfs.h>
 #include <linux/userfaultfd_k.h>
 #include <linux/dax.h>
@@ -2409,7 +2408,7 @@ static inline int pte_unmap_same(struct mm_struct *mm, pmd_t *pmd,
 				pte_t *page_table, pte_t orig_pte)
 {
 	int same = 1;
-#if defined(CONFIG_SMP) || defined(CONFIG_PREEMPT)
+#if defined(CONFIG_SMP) || defined(CONFIG_PREEMPTION)
 	if (sizeof(pte_t) > sizeof(unsigned long)) {
 		spinlock_t *ptl = pte_lockptr(mm, pmd);
 		spin_lock(ptl);
@@ -3685,12 +3684,8 @@ DEFINE_DEBUGFS_ATTRIBUTE(fault_around_bytes_fops,
 
 static int __init fault_around_debugfs(void)
 {
-	void *ret;
-
-	ret = debugfs_create_file_unsafe("fault_around_bytes", 0644, NULL, NULL,
-			&fault_around_bytes_fops);
-	if (!ret)
-		pr_warn("Failed to create fault_around_bytes in debugfs");
+	debugfs_create_file_unsafe("fault_around_bytes", 0644, NULL, NULL,
+				   &fault_around_bytes_fops);
 	return 0;
 }
 late_initcall(fault_around_debugfs);
@@ -4905,17 +4900,19 @@ long copy_huge_page_from_user(struct page *dst_page,
 	void *page_kaddr;
 	unsigned long i, rc = 0;
 	unsigned long ret_val = pages_per_huge_page * PAGE_SIZE;
+	struct page *subpage = dst_page;
 
-	for (i = 0; i < pages_per_huge_page; i++) {
+	for (i = 0; i < pages_per_huge_page;
+	     i++, subpage = mem_map_next(subpage, dst_page, i)) {
 		if (allow_pagefault)
-			page_kaddr = kmap(dst_page + i);
+			page_kaddr = kmap(subpage);
 		else
-			page_kaddr = kmap_atomic(dst_page + i);
+			page_kaddr = kmap_atomic(subpage);
 		rc = copy_from_user(page_kaddr,
 				(const void __user *)(src + i * PAGE_SIZE),
 				PAGE_SIZE);
 		if (allow_pagefault)
-			kunmap(dst_page + i);
+			kunmap(subpage);
 		else
 			kunmap_atomic(page_kaddr);
 

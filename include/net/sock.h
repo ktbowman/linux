@@ -295,6 +295,7 @@ struct bpf_local_storage;
   *	@sk_priority: %SO_PRIORITY setting
   *	@sk_type: socket type (%SOCK_STREAM, etc)
   *	@sk_protocol: which protocol this socket belongs in this network family
+  *	@sk_peer_lock: lock protecting @sk_peer_pid and @sk_peer_cred
   *	@sk_peer_pid: &struct pid for this socket's peer
   *	@sk_peer_cred: %SO_PEERCRED setting
   *	@sk_rcvlowat: %SO_RCVLOWAT setting
@@ -516,7 +517,7 @@ struct sock {
 	RH_KABI_USE(2, struct sk_buff                  *sk_tx_skb_cache)
 	RH_KABI_USE_SPLIT(3, u8			sk_prefer_busy_poll,
 			     u16		sk_busy_poll_budget)
-	RH_KABI_RESERVE(4)
+	RH_KABI_USE(4, spinlock_t		sk_peer_lock)
 	RH_KABI_RESERVE(5)
 	RH_KABI_RESERVE(6)
 	RH_KABI_RESERVE(7)
@@ -1112,6 +1113,7 @@ struct inet_hashinfo;
 struct raw_hashinfo;
 struct smc_hashinfo;
 struct module;
+struct sk_psock;
 
 /*
  * caches using SLAB_TYPESAFE_BY_RCU should let .next pointer from nulls nodes
@@ -1247,7 +1249,9 @@ struct proto {
 
 	RH_KABI_USE(1, bool	(*bpf_bypass_getsockopt)(int level,
 							 int optname))
-	RH_KABI_RESERVE(2)
+	RH_KABI_USE(2, int	(*psock_update_sk_prot)(struct sock *sk,
+							struct sk_psock *psock,
+							bool restore))
 	RH_KABI_RESERVE(3)
 	RH_KABI_RESERVE(4)
 	RH_KABI_RESERVE(5)
@@ -1666,6 +1670,7 @@ static inline void unlock_sock_fast(struct sock *sk, bool slow)
 		release_sock(sk);
 		__release(&sk->sk_lock.slock);
 	} else {
+		mutex_release(&sk->sk_lock.dep_map, _RET_IP_);
 		spin_unlock_bh(&sk->sk_lock.slock);
 	}
 }
@@ -2302,6 +2307,8 @@ static inline int sock_error(struct sock *sk)
 	return -err;
 }
 
+void sk_error_report(struct sock *sk);
+
 static inline unsigned long sock_wspace(struct sock *sk)
 {
 	int amt = 0;
@@ -2370,12 +2377,20 @@ struct sk_buff *sk_stream_alloc_skb(struct sock *sk, int size, gfp_t gfp,
  * sk_page_frag - return an appropriate page_frag
  * @sk: socket
  *
- * If socket allocation mode allows current thread to sleep, it means its
- * safe to use the per task page_frag instead of the per socket one.
+ * Use the per task page_frag instead of the per socket one for
+ * optimization when we know that we're in process context and own
+ * everything that's associated with %current.
+ *
+ * Both direct reclaim and page faults can nest inside other
+ * socket operations and end up recursing into sk_page_frag()
+ * while it's already in use: explicitly avoid task page_frag
+ * usage if the caller is potentially doing any of them.
+ * This assumes that page fault handlers use the GFP_NOFS flags.
  */
 static inline struct page_frag *sk_page_frag(struct sock *sk)
 {
-	if (gfpflags_allow_blocking(sk->sk_allocation))
+	if ((sk->sk_allocation & (__GFP_DIRECT_RECLAIM | __GFP_MEMALLOC | __GFP_FS)) ==
+	    (__GFP_DIRECT_RECLAIM | __GFP_FS))
 		return &current->task_frag;
 
 	return &sk->sk_frag;
