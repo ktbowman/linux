@@ -2127,8 +2127,11 @@ install -m755 page_owner_sort %{buildroot}%{_bindir}/page_owner_sort
 popd
 %endif
 
-if [ -f $DevelDir/vmlinux.h ]; then
-  RPM_VMLINUX_H=$DevelDir/vmlinux.h
+# We don't call InitBuildVars in install section so $DevelDir
+# variable is not defined. Using the $DevelDir definition
+# directly.
+if [ -f /usr/src/kernels/%{KVERREL}/vmlinux.h ]; then
+  RPM_VMLINUX_H=/usr/src/kernels/%{KVERREL}/vmlinux.h
 fi
 
 %if !%{with_realtime}
