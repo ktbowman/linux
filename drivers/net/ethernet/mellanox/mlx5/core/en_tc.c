@@ -494,11 +494,15 @@ static void mlx5e_hairpin_destroy_transport(struct mlx5e_hairpin *hp)
 	mlx5_core_dealloc_transport_domain(hp->func_mdev, hp->tdn);
 }
 
-static void mlx5e_hairpin_fill_rqt_rqns(struct mlx5e_hairpin *hp, void *rqtc)
+static int mlx5e_hairpin_fill_rqt_rqns(struct mlx5e_hairpin *hp, void *rqtc)
 {
-	u32 indirection_rqt[MLX5E_INDIR_RQT_SIZE], rqn;
 	struct mlx5e_priv *priv = hp->func_priv;
 	int i, ix, sz = MLX5E_INDIR_RQT_SIZE;
+	u32 *indirection_rqt, rqn;
+
+	indirection_rqt = kcalloc(sz, sizeof(*indirection_rqt), GFP_KERNEL);
+	if (!indirection_rqt)
+		return -ENOMEM;
 
 	mlx5e_build_default_indir_rqt(indirection_rqt, sz,
 				      hp->num_channels);
@@ -511,6 +515,9 @@ static void mlx5e_hairpin_fill_rqt_rqns(struct mlx5e_hairpin *hp, void *rqtc)
 		rqn = hp->pair->rqn[ix];
 		MLX5_SET(rqtc, rqtc, rq_num[i], rqn);
 	}
+
+	kfree(indirection_rqt);
+	return 0;
 }
 
 static int mlx5e_hairpin_create_indirect_rqt(struct mlx5e_hairpin *hp)
@@ -531,12 +538,15 @@ static int mlx5e_hairpin_create_indirect_rqt(struct mlx5e_hairpin *hp)
 	MLX5_SET(rqtc, rqtc, rqt_actual_size, sz);
 	MLX5_SET(rqtc, rqtc, rqt_max_size, sz);
 
-	mlx5e_hairpin_fill_rqt_rqns(hp, rqtc);
+	err = mlx5e_hairpin_fill_rqt_rqns(hp, rqtc);
+	if (err)
+		goto out;
 
 	err = mlx5_core_create_rqt(mdev, in, inlen, &hp->indir_rqt.rqtn);
 	if (!err)
 		hp->indir_rqt.enabled = true;
 
+out:
 	kvfree(in);
 	return err;
 }
@@ -945,7 +955,7 @@ mlx5e_add_offloaded_nic_rule(struct mlx5e_priv *priv,
 			if (IS_ERR(dest[dest_ix].ft))
 				return ERR_CAST(dest[dest_ix].ft);
 		} else {
-			dest[dest_ix].ft = priv->fs.vlan.ft.t;
+			dest[dest_ix].ft = mlx5e_vlan_get_flowtable(priv->fs.vlan);
 		}
 		dest_ix++;
 	}
@@ -2030,6 +2040,10 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 				    misc_parameters);
 	void *misc_v = MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				    misc_parameters);
+	void *misc_c_3 = MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
+				    misc_parameters_3);
+	void *misc_v_3 = MLX5_ADDR_OF(fte_match_param, spec->match_value,
+				    misc_parameters_3);
 	struct flow_rule *rule = flow_cls_offload_flow_rule(f);
 	struct flow_dissector *dissector = rule->match.dissector;
 	enum fs_flow_table_type fs_type;
@@ -2061,6 +2075,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	      BIT(FLOW_DISSECTOR_KEY_CT) |
 	      BIT(FLOW_DISSECTOR_KEY_ENC_IP) |
 	      BIT(FLOW_DISSECTOR_KEY_ENC_OPTS) |
+	      BIT(FLOW_DISSECTOR_KEY_ICMP) |
 	      BIT(FLOW_DISSECTOR_KEY_MPLS))) {
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported key");
 		netdev_dbg(priv->netdev, "Unsupported key used: 0x%x\n",
@@ -2407,7 +2422,49 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			   "Matching on MPLS is supported only for MPLS over UDP\n");
 		return -EOPNOTSUPP;
 	}
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ICMP)) {
+		struct flow_match_icmp match;
 
+		flow_rule_match_icmp(rule, &match);
+		switch (ip_proto) {
+		case IPPROTO_ICMP:
+			if (!(MLX5_CAP_GEN(priv->mdev, flex_parser_protocols) &
+			      MLX5_FLEX_PROTO_ICMP))
+				return -EOPNOTSUPP;
+			MLX5_SET(fte_match_set_misc3, misc_c_3, icmp_type,
+				 match.mask->type);
+			MLX5_SET(fte_match_set_misc3, misc_v_3, icmp_type,
+				 match.key->type);
+			MLX5_SET(fte_match_set_misc3, misc_c_3, icmp_code,
+				 match.mask->code);
+			MLX5_SET(fte_match_set_misc3, misc_v_3, icmp_code,
+				 match.key->code);
+			break;
+		case IPPROTO_ICMPV6:
+			if (!(MLX5_CAP_GEN(priv->mdev, flex_parser_protocols) &
+			      MLX5_FLEX_PROTO_ICMPV6))
+				return -EOPNOTSUPP;
+			MLX5_SET(fte_match_set_misc3, misc_c_3, icmpv6_type,
+				 match.mask->type);
+			MLX5_SET(fte_match_set_misc3, misc_v_3, icmpv6_type,
+				 match.key->type);
+			MLX5_SET(fte_match_set_misc3, misc_c_3, icmpv6_code,
+				 match.mask->code);
+			MLX5_SET(fte_match_set_misc3, misc_v_3, icmpv6_code,
+				 match.key->code);
+			break;
+		default:
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Code and type matching only with ICMP and ICMPv6");
+			netdev_err(priv->netdev,
+				   "Code and type matching only with ICMP and ICMPv6\n");
+			return -EINVAL;
+		}
+		if (match.mask->code || match.mask->type) {
+			*match_level = MLX5_MATCH_L4;
+			spec->match_criteria_enable |= MLX5_MATCH_MISC_PARAMETERS_3;
+		}
+	}
 	return 0;
 }
 
@@ -4831,7 +4888,7 @@ int mlx5e_tc_nic_init(struct mlx5e_priv *priv)
 	attr.ns = MLX5_FLOW_NAMESPACE_KERNEL;
 	attr.max_ft_sz = mlx5e_tc_nic_get_ft_size(dev);
 	attr.max_grp_num = MLX5E_TC_TABLE_NUM_GROUPS;
-	attr.default_ft = priv->fs.vlan.ft.t;
+	attr.default_ft = mlx5e_vlan_get_flowtable(priv->fs.vlan);
 	attr.mapping = chains_mapping;
 
 	tc->chains = mlx5_chains_create(dev, &attr);
