@@ -2432,25 +2432,6 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			*match_level = MLX5_MATCH_L4;
 	}
 
-	/* Currenlty supported only for MPLS over UDP */
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_MPLS) &&
-	    !netif_is_bareudp(filter_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Matching on MPLS is supported only for MPLS over UDP");
-		netdev_err(priv->netdev,
-			   "Matching on MPLS is supported only for MPLS over UDP\n");
-		return -EOPNOTSUPP;
-	}
-
-	/* Currenlty supported only for MPLS over UDP */
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_MPLS) &&
-	    !netif_is_bareudp(filter_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Matching on MPLS is supported only for MPLS over UDP");
-		netdev_err(priv->netdev,
-			   "Matching on MPLS is supported only for MPLS over UDP\n");
-		return -EOPNOTSUPP;
-	}
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ICMP)) {
 		struct flow_match_icmp match;
 
@@ -2494,6 +2475,16 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			spec->match_criteria_enable |= MLX5_MATCH_MISC_PARAMETERS_3;
 		}
 	}
+	/* Currenlty supported only for MPLS over UDP */
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_MPLS) &&
+	    !netif_is_bareudp(filter_dev)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Matching on MPLS is supported only for MPLS over UDP");
+		netdev_err(priv->netdev,
+			   "Matching on MPLS is supported only for MPLS over UDP\n");
+		return -EOPNOTSUPP;
+	}
+
 	return 0;
 }
 
