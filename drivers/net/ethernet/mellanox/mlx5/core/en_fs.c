@@ -1720,10 +1720,6 @@ static int mlx5e_create_vlan_table(struct mlx5e_priv *priv)
 	struct mlx5e_flow_table *ft;
 	int err;
 
-	priv->fs.vlan = kvzalloc(sizeof(*priv->fs.vlan), GFP_KERNEL);
-	if (!priv->fs.vlan)
-		return -ENOMEM;
-
 	ft = &priv->fs.vlan->ft;
 	ft->num_groups = 0;
 
@@ -1732,10 +1728,8 @@ static int mlx5e_create_vlan_table(struct mlx5e_priv *priv)
 	ft_attr.prio = MLX5E_NIC_PRIO;
 
 	ft->t = mlx5_create_flow_table(priv->fs.ns, &ft_attr);
-	if (IS_ERR(ft->t)) {
-		err = PTR_ERR(ft->t);
-		goto err_free_t;
-	}
+	if (IS_ERR(ft->t))
+		return PTR_ERR(ft->t);
 
 	ft->g = kcalloc(MLX5E_NUM_VLAN_GROUPS, sizeof(*ft->g), GFP_KERNEL);
 	if (!ft->g) {
@@ -1755,9 +1749,6 @@ err_free_g:
 	kfree(ft->g);
 err_destroy_vlan_table:
 	mlx5_destroy_flow_table(ft->t);
-err_free_t:
-	kvfree(priv->fs.vlan);
-	priv->fs.vlan = NULL;
 
 	return err;
 }
@@ -1766,7 +1757,6 @@ static void mlx5e_destroy_vlan_table(struct mlx5e_priv *priv)
 {
 	mlx5e_del_vlan_rules(priv);
 	mlx5e_destroy_flow_table(&priv->fs.vlan->ft);
-	kvfree(priv->fs.vlan);
 }
 
 int mlx5e_create_flow_steering(struct mlx5e_priv *priv)
@@ -1855,4 +1845,18 @@ void mlx5e_destroy_flow_steering(struct mlx5e_priv *priv)
 	mlx5e_destroy_inner_ttc_table(priv, &priv->fs.inner_ttc);
 	mlx5e_arfs_destroy_tables(priv);
 	mlx5e_ethtool_cleanup_steering(priv);
+}
+
+int mlx5e_fs_init(struct mlx5e_priv *priv)
+{
+	priv->fs.vlan = kvzalloc(sizeof(*priv->fs.vlan), GFP_KERNEL);
+	if (!priv->fs.vlan)
+		return -ENOMEM;
+	return 0;
+}
+
+void mlx5e_fs_cleanup(struct mlx5e_priv *priv)
+{
+	kvfree(priv->fs.vlan);
+	priv->fs.vlan = NULL;
 }
