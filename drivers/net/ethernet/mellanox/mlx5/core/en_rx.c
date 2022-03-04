@@ -1561,7 +1561,7 @@ int mlx5e_poll_rx_cq(struct mlx5e_cq *cq, int budget)
 
 	if (rq->cqd.left) {
 		work_done += mlx5e_decompress_cqes_cont(rq, cqwq, 0, budget);
-		if (rq->cqd.left || work_done >= budget)
+		if (work_done >= budget)
 			goto out;
 	}
 
