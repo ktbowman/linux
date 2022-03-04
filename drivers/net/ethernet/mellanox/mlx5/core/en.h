@@ -252,6 +252,7 @@ struct mlx5e_params {
 	struct {
 		u16 mode;
 		u8 num_tc;
+		struct netdev_tc_txq tc_to_txq[TC_MAX_QUEUE];
 	} mqprio;
 	bool rx_cqe_compress_def;
 	struct dim_cq_moder rx_cq_moderation;
