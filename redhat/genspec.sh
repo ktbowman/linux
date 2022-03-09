@@ -36,19 +36,20 @@ GIT_NOTES="--notes=refs/notes/${RHEL_MAJOR}.${RHEL_MINOR}*"
 # have the pathspec '(exclude)' support
 EXCLUDE=$(git log -1 --format=%P ${0%/*}/rhdocs | cut -d ' ' -f 2)
 
-echo >$clogf
-
 lasttag=$(git rev-list --first-parent --grep="^\[redhat\] ${PACKAGE_NAME}-${RPMVERSION}" --max-count=1 HEAD)
 # if we didn't find the proper tag, assume this is the first release
 if [ -z "$lasttag" ]; then
 	lasttag=$(git describe --match="$MARKER" --abbrev=0)
 fi
 echo "Gathering new log entries since $lasttag"
-git log --topo-order --reverse --no-merges -z $GIT_NOTES "$GIT_FORMAT" \
-	${lasttag}.. ${EXCLUDE:+^$EXCLUDE} | ${0%/*}/genlog.py >> "$clogf"
 
-cat $clogf | grep -v "tagging $RPM_VERSION" > $clogf.stripped
-cp $clogf.stripped $clogf
+cname="$(git var GIT_COMMITTER_IDENT |sed 's/>.*/>/')"
+cdate="$(LC_ALL=C date +"%a %b %d %Y")"
+cversion="[$RPM_VERSION]";
+echo "* $cdate $cname $cversion" > "$clogf"
+
+git log --topo-order --no-merges -z $GIT_NOTES "$GIT_FORMAT" \
+	${lasttag}.. ${EXCLUDE:+^$EXCLUDE} | ${0%/*}/genlog.py >> "$clogf"
 
 if [ "x$HIDE_REDHAT" == "x1" ]; then
 	cat $clogf | grep -v -e "^- \[redhat\]" |
@@ -61,28 +62,23 @@ if [ "x$HIDE_UNSUPPORTED_ARCH" == "x1" ]; then
 	cp $clogf.stripped $clogf
 fi
 
-LENGTH=$(wc -l $clogf | awk '{print $1}')
-
-#the changelog was created in reverse order
-#also remove the blank on top, if it exists
-#left by the 'print version\n' logic above
-cname="$(git var GIT_COMMITTER_IDENT |sed 's/>.*/>/')"
-cdate="$(LC_ALL=C date +"%a %b %d %Y")"
-cversion="[$RPM_VERSION]";
-tac $clogf | sed "1{/^$/d; /^- /i\
-* $cdate $cname $cversion
-	}" > $clogf.rev
-
+# during rh-dist-git genspec runs again and generates empty changelog
+# create empty file to avoid adding extra header to changelog
+LENGTH=$(grep "^-" $clogf | wc -l | awk '{print $1}')
 if [ "$LENGTH" = 0 ]; then
-	rm -f $clogf.rev; touch $clogf.rev
+	rm -f $clogf
+	touch $clogf
 fi
 
-cat $clogf.rev $CHANGELOG > $clogf.full
+cat $clogf $CHANGELOG > $clogf.full
 mv -f $clogf.full $CHANGELOG
+
+# genlog.py generates Resolves lines as well, strip these from RPM changelog
+cat $CHANGELOG | grep -v -e "^Resolves: " > $clogf.stripped
 
 test -n "$SPECFILE" &&
         sed -i -e "
-	/%%CHANGELOG%%/r $CHANGELOG
+	/%%CHANGELOG%%/r $clogf.stripped
 	/%%CHANGELOG%%/d
 	s/%%PACKAGE_NAME%%/$PACKAGE_NAME/
 	s/%%KVERSION%%/$KVERSION/
@@ -100,5 +96,5 @@ for opt in $BUILDOPTS; do
 	[ -n "$add_opt" ] && sed -i "s/^\\(# The following build options\\)/%define $add_opt 1\\n\\1/" $SPECFILE
 done
 
-rm -f $clogf{,.rev,.stripped};
+rm -f $clogf{,.stripped};
 
