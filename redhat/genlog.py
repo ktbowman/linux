@@ -61,6 +61,12 @@ def parse_commit(commit):
     bug_list = []
     zbug_list = []
     for line in lines[1:]:
+        # Metadata in git notes has priority over commit log
+        # If we found any BZ/ZBZ/CVE in git notes, we ignore commit log
+        if line == "^^^NOTES-END^^^":
+            if bug_list or zbug_list or cve_list:
+                break
+
         # If this is a patch applied through patchwork, we can leave processing
         # when outside of Patchwork metadata block
         if patchwork and line == "":

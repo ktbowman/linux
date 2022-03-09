@@ -10,12 +10,11 @@ KSUBLEVEL=$7
 DISTRO_BUILD=$8
 RELEASED_KERNEL=$9
 SPECRELEASE=${10}
-ZSTREAM_FLAG=${11}
-BUILDOPTS=${12}
-PACKAGE_NAME=${13}
-MARKER=${14}
-RHEL_MAJOR=${15}
-RHEL_MINOR=${16}
+BUILDOPTS=${11}
+PACKAGE_NAME=${12}
+MARKER=${13}
+RHEL_MAJOR=${14}
+RHEL_MINOR=${15}
 RPMVERSION=${KVERSION}.${KPATCHLEVEL}.${KSUBLEVEL}
 clogf="$SOURCES/changelog"
 # hide [redhat] entries from changelog
@@ -27,12 +26,8 @@ LC_TIME=
 STAMP=$(echo $MARKER | cut -f 1 -d '-' | sed -e "s/v//");
 RPM_VERSION="$RPMVERSION-$PKGRELEASE";
 
-GIT_FORMAT="--format=- %s (%an)%n%b"
-GIT_NOTES=""
-if [ "$ZSTREAM_FLAG" != "no" ]; then
-       GIT_FORMAT="--format=- %s (%an)%n%N"
-       GIT_NOTES="--notes=refs/notes/${RHEL_MAJOR}.${RHEL_MINOR}*"
-fi
+GIT_FORMAT="--format=- %s (%an)%n%N%n^^^NOTES-END^^^%n%b"
+GIT_NOTES="--notes=refs/notes/${RHEL_MAJOR}.${RHEL_MINOR}*"
 
 # We want to exclude changes in redhat/rhdocs tree from the changelog output.
 # Since the redhat/rhdocs is a separate git subtree, we can exclude the full
