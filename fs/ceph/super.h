@@ -31,6 +31,7 @@
  * large volume sizes on 32-bit machines. */
 #define CEPH_BLOCK_SHIFT   22  /* 4 MB */
 #define CEPH_BLOCK         (1 << CEPH_BLOCK_SHIFT)
+#define CEPH_4K_BLOCK_SHIFT 12  /* 4 KB */
 
 #define CEPH_MOUNT_OPT_CLEANRECOVER    (1<<1) /* auto reonnect (clean mode) after blocklisted */
 #define CEPH_MOUNT_OPT_DIRSTAT         (1<<4) /* `cat dirname` for stats */
@@ -47,8 +48,7 @@
 
 #define CEPH_MOUNT_OPT_DEFAULT			\
 	(CEPH_MOUNT_OPT_DCACHE |		\
-	 CEPH_MOUNT_OPT_NOCOPYFROM |		\
-	 CEPH_MOUNT_OPT_ASYNC_DIROPS)
+	 CEPH_MOUNT_OPT_NOCOPYFROM)
 
 #define ceph_set_mount_opt(fsc, opt) \
 	(fsc)->mount_options->flags |= CEPH_MOUNT_OPT_##opt
@@ -536,19 +536,23 @@ static inline int ceph_ino_compare(struct inode *inode, void *data)
  *
  * These come from src/mds/mdstypes.h in the ceph sources.
  */
-#define CEPH_MAX_MDS		0x100
-#define CEPH_NUM_STRAY		10
+#define CEPH_MAX_MDS			0x100
+#define CEPH_NUM_STRAY			10
 #define CEPH_MDS_INO_MDSDIR_OFFSET	(1 * CEPH_MAX_MDS)
+#define CEPH_MDS_INO_LOG_OFFSET		(2 * CEPH_MAX_MDS)
 #define CEPH_INO_SYSTEM_BASE		((6*CEPH_MAX_MDS) + (CEPH_MAX_MDS * CEPH_NUM_STRAY))
 
 static inline bool ceph_vino_is_reserved(const struct ceph_vino vino)
 {
-	if (vino.ino < CEPH_INO_SYSTEM_BASE &&
-	    vino.ino >= CEPH_MDS_INO_MDSDIR_OFFSET) {
-		WARN_RATELIMIT(1, "Attempt to access reserved inode number 0x%llx", vino.ino);
-		return true;
-	}
-	return false;
+	if (vino.ino >= CEPH_INO_SYSTEM_BASE ||
+	    vino.ino < CEPH_MDS_INO_MDSDIR_OFFSET)
+		return false;
+
+	/* Don't warn on mdsdirs */
+	WARN_RATELIMIT(vino.ino >= CEPH_MDS_INO_LOG_OFFSET,
+			"Attempt to access reserved inode number 0x%llx",
+			vino.ino);
+	return true;
 }
 
 static inline struct inode *ceph_find_inode(struct super_block *sb,

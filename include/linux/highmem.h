@@ -265,4 +265,31 @@ static inline void copy_highpage(struct page *to, struct page *from)
 
 #endif
 
+static inline void memcpy_from_page(char *to, struct page *page,
+				    size_t offset, size_t len)
+{
+	char *from = kmap_local_page(page);
+
+	memcpy(to, from + offset, len);
+	kunmap_local(from);
+}
+
+static inline void memcpy_to_page(struct page *page, size_t offset,
+				  const char *from, size_t len)
+{
+	char *to = kmap_local_page(page);
+
+	memcpy(to + offset, from, len);
+	flush_dcache_page(page);
+	kunmap_local(to);
+}
+
+static inline void memzero_page(struct page *page, size_t offset, size_t len)
+{
+	char *addr = kmap_local_page(page);
+	memset(addr + offset, 0, len);
+	flush_dcache_page(page);
+	kunmap_local(addr);
+}
+
 #endif /* _LINUX_HIGHMEM_H */
