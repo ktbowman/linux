@@ -26,6 +26,7 @@ enum mlx5dr_action_reformat_type {
 	DR_ACTION_REFORMAT_TYP_L2_TO_TNL_L2,
 	DR_ACTION_REFORMAT_TYP_TNL_L3_TO_L2,
 	DR_ACTION_REFORMAT_TYP_L2_TO_TNL_L3,
+	DR_ACTION_REFORMAT_TYP_INSERT_HDR,
 };
 
 struct mlx5dr_match_parameters {
@@ -87,7 +88,7 @@ mlx5dr_action_create_dest_flow_fw_table(struct mlx5dr_domain *domain,
 
 struct mlx5dr_action *
 mlx5dr_action_create_dest_vport(struct mlx5dr_domain *domain,
-				u32 vport, u8 vhca_id_valid,
+				u16 vport, u8 vhca_id_valid,
 				u16 vhca_id);
 
 struct mlx5dr_action *
@@ -100,11 +101,16 @@ struct mlx5dr_action *mlx5dr_action_create_drop(void);
 struct mlx5dr_action *mlx5dr_action_create_tag(u32 tag_value);
 
 struct mlx5dr_action *
+mlx5dr_action_create_flow_sampler(struct mlx5dr_domain *dmn, u32 sampler_id);
+
+struct mlx5dr_action *
 mlx5dr_action_create_flow_counter(u32 counter_id);
 
 struct mlx5dr_action *
 mlx5dr_action_create_packet_reformat(struct mlx5dr_domain *dmn,
 				     enum mlx5dr_action_reformat_type reformat_type,
+				     u8 reformat_param_0,
+				     u8 reformat_param_1,
 				     size_t data_sz,
 				     void *data);
 

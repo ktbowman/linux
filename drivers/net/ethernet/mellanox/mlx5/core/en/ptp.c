@@ -13,8 +13,6 @@ struct mlx5e_ptp_fs {
 	bool valid;
 };
 
-#define MLX5E_PTP_CHANNEL_IX 0
-
 struct mlx5e_ptp_params {
 	struct mlx5e_params params;
 	struct mlx5e_sq_param txq_sq_param;
@@ -482,8 +480,11 @@ static void mlx5e_ptp_build_params(struct mlx5e_ptp *c,
 		params->log_sq_size = orig->log_sq_size;
 		mlx5e_ptp_build_sq_param(c->mdev, params, &cparams->txq_sq_param);
 	}
-	if (test_bit(MLX5E_PTP_STATE_RX, c->state))
+	/* RQ */
+	if (test_bit(MLX5E_PTP_STATE_RX, c->state)) {
+		params->vlan_strip_disable = orig->vlan_strip_disable;
 		mlx5e_ptp_build_rq_param(c->mdev, c->netdev, c->priv->q_counter, cparams);
+	}
 }
 
 static int mlx5e_init_ptp_rq(struct mlx5e_ptp *c, struct mlx5e_params *params,
@@ -494,7 +495,7 @@ static int mlx5e_init_ptp_rq(struct mlx5e_ptp *c, struct mlx5e_params *params,
 	int err;
 
 	rq->wq_type      = params->rq_wq_type;
-	rq->pdev         = mdev->device;
+	rq->pdev         = c->pdev;
 	rq->netdev       = priv->netdev;
 	rq->priv         = priv;
 	rq->clock        = &mdev->clock;
@@ -502,6 +503,7 @@ static int mlx5e_init_ptp_rq(struct mlx5e_ptp *c, struct mlx5e_params *params,
 	rq->mdev         = mdev;
 	rq->hw_mtu       = MLX5E_SW2HW_MTU(params, params->sw_mtu);
 	rq->stats        = &c->priv->ptp_stats.rq;
+	rq->ix           = MLX5E_PTP_CHANNEL_IX;
 	rq->ptp_cyc2time = mlx5_rq_ts_translator(mdev);
 	err = mlx5e_rq_set_handlers(rq, params, false);
 	if (err)

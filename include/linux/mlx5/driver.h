@@ -554,6 +554,7 @@ struct mlx5_adev {
 	int idx;
 };
 
+struct mlx5_ft_pool;
 struct mlx5_priv {
 	/* IRQ table valid only for real pci devices PF or VF */
 	struct mlx5_irq_table   *irq_table;
@@ -580,7 +581,7 @@ struct mlx5_priv {
 	/* end: qp staff */
 
 	/* start: alloc staff */
-	/* protect buffer alocation according to numa node */
+	/* protect buffer allocation according to numa node */
 	struct mutex            alloc_mutex;
 	int                     numa_node;
 
@@ -606,6 +607,7 @@ struct mlx5_priv {
 	struct mlx5_core_roce	roce;
 	struct mlx5_fc_stats		fc_stats;
 	struct mlx5_rl_table            rl_table;
+	struct mlx5_ft_pool		*ft_pool;
 
 	struct mlx5_bfreg_data		bfregs;
 	struct mlx5_uars_page	       *uar;
@@ -1042,8 +1044,7 @@ void mlx5_unregister_debugfs(void);
 void mlx5_fill_page_array(struct mlx5_frag_buf *buf, __be64 *pas);
 void mlx5_fill_page_frag_array_perm(struct mlx5_frag_buf *buf, __be64 *pas, u8 perm);
 void mlx5_fill_page_frag_array(struct mlx5_frag_buf *frag_buf, __be64 *pas);
-int mlx5_vector2eqn(struct mlx5_core_dev *dev, int vector, int *eqn,
-		    unsigned int *irqn);
+int mlx5_vector2eqn(struct mlx5_core_dev *dev, int vector, int *eqn);
 int mlx5_core_attach_mcg(struct mlx5_core_dev *dev, union ib_gid *mgid, u32 qpn);
 int mlx5_core_detach_mcg(struct mlx5_core_dev *dev, union ib_gid *mgid, u32 qpn);
 
@@ -1109,7 +1110,7 @@ static inline u8 mlx5_mkey_variant(u32 mkey)
 }
 
 /* Async-atomic event notifier used by mlx5 core to forward FW
- * evetns recived from event queue to mlx5 consumers.
+ * evetns received from event queue to mlx5 consumers.
  * Optimise event queue dipatching.
  */
 int mlx5_notifier_register(struct mlx5_core_dev *dev, struct notifier_block *nb);
@@ -1134,7 +1135,6 @@ int mlx5_cmd_create_vport_lag(struct mlx5_core_dev *dev);
 int mlx5_cmd_destroy_vport_lag(struct mlx5_core_dev *dev);
 bool mlx5_lag_is_roce(struct mlx5_core_dev *dev);
 bool mlx5_lag_is_sriov(struct mlx5_core_dev *dev);
-bool mlx5_lag_is_multipath(struct mlx5_core_dev *dev);
 bool mlx5_lag_is_active(struct mlx5_core_dev *dev);
 struct net_device *mlx5_lag_get_roce_netdev(struct mlx5_core_dev *dev);
 u8 mlx5_lag_get_slave_port(struct mlx5_core_dev *dev,

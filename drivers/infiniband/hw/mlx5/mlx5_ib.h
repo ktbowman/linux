@@ -511,7 +511,6 @@ struct mlx5_ib_qp {
 	/*
 	 * IB/core doesn't store low-level QP types, so
 	 * store both MLX and IBTA types in the field below.
-	 * IB_QPT_DRIVER will be break to DCI/DCT subtypes.
 	 */
 	enum ib_qp_type		type;
 	/* A flag to indicate if there's a new counter is configured
@@ -549,6 +548,7 @@ static inline const struct mlx5_umr_wr *umr_wr(const struct ib_send_wr *wr)
 
 enum mlx5_ib_cq_pr_flags {
 	MLX5_IB_CQ_PR_FLAGS_CQE_128_PAD	= 1 << 0,
+	MLX5_IB_CQ_PR_FLAGS_REAL_TIME_TS = 1 << 1,
 };
 
 struct mlx5_ib_cq {
@@ -1594,5 +1594,11 @@ static inline bool mlx5_ib_lag_should_assign_affinity(struct mlx5_ib_dev *dev)
 	return dev->lag_active ||
 		(MLX5_CAP_GEN(dev->mdev, num_lag_ports) > 1 &&
 		 MLX5_CAP_GEN(dev->mdev, lag_tx_port_affinity));
+}
+
+static inline bool rt_supported(int ts_cap)
+{
+	return ts_cap == MLX5_TIMESTAMP_FORMAT_CAP_REAL_TIME ||
+	       ts_cap == MLX5_TIMESTAMP_FORMAT_CAP_FREE_RUNNING_AND_REAL_TIME;
 }
 #endif /* MLX5_IB_H */

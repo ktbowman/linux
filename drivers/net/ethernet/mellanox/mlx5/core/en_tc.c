@@ -72,6 +72,8 @@
 #include "lib/fs_chains.h"
 #include "diag/en_tc_tracepoint.h"
 #include <asm/div64.h>
+#include "lag.h"
+#include "lag_mp.h"
 
 #define nic_chains(priv) ((priv)->fs.tc.chains)
 #define MLX5_MH_ACT_SZ MLX5_UN_SZ_BYTES(set_add_copy_action_in_auto)
@@ -103,7 +105,7 @@ struct mlx5e_tc_attr_to_reg_mapping mlx5e_tc_attr_to_reg_mappings[] = {
 	[MARK_TO_REG] = mark_to_reg_ct,
 	[LABELS_TO_REG] = labels_to_reg_ct,
 	[FTEID_TO_REG] = fteid_to_reg_ct,
-	/* For NIC rules we store the retore metadata directly
+	/* For NIC rules we store the restore metadata directly
 	 * into reg_b that is passed to SW since we don't
 	 * jump between steering domains.
 	 */
@@ -452,12 +454,32 @@ static void mlx5e_detach_mod_hdr(struct mlx5e_priv *priv,
 static
 struct mlx5_core_dev *mlx5e_hairpin_get_mdev(struct net *net, int ifindex)
 {
+	struct mlx5_core_dev *mdev;
 	struct net_device *netdev;
 	struct mlx5e_priv *priv;
 
-	netdev = __dev_get_by_index(net, ifindex);
+	netdev = dev_get_by_index(net, ifindex);
+	if (!netdev)
+		return ERR_PTR(-ENODEV);
+
 	priv = netdev_priv(netdev);
-	return priv->mdev;
+	mdev = priv->mdev;
+	dev_put(netdev);
+
+	/* Mirred tc action holds a refcount on the ifindex net_device (see
+	 * net/sched/act_mirred.c:tcf_mirred_get_dev). So, it's okay to continue using mdev
+	 * after dev_put(netdev), while we're in the context of adding a tc flow.
+	 *
+	 * The mdev pointer corresponds to the peer/out net_device of a hairpin. It is then
+	 * stored in a hairpin object, which exists until all flows, that refer to it, get
+	 * removed.
+	 *
+	 * On the other hand, after a hairpin object has been created, the peer net_device may
+	 * be removed/unbound while there are still some hairpin flows that are using it. This
+	 * case is handled by mlx5e_tc_hairpin_update_dead_peer, which is hooked to
+	 * NETDEV_UNREGISTER event of the peer net_device.
+	 */
+	return mdev;
 }
 
 static int mlx5e_hairpin_create_transport(struct mlx5e_hairpin *hp)
@@ -666,6 +688,10 @@ mlx5e_hairpin_create(struct mlx5e_priv *priv, struct mlx5_hairpin_params *params
 
 	func_mdev = priv->mdev;
 	peer_mdev = mlx5e_hairpin_get_mdev(dev_net(priv->netdev), peer_ifindex);
+	if (IS_ERR(peer_mdev)) {
+		err = PTR_ERR(peer_mdev);
+		goto create_pair_err;
+	}
 
 	pair = mlx5_core_hairpin_create(func_mdev, peer_mdev, params);
 	if (IS_ERR(pair)) {
@@ -804,6 +830,11 @@ static int mlx5e_hairpin_flow_add(struct mlx5e_priv *priv,
 	int err;
 
 	peer_mdev = mlx5e_hairpin_get_mdev(dev_net(priv->netdev), peer_ifindex);
+	if (IS_ERR(peer_mdev)) {
+		NL_SET_ERR_MSG_MOD(extack, "invalid ifindex of mirred device");
+		return PTR_ERR(peer_mdev);
+	}
+
 	if (!MLX5_CAP_GEN(priv->mdev, hairpin) || !MLX5_CAP_GEN(peer_mdev, hairpin)) {
 		NL_SET_ERR_MSG_MOD(extack, "hairpin is not supported");
 		return -EOPNOTSUPP;
@@ -846,7 +877,7 @@ static int mlx5e_hairpin_flow_add(struct mlx5e_priv *priv,
 		 hash_hairpin_info(peer_id, match_prio));
 	mutex_unlock(&priv->fs.tc.hairpin_tbl_lock);
 
-	params.log_data_size = 15;
+	params.log_data_size = 16;
 	params.log_data_size = min_t(u8, params.log_data_size,
 				     MLX5_CAP_GEN(priv->mdev, log_max_hairpin_wq_data_sz));
 	params.log_data_size = max_t(u8, params.log_data_size,
@@ -1309,6 +1340,7 @@ bool mlx5e_tc_is_vf_tunnel(struct net_device *out_dev, struct net_device *route_
 int mlx5e_tc_query_route_vport(struct net_device *out_dev, struct net_device *route_dev, u16 *vport)
 {
 	struct mlx5e_priv *out_priv, *route_priv;
+	struct mlx5_devcom *devcom = NULL;
 	struct mlx5_core_dev *route_mdev;
 	struct mlx5_eswitch *esw;
 	u16 vhca_id;
@@ -1320,7 +1352,24 @@ int mlx5e_tc_query_route_vport(struct net_device *out_dev, struct net_device *ro
 	route_mdev = route_priv->mdev;
 
 	vhca_id = MLX5_CAP_GEN(route_mdev, vhca_id);
+	if (mlx5_lag_is_active(out_priv->mdev)) {
+		/* In lag case we may get devices from different eswitch instances.
+		 * If we failed to get vport num, it means, mostly, that we on the wrong
+		 * eswitch.
+		 */
+		err = mlx5_eswitch_vhca_id_to_vport(esw, vhca_id, vport);
+		if (err != -ENOENT)
+			return err;
+
+		devcom = out_priv->mdev->priv.devcom;
+		esw = mlx5_devcom_get_peer_data(devcom, MLX5_DEVCOM_ESW_OFFLOADS);
+		if (!esw)
+			return -ENODEV;
+	}
+
 	err = mlx5_eswitch_vhca_id_to_vport(esw, vhca_id, vport);
+	if (devcom)
+		mlx5_devcom_release_peer_data(devcom, MLX5_DEVCOM_ESW_OFFLOADS);
 	return err;
 }
 
@@ -1516,6 +1565,7 @@ static void mlx5e_tc_del_fdb_flow(struct mlx5e_priv *priv,
 		else
 			mlx5e_tc_unoffload_fdb_rules(esw, flow, attr);
 	}
+	complete_all(&flow->del_hw_done);
 
 	if (mlx5_flow_has_geneve_opt(flow))
 		mlx5_geneve_tlv_option_del(priv->mdev->geneve);
@@ -2403,25 +2453,6 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			*match_level = MLX5_MATCH_L4;
 	}
 
-	/* Currenlty supported only for MPLS over UDP */
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_MPLS) &&
-	    !netif_is_bareudp(filter_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Matching on MPLS is supported only for MPLS over UDP");
-		netdev_err(priv->netdev,
-			   "Matching on MPLS is supported only for MPLS over UDP\n");
-		return -EOPNOTSUPP;
-	}
-
-	/* Currenlty supported only for MPLS over UDP */
-	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_MPLS) &&
-	    !netif_is_bareudp(filter_dev)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Matching on MPLS is supported only for MPLS over UDP");
-		netdev_err(priv->netdev,
-			   "Matching on MPLS is supported only for MPLS over UDP\n");
-		return -EOPNOTSUPP;
-	}
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ICMP)) {
 		struct flow_match_icmp match;
 
@@ -2465,6 +2496,16 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 			spec->match_criteria_enable |= MLX5_MATCH_MISC_PARAMETERS_3;
 		}
 	}
+	/* Currently supported only for MPLS over UDP */
+	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_MPLS) &&
+	    !netif_is_bareudp(filter_dev)) {
+		NL_SET_ERR_MSG_MOD(extack,
+				   "Matching on MPLS is supported only for MPLS over UDP");
+		netdev_err(priv->netdev,
+			   "Matching on MPLS is supported only for MPLS over UDP\n");
+		return -EOPNOTSUPP;
+	}
+
 	return 0;
 }
 
@@ -3436,7 +3477,9 @@ static int parse_tc_nic_actions(struct mlx5e_priv *priv,
 			attr->dest_chain = act->chain_index;
 			break;
 		case FLOW_ACTION_CT:
-			err = mlx5_tc_ct_parse_action(get_ct_priv(priv), attr, act, extack);
+			err = mlx5_tc_ct_parse_action(get_ct_priv(priv), attr,
+						      &parse_attr->mod_hdr_acts,
+						      act, extack);
 			if (err)
 				return err;
 
@@ -3988,7 +4031,9 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				NL_SET_ERR_MSG_MOD(extack, "Sample action with connection tracking is not supported");
 				return -EOPNOTSUPP;
 			}
-			err = mlx5_tc_ct_parse_action(get_ct_priv(priv), attr, act, extack);
+			err = mlx5_tc_ct_parse_action(get_ct_priv(priv), attr,
+						      &parse_attr->mod_hdr_acts,
+						      act, extack);
 			if (err)
 				return err;
 
@@ -4202,6 +4247,7 @@ mlx5e_alloc_flow(struct mlx5e_priv *priv, int attr_size,
 	INIT_LIST_HEAD(&flow->l3_to_l2_reformat);
 	refcount_set(&flow->refcnt, 1);
 	init_completion(&flow->init_done);
+	init_completion(&flow->del_hw_done);
 
 	*__flow = flow;
 	*__parse_attr = parse_attr;

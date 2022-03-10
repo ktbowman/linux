@@ -45,6 +45,7 @@
 #include "en_tc.h"
 #include "en/rep/tc.h"
 #include "en/rep/neigh.h"
+#include "en/rep/bridge.h"
 #include "en/devlink.h"
 #include "fs_core.h"
 #include "lib/mlx5.h"
@@ -541,13 +542,13 @@ static const struct net_device_ops mlx5e_netdev_ops_rep = {
 	.ndo_change_carrier      = mlx5e_rep_change_carrier,
 };
 
-bool mlx5e_eswitch_uplink_rep(struct net_device *netdev)
+bool mlx5e_eswitch_uplink_rep(const struct net_device *netdev)
 {
 	return netdev->netdev_ops == &mlx5e_netdev_ops &&
 	       mlx5e_is_uplink_rep(netdev_priv(netdev));
 }
 
-bool mlx5e_eswitch_vf_rep(struct net_device *netdev)
+bool mlx5e_eswitch_vf_rep(const struct net_device *netdev)
 {
 	return netdev->netdev_ops == &mlx5e_netdev_ops_rep;
 }
@@ -564,7 +565,6 @@ static void mlx5e_build_rep_params(struct net_device *netdev)
 					 MLX5_CQ_PERIOD_MODE_START_FROM_CQE :
 					 MLX5_CQ_PERIOD_MODE_START_FROM_EQE;
 
-	priv->max_nch = mlx5e_calc_max_nch(priv, priv->profile);
 	params = &priv->channels.params;
 
 	params->num_channels = MLX5E_REP_PARAMS_DEF_NUM_CHANNELS;
@@ -615,7 +615,6 @@ static void mlx5e_build_rep_netdev(struct net_device *netdev,
 	netdev->hw_features    |= NETIF_F_RXCSUM;
 
 	netdev->features |= netdev->hw_features;
-	netdev->features |= NETIF_F_VLAN_CHALLENGED;
 	netdev->features |= NETIF_F_NETNS_LOCAL;
 }
 
@@ -988,12 +987,13 @@ static void mlx5e_uplink_rep_enable(struct mlx5e_priv *priv)
 	if (MLX5_CAP_GEN(mdev, uplink_follow))
 		mlx5_modify_vport_admin_state(mdev, MLX5_VPORT_STATE_OP_MOD_UPLINK,
 					      0, 0, MLX5_VPORT_ADMIN_STATE_AUTO);
-	mlx5_lag_add(mdev, netdev);
+	mlx5_lag_add_netdev(mdev, netdev);
 	priv->events_nb.notifier_call = uplink_rep_async_event;
 	mlx5_notifier_register(mdev, &priv->events_nb);
 	mlx5e_dcbnl_initialize(priv);
 	mlx5e_dcbnl_init_app(priv);
 	mlx5e_rep_neigh_init(rpriv);
+	mlx5e_rep_bridge_init(priv);
 
 	netdev->wanted_features |= NETIF_F_HW_TC;
 
@@ -1015,11 +1015,12 @@ static void mlx5e_uplink_rep_disable(struct mlx5e_priv *priv)
 	netif_device_detach(priv->netdev);
 	rtnl_unlock();
 
+	mlx5e_rep_bridge_cleanup(priv);
 	mlx5e_rep_neigh_cleanup(rpriv);
 	mlx5e_dcbnl_delete_app(priv);
 	mlx5_notifier_unregister(mdev, &priv->events_nb);
 	mlx5e_rep_tc_disable(priv);
-	mlx5_lag_remove(mdev);
+	mlx5_lag_remove_netdev(mdev, priv->netdev);
 }
 
 static MLX5E_DEFINE_STATS_GRP(sw_rep, 0);
@@ -1052,6 +1053,10 @@ static mlx5e_stats_grp_t mlx5e_ul_rep_stats_grps[] = {
 	&MLX5E_STATS_GRP(pme),
 	&MLX5E_STATS_GRP(channels),
 	&MLX5E_STATS_GRP(per_port_buff_congest),
+#ifdef CONFIG_MLX5_EN_IPSEC
+	&MLX5E_STATS_GRP(ipsec_sw),
+	&MLX5E_STATS_GRP(ipsec_hw),
+#endif
 };
 
 static unsigned int mlx5e_ul_rep_stats_grps_num(struct mlx5e_priv *priv)
@@ -1154,7 +1159,7 @@ mlx5e_vport_vf_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 	nch = mlx5e_get_max_num_channels(dev);
 	txqs = nch * profile->max_tc;
 	rxqs = nch * profile->rq_groups;
-	netdev = mlx5e_create_netdev(dev, txqs, rxqs);
+	netdev = mlx5e_create_netdev(dev, profile, txqs, rxqs);
 	if (!netdev) {
 		mlx5_core_warn(dev,
 			       "Failed to create representor netdev for vport %d\n",

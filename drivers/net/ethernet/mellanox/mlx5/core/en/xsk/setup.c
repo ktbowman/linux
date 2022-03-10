@@ -4,6 +4,7 @@
 #include "setup.h"
 #include "en/params.h"
 #include "en/txrx.h"
+#include "en/health.h"
 
 /* It matches XDP_UMEM_MIN_CHUNK_SIZE, but as this constant is private and may
  * change unexpectedly, and mlx5e has a minimum valid stride size for striding
@@ -126,7 +127,7 @@ int mlx5e_open_xsk(struct mlx5e_priv *priv, struct mlx5e_params *params,
 	/* Create a separate SQ, so that when the buff pool is disabled, we could
 	 * close this SQ safely and stop receiving CQEs. In other case, e.g., if
 	 * the XDPSQ was used instead, we might run into trouble when the buff pool
-	 * is disabled and then reenabled, but the SQ continues receiving CQEs
+	 * is disabled and then re-enabled, but the SQ continues receiving CQEs
 	 * from the old buff pool.
 	 */
 	err = mlx5e_open_xdpsq(c, params, &cparam->xdp_sq, pool, &c->xsksq, true);
@@ -170,7 +171,13 @@ void mlx5e_close_xsk(struct mlx5e_channel *c)
 
 void mlx5e_activate_xsk(struct mlx5e_channel *c)
 {
+	/* ICOSQ recovery deactivates RQs. Suspend the recovery to avoid
+	 * activating XSKRQ in the middle of recovery.
+	 */
+	mlx5e_reporter_icosq_suspend_recovery(c);
 	set_bit(MLX5E_RQ_STATE_ENABLED, &c->xskrq.state);
+	mlx5e_reporter_icosq_resume_recovery(c);
+
 	/* TX queue is created active. */
 
 	spin_lock_bh(&c->async_icosq_lock);
@@ -180,7 +187,14 @@ void mlx5e_activate_xsk(struct mlx5e_channel *c)
 
 void mlx5e_deactivate_xsk(struct mlx5e_channel *c)
 {
-	mlx5e_deactivate_rq(&c->xskrq);
+	/* ICOSQ recovery may reactivate XSKRQ if clear_bit is called in the
+	 * middle of recovery. Suspend the recovery to avoid it.
+	 */
+	mlx5e_reporter_icosq_suspend_recovery(c);
+	clear_bit(MLX5E_RQ_STATE_ENABLED, &c->xskrq.state);
+	mlx5e_reporter_icosq_resume_recovery(c);
+	synchronize_net(); /* Sync with NAPI to prevent mlx5e_post_rx_wqes. */
+
 	/* TX queue is disabled on close. */
 }
 

@@ -248,17 +248,11 @@ struct ttc_params {
 
 void mlx5e_set_ttc_basic_params(struct mlx5e_priv *priv, struct ttc_params *ttc_params);
 void mlx5e_set_ttc_ft_params(struct ttc_params *ttc_params);
-void mlx5e_set_inner_ttc_ft_params(struct ttc_params *ttc_params);
 
 int mlx5e_create_ttc_table(struct mlx5e_priv *priv, struct ttc_params *params,
 			   struct mlx5e_ttc_table *ttc);
 void mlx5e_destroy_ttc_table(struct mlx5e_priv *priv,
 			     struct mlx5e_ttc_table *ttc);
-
-int mlx5e_create_inner_ttc_table(struct mlx5e_priv *priv, struct ttc_params *params,
-				 struct mlx5e_ttc_table *ttc);
-void mlx5e_destroy_inner_ttc_table(struct mlx5e_priv *priv,
-				   struct mlx5e_ttc_table *ttc);
 
 void mlx5e_destroy_flow_table(struct mlx5e_flow_table *ft);
 int mlx5e_ttc_fwd_dest(struct mlx5e_priv *priv, enum mlx5e_traffic_types type,
@@ -272,6 +266,9 @@ void mlx5e_disable_cvlan_filter(struct mlx5e_priv *priv);
 
 int mlx5e_create_flow_steering(struct mlx5e_priv *priv);
 void mlx5e_destroy_flow_steering(struct mlx5e_priv *priv);
+
+int mlx5e_fs_init(struct mlx5e_priv *priv);
+void mlx5e_fs_cleanup(struct mlx5e_priv *priv);
 
 u8 mlx5e_get_proto_by_tunnel_type(enum mlx5e_tunnel_types tt);
 int mlx5e_add_vlan_trap(struct mlx5e_priv *priv, int  trap_id, int tir_num);

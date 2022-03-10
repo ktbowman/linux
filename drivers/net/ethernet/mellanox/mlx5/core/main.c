@@ -77,6 +77,7 @@
 #include "sf/vhca_event.h"
 #include "sf/dev/dev.h"
 #include "sf/sf.h"
+#include "mlx5_irq.h"
 
 MODULE_AUTHOR("Eli Cohen <eli@mellanox.com>");
 MODULE_DESCRIPTION("Mellanox 5th generation network adapters (ConnectX series) core driver");
@@ -1195,6 +1196,7 @@ static int mlx5_load(struct mlx5_core_dev *dev)
 	}
 
 	mlx5_sf_dev_table_create(dev);
+	mlx5_lag_add_mdev(dev);
 
 	return 0;
 
@@ -1230,6 +1232,7 @@ err_irq_table:
 
 static void mlx5_unload(struct mlx5_core_dev *dev)
 {
+	mlx5_lag_remove_mdev(dev);
 	mlx5_sf_dev_table_destroy(dev);
 	mlx5_sriov_detach(dev);
 	mlx5_ec_cleanup(dev);
@@ -1737,12 +1740,13 @@ void mlx5_disable_device(struct mlx5_core_dev *dev)
 
 int mlx5_recover_device(struct mlx5_core_dev *dev)
 {
-	int ret = -EIO;
+	if (!mlx5_core_is_sf(dev)) {
+		mlx5_pci_disable_device(dev);
+		if (mlx5_pci_slot_reset(dev->pdev) != PCI_ERS_RESULT_RECOVERED)
+			return -EIO;
+	}
 
-	mlx5_pci_disable_device(dev);
-	if (mlx5_pci_slot_reset(dev->pdev) == PCI_ERS_RESULT_RECOVERED)
-		ret = mlx5_load_one(dev);
-	return ret;
+	return mlx5_load_one(dev);
 }
 
 static struct pci_driver mlx5_core_driver = {
@@ -1791,16 +1795,14 @@ static int __init init(void)
 	if (err)
 		goto err_sf;
 
-#ifdef CONFIG_MLX5_CORE_EN
 	err = mlx5e_init();
-	if (err) {
-		pci_unregister_driver(&mlx5_core_driver);
-		goto err_debug;
-	}
-#endif
+	if (err)
+		goto err_en;
 
 	return 0;
 
+err_en:
+	mlx5_sf_driver_unregister();
 err_sf:
 	pci_unregister_driver(&mlx5_core_driver);
 err_debug:
@@ -1810,9 +1812,7 @@ err_debug:
 
 static void __exit cleanup(void)
 {
-#ifdef CONFIG_MLX5_CORE_EN
 	mlx5e_cleanup();
-#endif
 	mlx5_sf_driver_unregister();
 	pci_unregister_driver(&mlx5_core_driver);
 	mlx5_unregister_debugfs();

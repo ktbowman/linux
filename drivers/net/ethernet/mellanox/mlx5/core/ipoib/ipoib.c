@@ -110,10 +110,10 @@ void mlx5i_cleanup(struct mlx5e_priv *priv)
 
 static void mlx5i_grp_sw_update_stats(struct mlx5e_priv *priv)
 {
-	struct mlx5e_sw_stats s = { 0 };
+	struct rtnl_link_stats64 s = {};
 	int i, j;
 
-	for (i = 0; i < priv->max_nch; i++) {
+	for (i = 0; i < priv->stats_nch; i++) {
 		struct mlx5e_channel_stats *channel_stats;
 		struct mlx5e_rq_stats *rq_stats;
 
@@ -128,11 +128,17 @@ static void mlx5i_grp_sw_update_stats(struct mlx5e_priv *priv)
 
 			s.tx_packets           += sq_stats->packets;
 			s.tx_bytes             += sq_stats->bytes;
-			s.tx_queue_dropped     += sq_stats->dropped;
+			s.tx_dropped           += sq_stats->dropped;
 		}
 	}
 
-	memcpy(&priv->stats.sw, &s, sizeof(s));
+	memset(&priv->stats.sw, 0, sizeof(s));
+
+	priv->stats.sw.rx_packets = s.rx_packets;
+	priv->stats.sw.rx_bytes = s.rx_bytes;
+	priv->stats.sw.tx_packets = s.tx_packets;
+	priv->stats.sw.tx_bytes = s.tx_bytes;
+	priv->stats.sw.tx_queue_dropped = s.tx_dropped;
 }
 
 void mlx5i_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
@@ -331,17 +337,6 @@ static int mlx5i_create_flow_steering(struct mlx5e_priv *priv)
 	}
 
 	mlx5e_set_ttc_basic_params(priv, &ttc_params);
-	mlx5e_set_inner_ttc_ft_params(&ttc_params);
-	for (tt = 0; tt < MLX5E_NUM_INDIR_TIRS; tt++)
-		ttc_params.indir_tirn[tt] = priv->inner_indir_tir[tt].tirn;
-
-	err = mlx5e_create_inner_ttc_table(priv, &ttc_params, &priv->fs.inner_ttc);
-	if (err) {
-		netdev_err(priv->netdev, "Failed to create inner ttc table, err=%d\n",
-			   err);
-		goto err_destroy_arfs_tables;
-	}
-
 	mlx5e_set_ttc_ft_params(&ttc_params);
 	for (tt = 0; tt < MLX5E_NUM_INDIR_TIRS; tt++)
 		ttc_params.indir_tirn[tt] = priv->indir_tir[tt].tirn;
@@ -350,13 +345,11 @@ static int mlx5i_create_flow_steering(struct mlx5e_priv *priv)
 	if (err) {
 		netdev_err(priv->netdev, "Failed to create ttc table, err=%d\n",
 			   err);
-		goto err_destroy_inner_ttc_table;
+		goto err_destroy_arfs_tables;
 	}
 
 	return 0;
 
-err_destroy_inner_ttc_table:
-	mlx5e_destroy_inner_ttc_table(priv, &priv->fs.inner_ttc);
 err_destroy_arfs_tables:
 	mlx5e_arfs_destroy_tables(priv);
 
@@ -366,7 +359,6 @@ err_destroy_arfs_tables:
 static void mlx5i_destroy_flow_steering(struct mlx5e_priv *priv)
 {
 	mlx5e_destroy_ttc_table(priv, &priv->fs.ttc);
-	mlx5e_destroy_inner_ttc_table(priv, &priv->fs.inner_ttc);
 	mlx5e_arfs_destroy_tables(priv);
 }
 
@@ -392,7 +384,7 @@ static int mlx5i_init_rx(struct mlx5e_priv *priv)
 	if (err)
 		goto err_destroy_indirect_rqts;
 
-	err = mlx5e_create_indirect_tirs(priv, true);
+	err = mlx5e_create_indirect_tirs(priv, false);
 	if (err)
 		goto err_destroy_direct_rqts;
 
@@ -743,7 +735,7 @@ static int mlx5_rdma_setup_rn(struct ib_device *ibdev, u32 port_num,
 			goto destroy_ht;
 	}
 
-	err = mlx5e_priv_init(epriv, netdev, mdev);
+	err = mlx5e_priv_init(epriv, prof, netdev, mdev);
 	if (err)
 		goto destroy_mdev_resources;
 

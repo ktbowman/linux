@@ -63,6 +63,7 @@ static void set_mkc_access_pd_addr_fields(void *mkc, int acc, u64 start_addr,
 					  struct ib_pd *pd)
 {
 	struct mlx5_ib_dev *dev = to_mdev(pd->device);
+	bool ro_pci_enabled = pcie_relaxed_ordering_enabled(dev->mdev->pdev);
 
 	MLX5_SET(mkc, mkc, a, !!(acc & IB_ACCESS_REMOTE_ATOMIC));
 	MLX5_SET(mkc, mkc, rw, !!(acc & IB_ACCESS_REMOTE_WRITE));
@@ -72,10 +73,10 @@ static void set_mkc_access_pd_addr_fields(void *mkc, int acc, u64 start_addr,
 
 	if (MLX5_CAP_GEN(dev->mdev, relaxed_ordering_write))
 		MLX5_SET(mkc, mkc, relaxed_ordering_write,
-			 !!(acc & IB_ACCESS_RELAXED_ORDERING));
+			 (acc & IB_ACCESS_RELAXED_ORDERING) && ro_pci_enabled);
 	if (MLX5_CAP_GEN(dev->mdev, relaxed_ordering_read))
 		MLX5_SET(mkc, mkc, relaxed_ordering_read,
-			 !!(acc & IB_ACCESS_RELAXED_ORDERING));
+			 (acc & IB_ACCESS_RELAXED_ORDERING) && ro_pci_enabled);
 
 	MLX5_SET(mkc, mkc, pd, to_mpd(pd)->pdn);
 	MLX5_SET(mkc, mkc, qpn, 0xffffff);
@@ -534,8 +535,8 @@ static void __cache_work_func(struct mlx5_cache_ent *ent)
 		 */
 		spin_unlock_irq(&ent->lock);
 		need_delay = need_resched() || someone_adding(cache) ||
-			     time_after(jiffies,
-					READ_ONCE(cache->last_add) + 300 * HZ);
+			     !time_after(jiffies,
+					 READ_ONCE(cache->last_add) + 300 * HZ);
 		spin_lock_irq(&ent->lock);
 		if (ent->disabled)
 			goto out;
@@ -825,7 +826,8 @@ struct ib_mr *mlx5_ib_get_dma_mr(struct ib_pd *pd, int acc)
 
 	MLX5_SET(mkc, mkc, access_mode_1_0, MLX5_MKC_ACCESS_MODE_PA);
 	MLX5_SET(mkc, mkc, length64, 1);
-	set_mkc_access_pd_addr_fields(mkc, acc, 0, pd);
+	set_mkc_access_pd_addr_fields(mkc, acc | IB_ACCESS_RELAXED_ORDERING, 0,
+				      pd);
 
 	err = mlx5_ib_create_mkey(dev, &mr->mmkey, in, inlen);
 	if (err)
@@ -997,7 +999,7 @@ static struct mlx5_ib_mr *alloc_mr_from_cache(struct ib_pd *pd,
 static void *mlx5_ib_alloc_xlt(size_t *nents, size_t ent_size, gfp_t gfp_mask)
 {
 	const size_t xlt_chunk_align =
-		MLX5_UMR_MTT_ALIGNMENT / sizeof(ent_size);
+		MLX5_UMR_MTT_ALIGNMENT / ent_size;
 	size_t size;
 	void *res = NULL;
 
@@ -1026,7 +1028,7 @@ static void *mlx5_ib_alloc_xlt(size_t *nents, size_t ent_size, gfp_t gfp_mask)
 
 	if (size > MLX5_SPARE_UMR_CHUNK) {
 		size = MLX5_SPARE_UMR_CHUNK;
-		*nents = get_order(size) / ent_size;
+		*nents = size / ent_size;
 		res = (void *)__get_free_pages(gfp_mask | __GFP_NOWARN,
 					       get_order(size));
 		if (res)
@@ -1339,7 +1341,6 @@ static struct mlx5_ib_mr *reg_create(struct ib_mr *ibmr, struct ib_pd *pd,
 		goto err_2;
 	}
 	mr->mmkey.type = MLX5_MKEY_MR;
-	mr->desc_size = sizeof(struct mlx5_mtt);
 	kvfree(in);
 
 	mlx5_ib_dbg(dev, "mkey = 0x%x\n", mr->mmkey.key);
@@ -1523,6 +1524,7 @@ struct ib_mr *mlx5_ib_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 		err = PTR_ERR(mr);
 		goto error;
 	}
+	xa_init(&mr->implicit_children);
 
 	mlx5_ib_dbg(dev, "mkey 0x%x\n", mr->mmkey.key);
 
@@ -1860,7 +1862,7 @@ static void mlx5_set_umr_free_mkey(struct ib_pd *pd, u32 *in, int ndescs,
 	mkc = MLX5_ADDR_OF(create_mkey_in, in, memory_key_mkey_entry);
 
 	/* This is only used from the kernel, so setting the PD is OK. */
-	set_mkc_access_pd_addr_fields(mkc, 0, 0, pd);
+	set_mkc_access_pd_addr_fields(mkc, IB_ACCESS_RELAXED_ORDERING, 0, pd);
 	MLX5_SET(mkc, mkc, free, 1);
 	MLX5_SET(mkc, mkc, translations_octword_size, ndescs);
 	MLX5_SET(mkc, mkc, access_mode_1_0, access_mode & 0x3);
