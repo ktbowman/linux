@@ -4314,6 +4314,7 @@ ice_probe(struct pci_dev *pdev, const struct pci_device_id __always_unused *ent)
 	pf->hw.udp_tunnel_nic.unset_port = ice_udp_tunnel_unset_port;
 	pf->hw.udp_tunnel_nic.flags = UDP_TUNNEL_NIC_INFO_MAY_SLEEP |
 		__RH_UDP_TUNNEL_NIC_INFO_EXTENDED;
+	RH_KABI_AUX_SET_SIZE(&pf->hw.udp_tunnel_nic, udp_tunnel_nic_info);
 	pf->hw.udp_tunnel_nic._rh.shared = &pf->hw.udp_tunnel_shared;
 	i = 0;
 	if (pf->hw.tnl.valid_count[TNL_VXLAN]) {
