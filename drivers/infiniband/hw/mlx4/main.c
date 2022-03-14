@@ -581,12 +581,9 @@ static int mlx4_ib_query_device(struct ib_device *ibdev,
 	props->cq_caps.max_cq_moderation_count = MLX4_MAX_CQ_COUNT;
 	props->cq_caps.max_cq_moderation_period = MLX4_MAX_CQ_PERIOD;
 
-	if (!mlx4_is_slave(dev->dev))
-		err = mlx4_get_internal_clock_params(dev->dev, &clock_params);
-
 	if (uhw->outlen >= resp.response_length + sizeof(resp.hca_core_clock_offset)) {
 		resp.response_length += sizeof(resp.hca_core_clock_offset);
-		if (!err && !mlx4_is_slave(dev->dev)) {
+		if (!mlx4_get_internal_clock_params(dev->dev, &clock_params)) {
 			resp.comp_mask |= MLX4_IB_QUERY_DEV_RESP_MASK_CORE_CLOCK_OFFSET;
 			resp.hca_core_clock_offset = clock_params.offset % PAGE_SIZE;
 		}
@@ -2220,6 +2217,11 @@ static const struct ib_device_ops mlx4_ib_hw_stats_ops = {
 	.get_hw_stats = mlx4_ib_get_hw_stats,
 };
 
+static const struct ib_device_ops mlx4_ib_hw_stats_ops1 = {
+	.alloc_hw_device_stats = mlx4_ib_alloc_hw_device_stats,
+	.get_hw_stats = mlx4_ib_get_hw_stats,
+};
+
 static int mlx4_ib_alloc_diag_counters(struct mlx4_ib_dev *ibdev)
 {
 	struct mlx4_ib_diag_counters *diag = ibdev->diag_counters;
@@ -2232,9 +2234,16 @@ static int mlx4_ib_alloc_diag_counters(struct mlx4_ib_dev *ibdev)
 		return 0;
 
 	for (i = 0; i < MLX4_DIAG_COUNTERS_TYPES; i++) {
-		/* i == 1 means we are building port counters */
-		if (i && !per_port)
-			continue;
+		/*
+		 * i == 1 means we are building port counters, set a different
+		 * stats ops without port stats callback.
+		 */
+		if (i && !per_port) {
+			ib_set_device_ops(&ibdev->ib_dev,
+					  &mlx4_ib_hw_stats_ops1);
+
+			return 0;
+		}
 
 		ret = __mlx4_ib_alloc_diag_counters(ibdev, &diag[i].name,
 						    &diag[i].offset,
