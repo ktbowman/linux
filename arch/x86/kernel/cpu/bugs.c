@@ -898,7 +898,8 @@ static enum spectre_v2_mitigation_cmd __init spectre_v2_parse_cmdline(void)
 	     cmd == SPECTRE_V2_CMD_RETPOLINE_LFENCE ||
 	     cmd == SPECTRE_V2_CMD_RETPOLINE_GENERIC ||
 	     cmd == SPECTRE_V2_CMD_EIBRS_LFENCE ||
-	     cmd == SPECTRE_V2_CMD_EIBRS_RETPOLINE) &&
+	     cmd == SPECTRE_V2_CMD_EIBRS_RETPOLINE ||
+	     cmd == SPECTRE_V2_CMD_RETPOLINE_IBRS_USER) &&
 	    !IS_ENABLED(CONFIG_RETPOLINE)) {
 		pr_err("%s selected but not compiled in. Switching to AUTO select\n",
 		       mitigation_options[i].option);
@@ -920,6 +921,21 @@ static enum spectre_v2_mitigation_cmd __init spectre_v2_parse_cmdline(void)
 		pr_err("%s selected, but CPU doesn't have a serializing LFENCE. Switching to AUTO select\n",
 		       mitigation_options[i].option);
 		return SPECTRE_V2_CMD_AUTO;
+	}
+
+	if (cmd == SPECTRE_V2_CMD_IBRS ||
+	    cmd == SPECTRE_V2_CMD_IBRS_ALWAYS ||
+	    cmd == SPECTRE_V2_CMD_RETPOLINE_IBRS_USER) {
+		if (!boot_cpu_has(X86_FEATURE_IBRS)) {
+			pr_err("%s selected but CPU doesn't have IBRS. Switching to AUTO select\n",
+				mitigation_options[i].option);
+			return SPECTRE_V2_CMD_AUTO;
+		}
+		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED)) {
+			pr_err("%s selected but CPU has eIBRS. Fall back to use eIBRS instead\n",
+				mitigation_options[i].option);
+			return SPECTRE_V2_CMD_EIBRS;
+		}
 	}
 
 	spec_v2_print_cond(mitigation_options[i].option,
@@ -957,7 +973,6 @@ static void __init spectre_v2_select_mitigation(void)
 	case SPECTRE_V2_CMD_FORCE:
 	case SPECTRE_V2_CMD_AUTO:
 		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED)) {
-set_ibrs_enhanced:
 			mode = SPECTRE_V2_EIBRS;
 			break;
 		}
@@ -1008,10 +1023,6 @@ set_ibrs_enhanced:
 		break;
 
 	case SPECTRE_V2_CMD_IBRS_ALWAYS:
-		/* Fall back to IBRS_ENHANCED if feature present */
-		if (boot_cpu_has(X86_FEATURE_IBRS_ENHANCED))
-			goto set_ibrs_enhanced;
-
 		if (spec_ctrl_enable_ibrs_always()) {
 			mode = SPECTRE_V2_IBRS_ALWAYS;
 			break;
