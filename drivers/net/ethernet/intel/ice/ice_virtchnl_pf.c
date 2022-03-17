@@ -2927,14 +2927,10 @@ int ice_set_vf_spoofchk(struct net_device *netdev, int vf_id, bool ena)
 	ctx->info.valid_sections = cpu_to_le16(ICE_AQ_VSI_PROP_SECURITY_VALID);
 	if (ena) {
 		ctx->info.sec_flags |=
-			ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF |
-			(ICE_AQ_VSI_SEC_TX_VLAN_PRUNE_ENA <<
-			 ICE_AQ_VSI_SEC_TX_PRUNE_ENA_S);
+			ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF;
 	} else {
 		ctx->info.sec_flags &=
-			~(ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF |
-			  (ICE_AQ_VSI_SEC_TX_VLAN_PRUNE_ENA <<
-			   ICE_AQ_VSI_SEC_TX_PRUNE_ENA_S));
+			~(ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF);
 	}
 
 	ret = ice_update_vsi(&pf->hw, vf_vsi->idx, ctx, NULL);

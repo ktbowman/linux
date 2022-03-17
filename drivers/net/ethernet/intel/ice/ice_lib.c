@@ -1176,14 +1176,10 @@ static int ice_vsi_init(struct ice_vsi *vsi, bool init_vsi)
 			cpu_to_le16(ICE_AQ_VSI_PROP_SECURITY_VALID);
 		if (pf->vf[vsi->vf_id].spoofchk) {
 			ctxt->info.sec_flags |=
-				ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF |
-				(ICE_AQ_VSI_SEC_TX_VLAN_PRUNE_ENA <<
-				 ICE_AQ_VSI_SEC_TX_PRUNE_ENA_S);
+				ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF;
 		} else {
 			ctxt->info.sec_flags &=
-				~(ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF |
-				  (ICE_AQ_VSI_SEC_TX_VLAN_PRUNE_ENA <<
-				   ICE_AQ_VSI_SEC_TX_PRUNE_ENA_S));
+				~(ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF);
 		}
 	}
 
@@ -4227,9 +4223,7 @@ ice_vsi_update_security(struct ice_vsi *vsi, void (*fill)(struct ice_vsi_ctx *))
  */
 void ice_vsi_ctx_set_antispoof(struct ice_vsi_ctx *ctx)
 {
-	ctx->info.sec_flags |= ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF |
-			       (ICE_AQ_VSI_SEC_TX_VLAN_PRUNE_ENA <<
-				ICE_AQ_VSI_SEC_TX_PRUNE_ENA_S);
+	ctx->info.sec_flags |= ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF;
 }
 
 /**
@@ -4238,9 +4232,7 @@ void ice_vsi_ctx_set_antispoof(struct ice_vsi_ctx *ctx)
  */
 void ice_vsi_ctx_clear_antispoof(struct ice_vsi_ctx *ctx)
 {
-	ctx->info.sec_flags &= ~ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF &
-			       ~(ICE_AQ_VSI_SEC_TX_VLAN_PRUNE_ENA <<
-				 ICE_AQ_VSI_SEC_TX_PRUNE_ENA_S);
+	ctx->info.sec_flags &= ~ICE_AQ_VSI_SEC_FLAG_ENA_MAC_ANTI_SPOOF;
 }
 
 /**
