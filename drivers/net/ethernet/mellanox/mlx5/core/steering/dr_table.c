@@ -19,7 +19,7 @@ int mlx5dr_table_set_miss_action(struct mlx5dr_table *tbl,
 	if (!list_empty(&tbl->matcher_list))
 		last_matcher = list_last_entry(&tbl->matcher_list,
 					       struct mlx5dr_matcher,
-					       matcher_list);
+					       list_node);
 
 	if (tbl->dmn->type == MLX5DR_DOMAIN_TYPE_NIC_RX ||
 	    tbl->dmn->type == MLX5DR_DOMAIN_TYPE_FDB) {
@@ -266,6 +266,8 @@ struct mlx5dr_table *mlx5dr_table_create(struct mlx5dr_domain *dmn, u32 level, u
 	if (ret)
 		goto uninit_tbl;
 
+	INIT_LIST_HEAD(&tbl->dbg_node);
+	mlx5dr_dbg_tbl_add(tbl);
 	return tbl;
 
 uninit_tbl:
@@ -281,9 +283,10 @@ int mlx5dr_table_destroy(struct mlx5dr_table *tbl)
 {
 	int ret;
 
-	if (refcount_read(&tbl->refcount) > 1)
+	if (WARN_ON_ONCE(refcount_read(&tbl->refcount) > 1))
 		return -EBUSY;
 
+	mlx5dr_dbg_tbl_del(tbl);
 	ret = dr_table_destroy_sw_owned_tbl(tbl);
 	if (ret)
 		return ret;
