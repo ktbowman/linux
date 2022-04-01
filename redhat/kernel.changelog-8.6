@@ -1,3 +1,20 @@
+* Fri Apr 01 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.6.1.el8]
+- configs: enable CONFIG_RMI4_F3A (Benjamin Tissoires) [2067219]
+- Input: synaptics-rmi4 - add support for F3A (Benjamin Tissoires) [2067219]
+- RDMA/cma: Do not change route.addr.src_addr.ss_family (Kamal Heib) [2032074] {CVE-2021-4028}
+- drm/i915/adl_s: Remove require_force_probe protection (Michel Dänzer) [2025896]
+- drm/i915/adl_s: Update ADL-S PCI IDs (Michel Dänzer) [2025896]
+- drm/i915: Limit Wa_22010178259 to affected platforms (Michel Dänzer) [2025896]
+- drm/i915/adl_s: Fix dma_mask_size to 39 bit (Michel Dänzer) [2025896]
+- drm/i915/dmc: Update DMC to v2.14 on ADL-P (Michel Dänzer) [2060051]
+- drm/i915: Update memory bandwidth formulae (Michel Dänzer) [2060051]
+- drm/i915/fb: Fold modifier CCS type/tiling attribute to plane caps (Michel Dänzer) [2060051]
+- drm/i915/fb: Don't store bitmasks in the intel_plane_caps enum (Michel Dänzer) [2060051]
+- drm/i915/adl_p: Add ddc pin mapping (Michel Dänzer) [2060051]
+- iommu/amd: Fix I/O page table memory leak (Jerry Snitselaar) [2053210]
+- iommu/amd: Recover from event log overflow (Jerry Snitselaar) [2053210]
+Resolves: rhbz#2067219, rhbz#2032074, rhbz#2025896, rhbz#2060051, rhbz#2053210
+
 * Mon Mar 28 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.5.1.el8]
 - scsi: mpi3mr: Fix flushing !WQ_MEM_RECLAIM events warning (Tomas Henzl) [2052278]
 - scsi: mpi3mr: Fix memory leaks (Tomas Henzl) [2054814]
