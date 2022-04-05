@@ -384,7 +384,7 @@ bool ice_alloc_rx_bufs_zc(struct ice_rx_ring *rx_ring, u16 count)
 
 	do {
 		*xdp = xsk_buff_alloc(rx_ring->xsk_pool);
-		if (!xdp) {
+		if (!*xdp) {
 			ok = false;
 			break;
 		}
@@ -546,6 +546,9 @@ int ice_clean_rx_irq_zc(struct ice_rx_ring *rx_ring, int budget)
 		 * verified the descriptor has been written back.
 		 */
 		dma_rmb();
+
+		if (unlikely(rx_ring->next_to_clean == rx_ring->next_to_use))
+			break;
 
 		xdp = *ice_xdp_buf(rx_ring, rx_ring->next_to_clean);
 
