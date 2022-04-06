@@ -1,3 +1,23 @@
+* Wed Apr 06 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.7.1.el8]
+- netfilter: nf_tables_offload: incorrect flow offload action array size (Florian Westphal) [2056728] {CVE-2022-25636}
+- netfilter: nftables_offload: KASAN slab-out-of-bounds Read in nft_flow_rule_create (Florian Westphal) [2056728]
+- KVM: SVM: Allow AVIC support on system w/ physical APIC ID > 255 (Bandan Das) [2033068]
+- PCI/ACPI: Fix acpi_pci_osc_control_set() kernel-doc comment (Mark Langsdorf) [2049209]
+- PCI/ACPI: Check for _OSC support in acpi_pci_osc_control_set() (Mark Langsdorf) [2049209]
+- PCI/ACPI: Move _OSC query checks to separate function (Mark Langsdorf) [2049209]
+- PCI/ACPI: Move supported and control calculations to separate functions (Mark Langsdorf) [2049209]
+- PCI/ACPI: Remove OSC_PCI_SUPPORT_MASKS and OSC_PCI_CONTROL_MASKS (Mark Langsdorf) [2049209]
+- kabi: Adding symbol blkdev_get_by_dev (fs/block_dev.c) (Čestmír Kalina) [2010296]
+- kabi: Adding symbol thaw_bdev (fs/block_dev.c) (Čestmír Kalina) [2010296]
+- kabi: Adding symbol freeze_bdev (fs/block_dev.c) (Čestmír Kalina) [2010296]
+- s390/cio: make ccw_device_dma_* more robust (Thomas Huth) [2066709]
+- perf/x86/intel/uncore: Make uncore_discovery clean for 64 bit addresses (Michael Petlan) [2069237]
+- redhat: switch secureboot kernel image signing to release keys (Augusto Caringi)
+- ice: xsk: Stop Rx processing when ntc catches ntu (Ivan Vecera) [2069082]
+- ice: xsk: Fix indexing in ice_tx_xsk_pool() (Ivan Vecera) [2069082]
+- ice: Fix kernel crash in XDP scenario (Ivan Vecera) [2069082]
+Resolves: rhbz#2056728, rhbz#2033068, rhbz#2049209, rhbz#2010296, rhbz#2066709, rhbz#2069237, rhbz#2069082
+
 * Fri Apr 01 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.6.1.el8]
 - configs: enable CONFIG_RMI4_F3A (Benjamin Tissoires) [2067219]
 - Input: synaptics-rmi4 - add support for F3A (Benjamin Tissoires) [2067219]
