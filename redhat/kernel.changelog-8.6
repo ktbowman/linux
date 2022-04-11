@@ -1,3 +1,12 @@
+* Mon Apr 11 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.8.1.el8]
+- esp6: fix check on ipv6_skip_exthdr's return value (Sabrina Dubroca) [2054075]
+- scsi: iscsi: Fix nop handling during conn recovery (Chris Leech) [2069969]
+- scsi: iscsi: Merge suspend fields (Chris Leech) [2069969]
+- scsi: iscsi: Fix offload conn cleanup when iscsid restarts (Chris Leech) [2069969]
+- scsi: iscsi: Move iscsi_ep_disconnect (Chris Leech) [2069969]
+- CI: Remove deprecated option (Veronika Kabatova)
+Resolves: rhbz#2054075, rhbz#2069969
+
 * Wed Apr 06 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.7.1.el8]
 - netfilter: nf_tables_offload: incorrect flow offload action array size (Florian Westphal) [2056728] {CVE-2022-25636}
 - netfilter: nftables_offload: KASAN slab-out-of-bounds Read in nft_flow_rule_create (Florian Westphal) [2056728]
