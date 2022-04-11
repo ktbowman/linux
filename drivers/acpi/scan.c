@@ -1785,6 +1785,10 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 	fwnode_init(&device->fwnode, &acpi_device_fwnode_ops);
 	acpi_set_device_status(device, ACPI_STA_DEFAULT);
 	acpi_device_get_busid(device);
+	if (!strcmp(device->pnp.bus_id, "N0C0")) {
+		acpi_add_id(&device->pnp, "ACPI0016");
+		device->pnp.type.platform_id = 1;
+	}
 	acpi_set_pnp_ids(handle, &device->pnp, type);
 	acpi_init_properties(device);
 	acpi_bus_get_flags(device);
