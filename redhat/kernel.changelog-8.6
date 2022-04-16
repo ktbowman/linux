@@ -1,3 +1,18 @@
+* Fri Apr 15 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.9.1.el8]
+- scsi: qedi: Fix failed disconnect handling (Chris Leech) [2071519]
+- scsi: iscsi: Fix unbound endpoint error handling (Chris Leech) [2071519]
+- scsi: iscsi: Fix conn cleanup and stop race during iscsid restart (Chris Leech) [2071519]
+- scsi: iscsi: Fix endpoint reuse regression (Chris Leech) [2071519]
+- scsi: iscsi: Release endpoint ID when its freed (Chris Leech) [2071519]
+- scsi: iscsi: Fix offload conn cleanup when iscsid restarts (Chris Leech) [2071519]
+- Revert "scsi: iscsi: Fix offload conn cleanup when iscsid restarts" (Chris Leech) [2071519]
+- scsi: iscsi: Speed up session unblocking and removal (Chris Leech) [2071519]
+- scsi: iscsi: Fix recovery and unblocking race (Chris Leech) [2071519]
+- scsi: iscsi: Unblock session then wake up error handler (Chris Leech) [2071519]
+- bnxt_en: make hw-tc-offload default to off (Ken Cox) [2005101]
+- bnxt_en: reject indirect blk offload when hw-tc-offload is off (Ken Cox) [2005101]
+Resolves: rhbz#2071519, rhbz#2005101
+
 * Mon Apr 11 2022 Augusto Caringi <acaringi@redhat.com> [4.18.0-372.8.1.el8]
 - esp6: fix check on ipv6_skip_exthdr's return value (Sabrina Dubroca) [2054075]
 - scsi: iscsi: Fix nop handling during conn recovery (Chris Leech) [2069969]
