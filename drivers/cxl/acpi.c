@@ -377,6 +377,19 @@ static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 			continue;
 
 		rcrb = cxl_get_rcrb(uid);
+
+		/*
+		 * workaround if no cedt is present:
+		 *
+		 * base: 0xb8200000	(from bios log)
+		 * size: SZ_8K		(from spec)
+		 * busnr: 0x7f		(from lspci/bios log)
+		 */
+		if (!rcrb && host->busnr == 0x7f) {
+			rcrb = 0xb8200000;
+			dev_info(&host->dev, "Applying CEDT workaround\n");
+		}
+
 		if (!rcrb)
 			continue;
 
