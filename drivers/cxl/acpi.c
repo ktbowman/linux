@@ -271,6 +271,42 @@ static int add_root_nvdimm_bridge(struct device *match, void *data)
 	return 1;
 }
 
+static int __cxl_get_rcrb(union acpi_subtable_headers *header, void *arg,
+			  const unsigned long end)
+{
+	struct cxl_chbs_context *ctx = arg;
+	struct acpi_cedt_chbs *chbs;
+
+	if (ctx->chbcr)
+		return 0;
+
+	chbs = (struct acpi_cedt_chbs *)header;
+
+	if (ctx->uid != chbs->uid)
+		return 0;
+
+	if (chbs->cxl_version != ACPI_CEDT_CHBS_VERSION_CXL11)
+		return 0;
+
+	if (chbs->length != SZ_8K)
+		return 0;
+
+	ctx->chbcr = chbs->base;
+
+	return 0;
+}
+
+static resource_size_t cxl_get_rcrb(u32 uid)
+{
+	struct cxl_chbs_context ctx = {
+		.uid = uid,
+	};
+
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CHBS, __cxl_get_rcrb, &ctx);
+
+	return ctx.chbcr;
+}
+
 struct pci_host_bridge *cxl_find_next_rch(struct pci_host_bridge *host)
 {
 	struct pci_bus *bus = host ? host->bus : NULL;
@@ -321,6 +357,7 @@ static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 	struct pci_host_bridge *host = NULL;
 	struct acpi_device *adev;
 	unsigned long long uid = ~0;
+	resource_size_t rcrb;
 
 	while ((host = cxl_find_next_rch(host)) != NULL) {
 		adev = ACPI_COMPANION(&host->dev);
@@ -338,6 +375,12 @@ static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 
 		if (uid > U32_MAX)
 			continue;
+
+		rcrb = cxl_get_rcrb(uid);
+		if (!rcrb)
+			continue;
+
+		dev_dbg(&host->dev, "RCRB found: 0x%08llx\n", (u64)rcrb);
 
 		dev_info(&host->dev, "host supports CXL\n");
 	}
