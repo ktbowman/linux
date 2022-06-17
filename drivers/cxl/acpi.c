@@ -471,13 +471,52 @@ static int cxl_setup_component_reg(struct device *parent,
 	return 0;
 }
 
+static int cxl_enumerate_rch_ports(struct device *root_dev,
+				   struct cxl_port *cxl_root,
+				   struct pci_host_bridge *host,
+				   resource_size_t component_reg_phys,
+				   int port_id)
+{
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+	struct pci_dev *pdev;
+
+	dport = devm_cxl_add_dport(cxl_root, &host->dev, port_id,
+				   component_reg_phys);
+	if (IS_ERR(dport))
+		return PTR_ERR(dport);
+
+	port = devm_cxl_add_port(root_dev, &host->dev,
+				 component_reg_phys, dport);
+	if (IS_ERR(port))
+		return PTR_ERR(port);
+
+	pdev = pci_get_slot(host->bus, PCI_DEVFN(0, 0));
+	if (!pdev)
+		return -ENXIO;
+
+	/* Note: The endpoint provides the component reg base. */
+	dport = devm_cxl_add_dport(port, &pdev->dev, 0,
+				   CXL_RESOURCE_NONE);
+
+	pci_dev_put(pdev);
+
+	if (IS_ERR(dport))
+		return PTR_ERR(dport);
+
+	return 0;
+}
+
 static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 {
+	struct device *root_dev = &pdev->dev;
 	struct pci_host_bridge *host = NULL;
 	struct acpi_device *adev;
+	struct cxl_port *cxl_root = NULL;
 	unsigned long long uid = ~0;
 	resource_size_t rcrb;
 	resource_size_t component_reg_phys;
+	int port_id = 0;
 	int rc;
 
 	while ((host = cxl_find_next_rch(host)) != NULL) {
@@ -497,8 +536,27 @@ static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 
 		dev_dbg(&host->dev, "RCRB found: 0x%08llx\n", (u64)rcrb);
 
+		/*
+		 * For CXL 1.1 hosts we create a root device other
+		 * than the ACPI0017 device to hold the devm data and
+		 * the uport ref.
+		 */
+		if (!cxl_root) {
+			cxl_root = devm_cxl_add_port(root_dev, root_dev,
+						     CXL_RESOURCE_NONE, NULL);
+			if (IS_ERR(cxl_root)) {
+				rc = PTR_ERR(cxl_root);
+				goto fail;
+			}
+		}
+
 		component_reg_phys = cxl_get_component_reg_phys(rcrb);
 		rc = cxl_setup_component_reg(&host->dev, component_reg_phys);
+		if (rc)
+			goto fail;
+
+		rc = cxl_enumerate_rch_ports(root_dev, cxl_root, host,
+					     component_reg_phys, port_id++);
 		if (rc)
 			goto fail;
 
