@@ -312,6 +312,33 @@ static int add_root_nvdimm_bridge(struct device *match, void *data)
 	return 1;
 }
 
+struct pci_host_bridge *cxl_find_next_rch(struct pci_host_bridge *host)
+{
+	struct pci_bus *bus = host ? host->bus : NULL;
+
+	while ((bus = pci_find_next_bus(bus)) != NULL) {
+		host = bus ? to_pci_host_bridge(bus->bridge) : NULL;
+		if (!host)
+			continue;
+
+		dev_dbg(&host->dev, "PCI bridge found\n");
+
+		return host;
+	}
+
+	return NULL;
+}
+
+static int __init cxl_restricted_host_probe(struct platform_device *pdev)
+{
+	struct pci_host_bridge *host = NULL;
+
+	while ((host = cxl_find_next_rch(host)) != NULL) {
+	}
+
+	return 0;
+}
+
 static struct lock_class_key cxl_root_key;
 
 static void cxl_acpi_lock_reset_class(void *dev)
@@ -445,6 +472,13 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	struct acpi_device *adev = ACPI_COMPANION(host);
 	struct cxl_cfmws_context ctx;
 
+	/*
+	 * For RCH (CXL 1.1 hosts) the probe is triggered by a plain
+	 * platform dev which does not have an acpi companion.
+	 */
+	if (!adev)
+		return cxl_restricted_host_probe(pdev);
+
 	device_lock_set_class(&pdev->dev, &cxl_root_key);
 	rc = devm_add_action_or_reset(&pdev->dev, cxl_acpi_lock_reset_class,
 				      &pdev->dev);
@@ -518,6 +552,7 @@ MODULE_DEVICE_TABLE(acpi, cxl_acpi_ids);
 
 static const struct platform_device_id cxl_test_ids[] = {
 	{ "cxl_acpi" },
+	{ "cxl_root" },
 	{ },
 };
 MODULE_DEVICE_TABLE(platform, cxl_test_ids);
@@ -531,7 +566,41 @@ static struct platform_driver cxl_acpi_driver = {
 	.id_table = cxl_test_ids,
 };
 
-module_platform_driver(cxl_acpi_driver);
+static void cxl_acpi_device_release(struct device *dev) { }
+
+static struct platform_device cxl_acpi_device = {
+	.name = "cxl_root",
+	.id = PLATFORM_DEVID_NONE,
+	.dev = {
+		.release = cxl_acpi_device_release,
+	}
+};
+
+static int __init cxl_host_init(void)
+{
+	int rc;
+
+	/* Kick off restricted host (CXL 1.1) detection */
+	rc = platform_device_register(&cxl_acpi_device);
+	if (rc) {
+		platform_device_put(&cxl_acpi_device);
+		return rc;
+	}
+	rc = platform_driver_register(&cxl_acpi_driver);
+	if (rc)
+		platform_device_unregister(&cxl_acpi_device);
+	return rc;
+}
+
+static void __exit cxl_host_exit(void)
+{
+	platform_driver_unregister(&cxl_acpi_driver);
+	platform_device_unregister(&cxl_acpi_device);
+}
+
+module_init(cxl_host_init);
+module_exit(cxl_host_exit);
+
 MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS(CXL);
 MODULE_IMPORT_NS(ACPI);
