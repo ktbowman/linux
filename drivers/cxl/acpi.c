@@ -282,17 +282,36 @@ struct pci_host_bridge *cxl_find_next_rch(struct pci_host_bridge *host)
 
 		dev_dbg(&host->dev, "PCI bridge found\n");
 
+		/* Must be a root bridge */
+		if (host->bus->parent)
+			continue;
+
+		dev_dbg(&host->dev, "PCI bridge is root bridge\n");
+
 		return host;
 	}
 
 	return NULL;
 }
 
+static const struct acpi_device_id cxl_host_ids[] = {
+	{ "ACPI0016", 0 },
+	{ "PNP0A08", 0 },
+	{ },
+};
+
 static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 {
 	struct pci_host_bridge *host = NULL;
+	struct acpi_device *adev;
 
 	while ((host = cxl_find_next_rch(host)) != NULL) {
+		adev = ACPI_COMPANION(&host->dev);
+		if (acpi_match_device_ids(adev, cxl_host_ids))
+			continue;
+
+		dev_dbg(&host->dev, "PCI ACPI host found: %s\n",
+			acpi_dev_name(adev));
 	}
 
 	return 0;
