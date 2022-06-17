@@ -368,8 +368,20 @@ struct pci_host_bridge *cxl_find_next_rch(struct pci_host_bridge *host)
 static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 {
 	struct pci_host_bridge *host = NULL;
+	struct acpi_device *adev;
+	unsigned long long uid = ~0;
 
 	while ((host = cxl_find_next_rch(host)) != NULL) {
+		adev = ACPI_COMPANION(&host->dev);
+		if (!adev || !adev->pnp.unique_id ||
+			(kstrtoull(adev->pnp.unique_id, 10, &uid) < 0))
+			continue;
+
+		dev_dbg(&adev->dev, "host uid: %llu\n", uid);
+
+		if (uid > U32_MAX)
+			continue;
+
 		dev_info(&host->dev, "host supports CXL\n");
 	}
 
