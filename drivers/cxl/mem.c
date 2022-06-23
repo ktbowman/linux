@@ -174,7 +174,8 @@ static int cxl_mem_probe(struct device *dev)
 	 * If DVSEC ranges are being used instead of HDM decoder registers there
 	 * is no use in trying to manage those.
 	 */
-	if (!cxl_hdm_decode_init(cxlds)) {
+	/* skip for now */
+	if (false && !cxl_hdm_decode_init(cxlds)) {
 		dev_err(dev,
 			"Legacy range registers configuration prevents HDM operation.\n");
 		return -EBUSY;
