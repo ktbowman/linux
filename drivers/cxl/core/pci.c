@@ -65,6 +65,15 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 	return 0;
 }
 
+/*
+ * A parent of an RCH (CXL 1.1 host) is a plain platform device while
+ * a 2.0 host links to the ACPI0017 root device.
+ */
+static inline bool is_rch_uport(struct cxl_port *port)
+{
+	return is_cxl_port(&port->dev) && !port->dev.parent->fwnode;
+}
+
 /**
  * devm_cxl_port_enumerate_dports - enumerate downstream ports of the upstream port
  * @port: cxl_port whose ->uport is the upstream of dports to be enumerated
@@ -74,10 +83,19 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
  */
 int devm_cxl_port_enumerate_dports(struct cxl_port *port)
 {
-	struct pci_bus *bus = cxl_port_to_pci_bus(port);
+	struct pci_bus *bus;
 	struct cxl_walk_context ctx;
 	int type;
 
+	/*
+	 * Skip enumeration in Restricted CXL Device mode as the
+	 * device has been already registered at the host's dport
+	 * during host discovery.
+	 */
+	if (is_rch_uport(port))
+		return 0;
+
+	bus = cxl_port_to_pci_bus(port);
 	if (!bus)
 		return -ENXIO;
 
