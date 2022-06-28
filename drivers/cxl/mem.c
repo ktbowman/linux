@@ -91,6 +91,11 @@ __mock bool cxl_hdm_decode_init(struct cxl_dev_state *cxlds)
 	if (info->ranges < 0)
 		return false;
 
+	if (cxlds->component_reg_phys == CXL_RESOURCE_NONE) {
+		dev_dbg(cxlds->dev, "No component registers found\n");
+		return false;
+	}
+
 	/* map hdm decoder */
 	crb = ioremap(cxlds->component_reg_phys, CXL_COMPONENT_REG_BLOCK_SIZE);
 	if (!crb) {
