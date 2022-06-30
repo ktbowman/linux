@@ -352,12 +352,62 @@ static const struct acpi_device_id cxl_host_ids[] = {
 	{ },
 };
 
+static resource_size_t cxl_get_component_reg_phys(resource_size_t rcrb)
+{
+	resource_size_t component_reg_phys;
+	void *rcrb_mapped;
+
+	/*
+	 * RCRB's BAR[0..1] point to component block containing CXL subsystem
+	 * component registers.
+	 * CXL 8.2.4 - Component Register Layout Definition.
+	 *
+	 * Also, RCRB accesses must use MMIO readl()/readq() to guarantee
+	 * 32/64-bit access.
+	 * CXL 8.2.2 - CXL 1.1 Upstream and Downstream Port Subsystem Component
+	 * Registers
+	 */
+	rcrb_mapped = ioremap(rcrb, 0x18);
+	component_reg_phys = readq(rcrb_mapped+0x10) & ~((u64)0xf);
+	iounmap(rcrb_mapped);
+
+	return component_reg_phys;
+}
+
+static int cxl_setup_component_reg(struct device *parent,
+				   resource_size_t component_reg_phys)
+{
+	struct cxl_component_reg_map comp_map;
+	void __iomem *base = ioremap(component_reg_phys, SZ_64K);
+
+	/* TODO: check component_reg_phys */
+
+	if (!base) {
+		dev_err(parent, "failed to map registers\n");
+		return -ENOMEM;
+	}
+
+	cxl_probe_component_regs(parent, base, &comp_map);
+	iounmap(base);
+
+	if (!comp_map.hdm_decoder.valid) {
+		dev_err(parent, "HDM decoder registers not found\n");
+		return -ENXIO;
+	}
+
+	dev_dbg(parent, "Set up component registers\n");
+
+	return 0;
+}
+
 static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 {
 	struct pci_host_bridge *host = NULL;
 	struct acpi_device *adev;
 	unsigned long long uid = ~0;
 	resource_size_t rcrb;
+	resource_size_t component_reg_phys;
+	int rc;
 
 	while ((host = cxl_find_next_rch(host)) != NULL) {
 		adev = ACPI_COMPANION(&host->dev);
@@ -395,10 +445,18 @@ static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 
 		dev_dbg(&host->dev, "RCRB found: 0x%08llx\n", (u64)rcrb);
 
+		component_reg_phys = cxl_get_component_reg_phys(rcrb);
+		rc = cxl_setup_component_reg(&host->dev, component_reg_phys);
+		if (rc)
+			goto fail;
+
 		dev_info(&host->dev, "host supports CXL\n");
 	}
 
 	return 0;
+fail:
+	dev_err(&host->dev, "failed to initialize CXL host: %d\n", rc);
+	return rc;
 }
 
 static int cxl_acpi_probe(struct platform_device *pdev)
