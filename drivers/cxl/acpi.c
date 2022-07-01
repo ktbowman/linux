@@ -389,12 +389,12 @@ static int cxl_setup_component_reg(struct device *parent,
 
 	cxl_probe_component_regs(parent, base, &comp_map);
 	iounmap(base);
-
+#if 0
 	if (!comp_map.hdm_decoder.valid) {
 		dev_err(parent, "HDM decoder registers not found\n");
 		return -ENXIO;
 	}
-
+#endif
 	dev_dbg(parent, "Set up component registers\n");
 
 	return 0;
