@@ -871,6 +871,22 @@ static struct device *grandparent(struct device *dev)
 	return NULL;
 }
 
+static struct device *cxl_mem_dport_dev(struct cxl_memdev *cxlmd)
+{
+	struct device *dev = cxlmd->dev.parent;
+	struct pci_dev *pdev = to_pci_dev(cxlmd->dev.parent);
+
+	/*
+	 * An RCiEP is directly connected to the root bridge without
+	 * any PCI bridges/ports in between. Reduce the parent level
+	 * for those.
+	 */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END)
+		return dev;
+
+	return dev->parent;
+}
+
 static void delete_endpoint(void *data)
 {
 	struct cxl_memdev *cxlmd = data;
@@ -1076,7 +1092,7 @@ out:
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
-	struct device *iter;
+	struct device *dport_dev;
 	int rc;
 
 	rc = devm_add_action_or_reset(&cxlmd->dev, cxl_detach_ep, cxlmd);
@@ -1089,24 +1105,20 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 	 * attempt fails.
 	 */
 retry:
-	for (iter = dev; iter; iter = grandparent(iter)) {
-		struct device *dport_dev = grandparent(iter);
+	for (dport_dev = cxl_mem_dport_dev(cxlmd); dport_dev;
+	     dport_dev = grandparent(dport_dev)) {
 		struct device *uport_dev;
 		struct cxl_port *port;
 
-		if (!dport_dev)
-			return 0;
-
 		uport_dev = dport_dev->parent;
 		if (!uport_dev) {
-			dev_warn(dev, "at %s no parent for dport: %s\n",
-				 dev_name(iter), dev_name(dport_dev));
+			dev_warn(dev, "no parent for dport: %s\n",
+				 dev_name(dport_dev));
 			return -ENXIO;
 		}
 
-		dev_dbg(dev, "scan: iter: %s dport_dev: %s parent: %s\n",
-			dev_name(iter), dev_name(dport_dev),
-			dev_name(uport_dev));
+		dev_dbg(dev, "scan: dport_dev: %s parent: %s\n",
+			dev_name(dport_dev), dev_name(uport_dev));
 		port = find_cxl_port(dport_dev);
 		if (port) {
 			dev_dbg(&cxlmd->dev,
@@ -1153,7 +1165,7 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_enumerate_ports, CXL);
 
 struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd)
 {
-	return find_cxl_port(grandparent(&cxlmd->dev));
+	return find_cxl_port(cxl_mem_dport_dev(cxlmd));
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_find_port, CXL);
 
