@@ -179,7 +179,6 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 				 root_port);
 	if (IS_ERR(port))
 		return PTR_ERR(port);
-	dev_dbg(host, "%s: add: %s\n", dev_name(match), dev_name(&port->dev));
 
 	return 0;
 }
@@ -286,7 +285,6 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	root_port = devm_cxl_add_port(host, host, CXL_RESOURCE_NONE, NULL);
 	if (IS_ERR(root_port))
 		return PTR_ERR(root_port);
-	dev_dbg(host, "add: %s\n", dev_name(&root_port->dev));
 
 	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
 			      add_host_bridge_dport);
