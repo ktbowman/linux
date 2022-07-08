@@ -666,13 +666,17 @@ struct cxl_port *devm_cxl_add_port(struct device *host, struct device *uport,
 				   resource_size_t component_reg_phys,
 				   struct cxl_dport *parent_dport)
 {
-	struct cxl_port *port;
+	struct cxl_port *port, *parent_port;
 	struct device *dev;
 	int rc;
 
+	parent_port = parent_dport ? parent_dport->port : NULL;
+
 	port = cxl_port_alloc(uport, component_reg_phys, parent_dport);
-	if (IS_ERR(port))
-		return port;
+	if (IS_ERR(port)) {
+		rc = PTR_ERR(port);
+		goto err_out;
+	}
 
 	dev = &port->dev;
 	if (is_cxl_memdev(uport))
@@ -682,24 +686,39 @@ struct cxl_port *devm_cxl_add_port(struct device *host, struct device *uport,
 	else
 		rc = dev_set_name(dev, "root%d", port->id);
 	if (rc)
-		goto err;
+		goto err_put;
 
 	rc = device_add(dev);
 	if (rc)
-		goto err;
+		goto err_put;
 
 	rc = devm_add_action_or_reset(host, unregister_port, port);
 	if (rc)
-		return ERR_PTR(rc);
+		goto err_out;
 
 	rc = devm_cxl_link_uport(host, port);
 	if (rc)
-		return ERR_PTR(rc);
+		goto err_out;
+
+	dev_dbg(host, "added %s as%s port of device %s%s%s\n",
+		dev_name(&port->dev),
+		parent_port ? "" : " root",
+		dev_name(uport),
+		parent_port ? " to parent port " : "",
+		parent_port ? dev_name(&parent_port->dev) : "");
 
 	return port;
-
-err:
+err_put:
 	put_device(dev);
+err_out:
+	dev_dbg(host, "failed to add %s as%s port of device %s%s%s: %d\n",
+		dev_name(&port->dev),
+		parent_port ? "" : " root",
+		dev_name(uport),
+		parent_port ? " to parent port " : "",
+		parent_port ? dev_name(&parent_port->dev) : "",
+		rc);
+
 	return ERR_PTR(rc);
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_port, CXL);
@@ -1139,8 +1158,6 @@ int devm_cxl_add_endpoint(struct cxl_memdev *cxlmd,
 				     cxlds->component_reg_phys, parent_dport);
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
-
-	dev_dbg(&cxlmd->dev, "add: %s\n", dev_name(&endpoint->dev));
 
 	rc = cxl_endpoint_autoremove(cxlmd, endpoint);
 	if (rc)
