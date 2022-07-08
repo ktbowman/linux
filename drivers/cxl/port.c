@@ -73,13 +73,13 @@ static int cxl_port_probe(struct device *dev)
 			return rc;
 		}
 	}
-
+#if 0
 	rc = devm_cxl_enumerate_decoders(cxlhdm);
 	if (rc) {
 		dev_err(dev, "Couldn't enumerate decoders (%d)\n", rc);
 		return rc;
 	}
-
+#endif
 	return 0;
 }
 
