@@ -47,6 +47,8 @@ static int cxl_port_probe(struct device *dev)
 		rc = devm_cxl_port_enumerate_dports(port);
 		if (rc < 0)
 			return rc;
+		return 0;
+
 		if (rc == 1)
 			return devm_cxl_add_passthrough_decoder(port);
 	}
