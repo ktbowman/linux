@@ -51,6 +51,8 @@ static int cxl_port_probe(struct device *dev)
 			return devm_cxl_add_passthrough_decoder(port);
 	}
 
+	return 0;
+
 	cxlhdm = devm_cxl_setup_hdm(port);
 	if (IS_ERR(cxlhdm))
 		return PTR_ERR(cxlhdm);
