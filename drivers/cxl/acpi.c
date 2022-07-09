@@ -322,6 +322,8 @@ struct pci_host_bridge *cxl_find_next_rch(struct pci_host_bridge *host)
 {
 	struct pci_bus *bus = host ? host->bus : NULL;
 	struct acpi_device *adev;
+	struct pci_dev *pdev;
+	bool is_restricted_host;
 
 	while ((bus = pci_find_next_bus(bus)) != NULL) {
 		host = bus ? to_pci_host_bridge(bus->bridge) : NULL;
@@ -343,6 +345,20 @@ struct pci_host_bridge *cxl_find_next_rch(struct pci_host_bridge *host)
 		dev_dbg(&host->dev, "PCI ACPI host found: %s\n",
 			acpi_dev_name(adev));
 
+		/* Check CXL DVSEC of dev 0 func 0 */
+		pdev = pci_get_slot(bus, PCI_DEVFN(0, 0));
+		is_restricted_host = pdev
+			&& (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END)
+			&& pci_find_dvsec_capability(pdev,
+						PCI_DVSEC_VENDOR_ID_CXL,
+						CXL_DVSEC_PCIE_DEVICE);
+		pci_dev_put(pdev);
+
+		if (!is_restricted_host)
+			continue;
+
+		dev_dbg(&host->dev, "CXL restricted host found\n");
+
 		return host;
 	}
 
@@ -354,6 +370,7 @@ static int __init cxl_restricted_host_probe(struct platform_device *pdev)
 	struct pci_host_bridge *host = NULL;
 
 	while ((host = cxl_find_next_rch(host)) != NULL) {
+		dev_info(&host->dev, "host supports CXL\n");
 	}
 
 	return 0;
