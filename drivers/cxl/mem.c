@@ -237,3 +237,4 @@ MODULE_ALIAS_CXL(CXL_DEVICE_MEMORY_EXPANDER);
  * endpoint registration.
  */
 MODULE_SOFTDEP("pre: cxl_port");
+MODULE_SOFTDEP("pre: cxl_acpi");
