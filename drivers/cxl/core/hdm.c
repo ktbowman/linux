@@ -118,6 +118,9 @@ struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port)
 		return ERR_PTR(-ENXIO);
 	}
 
+	/* Skip HDM decoding */
+	return cxlhdm;
+
 	hdm = map_hdm_decoder_regs(port, crb);
 	if (IS_ERR(hdm))
 		return ERR_CAST(hdm);
