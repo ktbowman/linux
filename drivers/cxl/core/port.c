@@ -914,12 +914,16 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 	}
 
 	if (snprintf(link_name, CXL_TARGET_STRLEN, "dport%d", port_id) >=
-	    CXL_TARGET_STRLEN)
-		return ERR_PTR(-EINVAL);
+	    CXL_TARGET_STRLEN) {
+		rc = -EINVAL;
+		goto err;
+	}
 
 	dport = devm_kzalloc(host, sizeof(*dport), GFP_KERNEL);
-	if (!dport)
-		return ERR_PTR(-ENOMEM);
+	if (!dport) {
+		rc = -ENOMEM;
+		goto err;
+	}
 
 	dport->dport = dport_dev;
 	dport->port_id = port_id;
@@ -930,22 +934,30 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 	rc = add_dport(port, dport);
 	cond_cxl_root_unlock(port);
 	if (rc)
-		return ERR_PTR(rc);
+		goto err;
 
 	get_device(dport_dev);
 	rc = devm_add_action_or_reset(host, cxl_dport_remove, dport);
 	if (rc)
-		return ERR_PTR(rc);
+		goto err;
 
 	rc = sysfs_create_link(&port->dev.kobj, &dport_dev->kobj, link_name);
 	if (rc)
-		return ERR_PTR(rc);
+		goto err;
 
 	rc = devm_add_action_or_reset(host, cxl_dport_unlink, dport);
 	if (rc)
-		return ERR_PTR(rc);
+		goto err;
+
+	dev_dbg(&port->dev, "added %s (%s) as dport of device %s\n",
+		dev_name(&port->dev), link_name, dev_name(dport_dev));
 
 	return dport;
+err:
+	dev_dbg(&port->dev, "failed to add %s (%s) as dport of device %s: %d\n",
+		dev_name(&port->dev), link_name, dev_name(dport_dev), rc);
+
+	return ERR_PTR(rc);
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_add_dport, CXL);
 
