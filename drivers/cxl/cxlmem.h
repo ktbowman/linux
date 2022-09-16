@@ -218,7 +218,8 @@ struct cxl_endpoint_dvsec_info {
  */
 struct cxl_dev_state {
 	struct device *dev;
-
+	struct cxl_memdev *cxlmd;
+	
 	struct cxl_regs regs;
 	int cxl_dvsec;
 

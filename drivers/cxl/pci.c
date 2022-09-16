@@ -9,6 +9,7 @@
 #include <linux/list.h>
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
+#include <linux/aer.h>
 #include <linux/io.h>
 #include "cxlmem.h"
 #include "cxlpci.h"
@@ -33,8 +34,8 @@
  *  - Registers a CXL mailbox with cxl_core.
  */
 
-#define cxl_doorbell_busy(cxlds)                                                \
-	(readl((cxlds)->regs.mbox + CXLDEV_MBOX_CTRL_OFFSET) &                  \
+#define cxl_doorbell_busy(cxlds)				\
+	(readl((cxlds)->regs.mbox + CXLDEV_MBOX_CTRL_OFFSET) &	\
 	 CXLDEV_MBOX_CTRL_DOORBELL)
 
 /* CXL 2.0 - 8.2.8.4 */
@@ -75,15 +76,15 @@ static int cxl_pci_mbox_wait_for_doorbell(struct cxl_dev_state *cxlds)
 	return 0;
 }
 
-#define cxl_err(dev, status, msg)                                        \
-	dev_err_ratelimited(dev, msg ", device state %s%s\n",                  \
-			    status & CXLMDEV_DEV_FATAL ? " fatal" : "",        \
+#define cxl_err(dev, status, msg)					\
+	dev_err_ratelimited(dev, msg ", device state %s%s\n",		\
+			    status & CXLMDEV_DEV_FATAL ? " fatal" : "",	\
 			    status & CXLMDEV_FW_HALT ? " firmware-halt" : "")
 
-#define cxl_cmd_err(dev, cmd, status, msg)                               \
-	dev_err_ratelimited(dev, msg " (opcode: %#x), device state %s%s\n",    \
-			    (cmd)->opcode,                                     \
-			    status & CXLMDEV_DEV_FATAL ? " fatal" : "",        \
+#define cxl_cmd_err(dev, cmd, status, msg)				\
+	dev_err_ratelimited(dev, msg " (opcode: %#x), device state %s%s\n", \
+			    (cmd)->opcode,				\
+			    status & CXLMDEV_DEV_FATAL ? " fatal" : "",	\
 			    status & CXLMDEV_FW_HALT ? " firmware-halt" : "")
 
 /**
@@ -280,13 +281,13 @@ static int cxl_map_regblock(struct pci_dev *pdev, struct cxl_register_map *map)
 {
 	map->base = ioremap(map->resource, map->max_size);
 	if (!map->base) {
-		dev_err(&pdev->dev, "failed to map registers\n");		
+		dev_err(&pdev->dev, "failed to map registers\n");
 		return -ENOMEM;
 	}
 
 	dev_dbg(&pdev->dev, "Mapped CXL Memory Device resource %lld\n",
 		map->resource);
-	
+
 	return 0;
 }
 
@@ -315,7 +316,7 @@ static int cxl_probe_regs(struct pci_dev *pdev, struct cxl_register_map *map)
 
 		if (!comp_map->ras.valid)
 			dev_dbg(dev, "RAS registers not found\n");
-		
+
 		dev_dbg(dev, "Set up component registers\n");
 		break;
 	case CXL_REGLOC_RBI_MEMDEV:
@@ -399,6 +400,11 @@ static void devm_cxl_pci_create_doe(struct cxl_dev_state *cxlds)
 	}
 }
 
+static void disable_aer(void *pdev)
+{
+	pci_disable_pcie_error_reporting(pdev);
+}
+
 static int check_restricted_device(struct pci_dev *pdev, u16 pcie_dvsec)
 {
 	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_END)
@@ -408,7 +414,7 @@ static int check_restricted_device(struct pci_dev *pdev, u16 pcie_dvsec)
 		return 0;		/* ok */
 
 	dev_warn(&pdev->dev, "Skipping RCD: devfn=0x%02x dvsec=%u\n",
-		pdev->devfn, pcie_dvsec);
+		 pdev->devfn, pcie_dvsec);
 
 	return -ENODEV;
 }
@@ -443,6 +449,8 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (IS_ERR(cxlds))
 		return PTR_ERR(cxlds);
 
+	pci_set_drvdata(pdev, cxlds);
+
 	cxlds->serial = pci_get_dsn(pdev);
 	cxlds->cxl_dvsec = pcie_dvsec;
 	if (!cxlds->cxl_dvsec)
@@ -474,7 +482,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 				    &map, BIT(CXL_CM_CAP_CAP_ID_RAS));
 	if (rc)
 		dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
-	
+
 	rc = cxl_pci_setup_mailbox(cxlds);
 	if (rc)
 		return rc;
@@ -495,6 +503,14 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
 
+	if (cxlds->regs.ras) {
+		pci_enable_pcie_error_reporting(pdev);
+		rc = devm_add_action_or_reset(&pdev->dev, disable_aer, pdev);
+		if (rc)
+			return rc;
+	}
+	pci_save_state(pdev);
+
 	if (resource_size(&cxlds->pmem_res) && IS_ENABLED(CONFIG_CXL_PMEM))
 		rc = devm_cxl_add_nvdimm(&pdev->dev, cxlmd);
 
@@ -507,6 +523,151 @@ static const struct pci_device_id cxl_mem_pci_tbl[] = {
 	{ /* terminate list */ },
 };
 MODULE_DEVICE_TABLE(pci, cxl_mem_pci_tbl);
+
+/* CXL spec rev3.0 8.2.4.16.1 */
+#define DATA_HEADER_SIZE 16
+#define FLIT_SIZE (64 + 2)
+static int header_log_setup(struct cxl_dev_state *cxlds, u32 fe, u8 *log)
+{
+	void __iomem *addr;
+
+	addr = cxlds->regs.ras + CXL_RAS_HEADER_LOG_OFFSET;
+
+	if (fe & CXL_RAS_UC_CACHE_DATA_PARITY || fe & CXL_RAS_UC_CACHE_ADDR_PARITY ||
+	    fe & CXL_RAS_UC_CACHE_BE_PARITY || fe & CXL_RAS_UC_CACHE_DATA_ECC ||
+	    fe & CXL_RAS_UC_MEM_DATA_PARITY || fe & CXL_RAS_UC_MEM_ADDR_PARITY ||
+	    fe & CXL_RAS_UC_MEM_BE_PARITY || fe & CXL_RAS_UC_MEM_DATA_ECC) {
+		memcpy_fromio(log, addr, DATA_HEADER_SIZE);
+		return DATA_HEADER_SIZE;
+	}
+
+	if (fe & CXL_RAS_UC_RSVD_ENCODE) {
+		memcpy_fromio(log, addr, FLIT_SIZE);
+		return FLIT_SIZE;
+	}
+
+	if (fe & CXL_RAS_UC_RECV_OVERFLOW) {
+		*log = readb(addr);
+		return sizeof(u8);
+	}
+
+	return 0;
+}
+
+/*
+ * Log the state of the RAS status registers and prepare them to log the
+ * next error status. Return 1 if reset needed.
+ */
+static bool cxl_report_and_clear(struct cxl_dev_state *cxlds)
+{
+	struct cxl_memdev *cxlmd = cxlds->cxlmd;
+	struct device *dev = &cxlmd->dev;
+	void __iomem *addr;
+	u32 status;
+	bool ue = false;
+
+	if (!cxlds->regs.ras)
+		return false;
+
+	addr = cxlds->regs.ras + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
+	status = le32_to_cpu(readl(addr));
+	if (status & CXL_RAS_UNCORRECTABLE_STATUS_MASK) {
+		u8 hl[CXL_RAX_HEADER_LOG_SIZE];
+		u32 fe;
+		int size;
+
+		writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
+		ue = true;
+
+		/* If multiple errors, log header points to first error from ctrl reg */
+		if (hweight32(status) > 1) {
+			addr = cxlds->regs.ras + CXL_RAS_CAP_CONTROL_OFFSET;
+			fe = BIT(le32_to_cpu(readl(addr)) & CXL_RAS_CAP_CONTROL_FE_MASK);
+		} else {
+			fe = status;
+		}
+
+		size = header_log_setup(cxlds, fe, hl);
+		trace_cxl_ras_uc(dev_name(dev), status, fe, hl, size);
+	}
+
+	addr = cxlds->regs.ras + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
+	status = le32_to_cpu(readl(addr));
+	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
+		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
+		trace_cxl_ras_ce(dev_name(dev), status);
+	}
+
+	return ue;
+}
+
+static pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
+					   pci_channel_state_t state)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	struct cxl_memdev *cxlmd = cxlds->cxlmd;
+	struct device *dev = &cxlmd->dev;
+	bool ue;
+
+	/*
+	 * A frozen channel indicates an impending reset which is fatal to
+	 * CXL.mem operation, and will likely crash the system. On the off
+	 * chance the situation is recoverable dump the status of the RAS
+	 * capability registers and bounce the active state of the memdev.
+	 */
+	ue = cxl_report_and_clear(cxlds);
+
+	switch (state) {
+	case pci_channel_io_normal:
+		if (ue) {
+			device_release_driver(dev);
+			return PCI_ERS_RESULT_NEED_RESET;
+		}
+		return PCI_ERS_RESULT_CAN_RECOVER;
+	case pci_channel_io_frozen:
+		dev_warn(&pdev->dev,
+			 "%s: frozen state error detected, disable CXL.mem\n",
+			 dev_name(dev));
+		device_release_driver(dev);
+		return PCI_ERS_RESULT_NEED_RESET;
+	case pci_channel_io_perm_failure:
+		dev_warn(&pdev->dev,
+			 "failure state error detected, request disconnect\n");
+		return PCI_ERS_RESULT_DISCONNECT;
+	}
+	return PCI_ERS_RESULT_NEED_RESET;
+}
+
+static pci_ers_result_t cxl_slot_reset(struct pci_dev *pdev)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	struct cxl_memdev *cxlmd = cxlds->cxlmd;
+	struct device *dev = &cxlmd->dev;
+
+	dev_info(&pdev->dev, "%s: restart CXL.mem after slot reset\n",
+		 dev_name(dev));
+	pci_restore_state(pdev);
+	if (device_attach(dev) <= 0)
+		return PCI_ERS_RESULT_DISCONNECT;
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
+static void cxl_error_resume(struct pci_dev *pdev)
+{
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+	struct cxl_memdev *cxlmd = cxlds->cxlmd;
+	struct device *dev = &cxlmd->dev;
+
+	dev_info(&pdev->dev, "%s: error resume %s\n", dev_name(dev),
+		 dev->driver ? "successful" : "failed");
+}
+
+static const struct pci_error_handlers cxl_error_handlers = {
+	.error_detected = cxl_error_detected,
+	.slot_reset     = cxl_slot_reset,
+	.resume         = cxl_error_resume,
+};
+
 
 static struct pci_driver cxl_pci_driver = {
 	.name			= KBUILD_MODNAME,
