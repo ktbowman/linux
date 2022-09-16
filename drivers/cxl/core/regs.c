@@ -95,6 +95,7 @@ void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 		if (!rmap)
 			continue;
 		rmap->valid = true;
+		rmap->id = cap_id;
 		rmap->offset = CXL_CM_OFFSET + offset;
 		rmap->size = length;
 	}
@@ -162,6 +163,7 @@ void cxl_probe_device_regs(struct device *dev, void __iomem *base,
 		if (!rmap)
 			continue;
 		rmap->valid = true;
+		rmap->id = cap_id;
 		rmap->offset = offset;
 		rmap->size = length;
 	}
@@ -173,7 +175,7 @@ void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
 {
 	void __iomem *ret_val;
 	struct resource *res;
-
+	
 	if (WARN_ON_ONCE(addr == CXL_RESOURCE_NONE))
 		return NULL;
 
@@ -194,22 +196,34 @@ void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
 
 int cxl_map_component_regs(struct pci_dev *pdev,
 			   struct cxl_component_regs *regs,
-			   struct cxl_register_map *map)
+			   struct cxl_register_map *map,
+			   unsigned long map_mask)
 {
 	struct device *dev = &pdev->dev;
-	resource_size_t phys_addr;
-	resource_size_t length;
-
-	phys_addr = map->resource;
-        phys_addr += map->component_map.hdm_decoder.offset;
-        length = map->component_map.hdm_decoder.size;
-        regs->hdm_decoder = devm_cxl_iomap_block(dev, phys_addr, length);
-
 	
-	length = map->component_map.hdm_decoder.size;
-	regs->hdm_decoder = devm_cxl_iomap_block(dev, phys_addr, length);
-	if (!regs->hdm_decoder)
-		return -ENOMEM;
+	struct mapinfo {
+		struct cxl_reg_map *rmap;
+		void __iomem **addr;
+	} mapinfo[] = {
+		{ &map->component_map.hdm_decoder, &regs->hdm_decoder },
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(mapinfo); i++) {
+		struct mapinfo *mi = &mapinfo[i];
+		resource_size_t phys_addr;
+		resource_size_t length;
+
+		if (!mi->rmap->valid)
+			continue;
+		if (!test_bit(mi->rmap->id, &map_mask))
+			continue;
+		phys_addr = map->resource + mi->rmap->offset;
+		length = mi->rmap->size;
+		*(mi->addr) = devm_cxl_iomap_block(dev, phys_addr, length);
+		if (!*(mi->addr))
+			return -ENOMEM;
+	}
 
 	return 0;
 }
@@ -263,7 +277,7 @@ static bool cxl_decode_regblock(struct pci_dev *pdev, u32 reg_lo, u32 reg_hi,
                         &pdev->resource[bar], &offset, map->reg_type);
                return false;
        }
-       
+
        map->reg_type = FIELD_GET(CXL_DVSEC_REG_LOCATOR_BLOCK_ID_MASK, reg_lo);
        map->resource = pci_resource_start(pdev, bar) + offset;
        map->max_size = pci_resource_len(pdev, bar) - offset;
