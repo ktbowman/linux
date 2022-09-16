@@ -85,7 +85,6 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 	struct cxl_port *port = ctx->port;
 	int type = pci_pcie_type(pdev);
 	struct cxl_register_map map;
-	resource_size_t component_reg_phys;
 	int rc;
 
 	if (pdev->bus != ctx->bus)
@@ -99,8 +98,7 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 	if (rc)
 		dev_dbg(&port->dev, "failed to find component registers\n");
 
-	component_reg_phys = cxl_regmap_to_base(pdev, &map);
-	rc = pci_dev_add_dport(pdev, port, component_reg_phys);
+	rc = pci_dev_add_dport(pdev, port, map.resource);
 	if (rc) {
 		ctx->error = rc;
 		return rc;

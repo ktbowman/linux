@@ -276,35 +276,22 @@ static int cxl_pci_setup_mailbox(struct cxl_dev_state *cxlds)
 
 static int cxl_map_regblock(struct pci_dev *pdev, struct cxl_register_map *map)
 {
-	void __iomem *addr;
-	int bar = map->barno;
-	struct device *dev = &pdev->dev;
-	resource_size_t offset = map->block_offset;
-
-	/* Basic sanity check that BAR is big enough */
-	if (pci_resource_len(pdev, bar) < offset) {
-		dev_err(dev, "BAR%d: %pr: too small (offset: %pa)\n", bar,
-			&pdev->resource[bar], &offset);
-		return -ENXIO;
-	}
-
-	addr = pci_iomap(pdev, bar, 0);
-	if (!addr) {
-		dev_err(dev, "failed to map registers\n");
+	map->base = ioremap(map->resource, map->max_size);
+	if (!map->base) {
+		dev_err(&pdev->dev, "failed to map registers\n");		
 		return -ENOMEM;
 	}
 
-	dev_dbg(dev, "Mapped CXL Memory Device resource bar %u @ %pa\n",
-		bar, &offset);
-
-	map->base = addr + map->block_offset;
+	dev_dbg(&pdev->dev, "Mapped CXL Memory Device resource %lld\n",
+		map->resource);
+	
 	return 0;
 }
 
 static void cxl_unmap_regblock(struct pci_dev *pdev,
 			       struct cxl_register_map *map)
 {
-	pci_iounmap(pdev, map->base - map->block_offset);
+	iounmap(map->base);
 	map->base = NULL;
 }
 
@@ -474,7 +461,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_warn(&pdev->dev, "No component registers (%d)\n", rc);
 
-	cxlds->component_reg_phys = cxl_regmap_to_base(pdev, &map);
+	cxlds->component_reg_phys = map.resource;
 
 	devm_cxl_pci_create_doe(cxlds);
 

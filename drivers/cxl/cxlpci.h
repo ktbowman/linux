@@ -62,6 +62,7 @@ enum cxl_regloc_type {
 	CXL_REGLOC_RBI_TYPES
 };
 
+#if 0
 static inline resource_size_t cxl_regmap_to_base(struct pci_dev *pdev,
 						 struct cxl_register_map *map)
 {
@@ -70,6 +71,7 @@ static inline resource_size_t cxl_regmap_to_base(struct pci_dev *pdev,
 
 	return pci_resource_start(pdev, map->barno) + map->block_offset;
 }
+#endif
 
 int devm_cxl_port_enumerate_dports(struct cxl_port *port);
 struct cxl_dev_state;

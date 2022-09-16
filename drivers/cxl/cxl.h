@@ -195,9 +195,9 @@ struct cxl_device_reg_map {
  */
 struct cxl_register_map {
 	void __iomem *base;
-	u64 block_offset;
+	resource_size_t resource;
+	resource_size_t max_size;
 	u8 reg_type;
-	u8 barno;
 	union {
 		struct cxl_component_reg_map component_map;
 		struct cxl_device_reg_map device_map;

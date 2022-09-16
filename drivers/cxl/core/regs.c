@@ -85,6 +85,7 @@ void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 			rmap = &map->hdm_decoder;
 			break;
 		}
+
 		default:
 			dev_dbg(dev, "Unknown CM cap ID: %d (0x%x)\n", cap_id,
 				offset);
@@ -199,10 +200,12 @@ int cxl_map_component_regs(struct pci_dev *pdev,
 	resource_size_t phys_addr;
 	resource_size_t length;
 
-	phys_addr = pci_resource_start(pdev, map->barno);
-	phys_addr += map->block_offset;
+	phys_addr = map->resource;
+        phys_addr += map->component_map.hdm_decoder.offset;
+        length = map->component_map.hdm_decoder.size;
+        regs->hdm_decoder = devm_cxl_iomap_block(dev, phys_addr, length);
 
-	phys_addr += map->component_map.hdm_decoder.offset;
+	
 	length = map->component_map.hdm_decoder.size;
 	regs->hdm_decoder = devm_cxl_iomap_block(dev, phys_addr, length);
 	if (!regs->hdm_decoder)
@@ -216,8 +219,7 @@ int cxl_map_device_regs(struct pci_dev *pdev,
 			struct cxl_device_regs *regs,
 			struct cxl_register_map *map)
 {
-	resource_size_t phys_addr =
-		pci_resource_start(pdev, map->barno) + map->block_offset;
+	resource_size_t phys_addr = map->resource;
 	struct device *dev = &pdev->dev;
 	struct mapinfo {
 		struct cxl_reg_map *rmap;
@@ -248,13 +250,24 @@ int cxl_map_device_regs(struct pci_dev *pdev,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_map_device_regs, CXL);
 
-static void cxl_decode_regblock(u32 reg_lo, u32 reg_hi,
+static bool cxl_decode_regblock(struct pci_dev *pdev, u32 reg_lo, u32 reg_hi,
 				struct cxl_register_map *map)
 {
-	map->block_offset = ((u64)reg_hi << 32) |
-			    (reg_lo & CXL_DVSEC_REG_LOCATOR_BLOCK_OFF_LOW_MASK);
-	map->barno = FIELD_GET(CXL_DVSEC_REG_LOCATOR_BIR_MASK, reg_lo);
-	map->reg_type = FIELD_GET(CXL_DVSEC_REG_LOCATOR_BLOCK_ID_MASK, reg_lo);
+       int bar = FIELD_GET(CXL_DVSEC_REG_LOCATOR_BIR_MASK, reg_lo);
+       u64 offset = ((u64)reg_hi << 32) |
+                    (reg_lo & CXL_DVSEC_REG_LOCATOR_BLOCK_OFF_LOW_MASK);
+
+       if (offset > pci_resource_len(pdev, bar)) {
+               dev_warn(&pdev->dev,
+                        "BAR%d: %pr: too small (offset: %pa, type: %d)\n", bar,
+                        &pdev->resource[bar], &offset, map->reg_type);
+               return false;
+       }
+       
+       map->reg_type = FIELD_GET(CXL_DVSEC_REG_LOCATOR_BLOCK_ID_MASK, reg_lo);
+       map->resource = pci_resource_start(pdev, bar) + offset;
+       map->max_size = pci_resource_len(pdev, bar) - offset;
+       return true;	
 }
 
 /**
@@ -274,7 +287,6 @@ int cxl_find_regblock(struct pci_dev *pdev, enum cxl_regloc_type type,
 	u32 regloc_size, regblocks;
 	int regloc, i;
 
-	map->block_offset = U64_MAX;
 	regloc = pci_find_dvsec_capability(pdev, PCI_DVSEC_VENDOR_ID_CXL,
 					   CXL_DVSEC_REG_LOCATOR);
 	if (!regloc)
@@ -292,13 +304,12 @@ int cxl_find_regblock(struct pci_dev *pdev, enum cxl_regloc_type type,
 		pci_read_config_dword(pdev, regloc, &reg_lo);
 		pci_read_config_dword(pdev, regloc + 4, &reg_hi);
 
-		cxl_decode_regblock(reg_lo, reg_hi, map);
+		cxl_decode_regblock(pdev, reg_lo, reg_hi, map);
 
 		if (map->reg_type == type)
 			return 0;
 	}
 
-	map->block_offset = U64_MAX;
 	return -ENODEV;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_find_regblock, CXL);
