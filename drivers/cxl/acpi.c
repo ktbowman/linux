@@ -578,6 +578,7 @@ MODULE_DEVICE_TABLE(acpi, cxl_acpi_ids);
 
 static const struct platform_device_id cxl_test_ids[] = {
 	{ "cxl_acpi" },
+	{ "cxl_rcd" },
 	{ },
 };
 MODULE_DEVICE_TABLE(platform, cxl_test_ids);
@@ -591,7 +592,65 @@ static struct platform_driver cxl_acpi_driver = {
 	.id_table = cxl_test_ids,
 };
 
-module_platform_driver(cxl_acpi_driver);
+static void cxl_rcd_release(struct device *dev) { }
+
+static struct platform_device cxl_rcd = {
+	.name = "cxl_rcd",
+	.id = PLATFORM_DEVID_NONE,
+	.dev = {
+		.release = cxl_rcd_release,
+	}
+};
+
+static int find_acpi0017_device(struct device *dev, void *unused)
+{
+	if (acpi_match_device(cxl_acpi_ids, dev))
+		return -EEXIST;
+	return 0;
+}
+
+static int enable_acpi0017_workaround(void)
+{
+	int rc;
+
+	rc = acpi_bus_for_each_dev(find_acpi0017_device, NULL);
+	if (rc)
+		/* ACPI0017 exists */
+		return 0;
+
+	/* Kick off restricted host (CXL 1.1) detection */
+	rc = platform_device_register(&cxl_rcd);
+	if (rc) {
+		platform_device_put(&cxl_rcd);
+		return rc;
+	}
+
+	dev_info(&cxl_rcd.dev, "Applying ACPI0017 workaround\n");
+
+	return 0;
+}
+
+static void remove_acpi0017_workaround(void)
+{
+	if (device_is_registered(&cxl_rcd.dev))
+		platform_device_unregister(&cxl_rcd);
+}
+
+static int __init cxl_host_init(void)
+{
+	enable_acpi0017_workaround();
+	return platform_driver_register(&cxl_acpi_driver);
+}
+
+static void __exit cxl_host_exit(void)
+{
+	platform_driver_unregister(&cxl_acpi_driver);
+	remove_acpi0017_workaround();
+}
+
+module_init(cxl_host_init);
+module_exit(cxl_host_exit);
+
 MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS(CXL);
 MODULE_IMPORT_NS(ACPI);
