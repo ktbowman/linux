@@ -533,6 +533,8 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	if (rc)
 		return rc;
 
+	goto skip;
+
 	ctx = (struct cxl_cfmws_context) {
 		.dev = host,
 		.root_port = root_port,
@@ -551,7 +553,7 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	 * if present
 	 */
 	device_for_each_child(&root_port->dev, cxl_res, pair_cxl_resource);
-
+skip:
 	/*
 	 * Root level scanned with host-bridge as dports, now scan host-bridges
 	 * for their role as CXL uports to their CXL-capable PCIe Root Ports.
