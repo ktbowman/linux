@@ -48,6 +48,37 @@ static int pci_dev_add_dport(struct pci_dev *pdev, struct cxl_port *port,
 	return 0;
 }
 
+static int restricted_host_enumerate_dport(struct cxl_port *port,
+					   struct pci_bus *bus)
+{
+	struct pci_dev *pdev;
+	bool is_restricted_host;
+	int rc;
+
+	/* Check CXL DVSEC of dev 0 func 0 */
+	pdev = pci_get_slot(bus, PCI_DEVFN(0, 0));
+
+	is_restricted_host = pdev
+		&& (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_END)
+		&& pci_find_dvsec_capability(pdev,
+					PCI_DVSEC_VENDOR_ID_CXL,
+					CXL_DVSEC_PCIE_DEVICE);
+	if (is_restricted_host)
+		rc = pci_dev_add_dport(pdev, port, CXL_RESOURCE_NONE);
+
+	pci_dev_put(pdev);
+
+	if (!is_restricted_host)
+		return 0;
+
+	dev_dbg(bus->bridge, "CXL restricted host found\n");
+
+	if (rc)
+		return rc;
+
+	return 1;
+}
+
 static int match_add_dports(struct pci_dev *pdev, void *data)
 {
 	struct cxl_walk_context *ctx = data;
@@ -91,10 +122,14 @@ int devm_cxl_port_enumerate_dports(struct cxl_port *port)
 {
 	struct pci_bus *bus = cxl_port_to_pci_bus(port);
 	struct cxl_walk_context ctx;
-	int type;
+	int type, count;
 
 	if (!bus)
 		return -ENXIO;
+
+	count = restricted_host_enumerate_dport(port, bus);
+	if (count)
+		return count;
 
 	if (pci_is_root_bus(bus))
 		type = PCI_EXP_TYPE_ROOT_PORT;
