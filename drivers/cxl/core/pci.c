@@ -29,14 +29,32 @@ struct cxl_walk_context {
 	int count;
 };
 
+static int pci_dev_add_dport(struct pci_dev *pdev, struct cxl_port *port,
+			      resource_size_t component_reg_phys)
+{
+	struct cxl_dport *dport;
+	u32 lnkcap, port_num;
+
+	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
+				  &lnkcap))
+		return -ENXIO;
+
+	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
+	dport = devm_cxl_add_dport(port, &pdev->dev, port_num,
+				   component_reg_phys);
+	if (IS_ERR(dport))
+		return PTR_ERR(dport);
+
+	return 0;
+}
+
 static int match_add_dports(struct pci_dev *pdev, void *data)
 {
 	struct cxl_walk_context *ctx = data;
 	struct cxl_port *port = ctx->port;
 	int type = pci_pcie_type(pdev);
 	struct cxl_register_map map;
-	struct cxl_dport *dport;
-	u32 lnkcap, port_num;
+	resource_size_t component_reg_phys;
 	int rc;
 
 	if (pdev->bus != ctx->bus)
@@ -45,21 +63,18 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 		return 0;
 	if (type != ctx->type)
 		return 0;
-	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
-				  &lnkcap))
-		return -ENXIO;
 
 	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
 	if (rc)
 		dev_dbg(&port->dev, "failed to find component registers\n");
 
-	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
-	dport = devm_cxl_add_dport(port, &pdev->dev, port_num,
-				   cxl_regmap_to_base(pdev, &map));
-	if (IS_ERR(dport)) {
-		ctx->error = PTR_ERR(dport);
-		return PTR_ERR(dport);
+	component_reg_phys = cxl_regmap_to_base(pdev, &map);
+	rc = pci_dev_add_dport(pdev, port, component_reg_phys);
+	if (rc) {
+		ctx->error = rc;
+		return rc;
 	}
+
 	ctx->count++;
 
 	return 0;
