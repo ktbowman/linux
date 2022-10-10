@@ -1384,15 +1384,55 @@ out:
 	return rc;
 }
 
+static inline bool is_cxl_restricted(struct cxl_memdev *cxlmd)
+{
+	struct device *parent = cxlmd->dev.parent;
+	if (!dev_is_pci(parent))
+		return false;
+	return pci_pcie_type(to_pci_dev(parent)) == PCI_EXP_TYPE_RC_END;
+}
+
+static int restricted_host_enumerate_port(struct cxl_memdev *cxlmd)
+{
+	struct device *dev, *dport_dev, *uport_dev;
+	int count;
+
+	if (!is_cxl_restricted(cxlmd))
+		return 0;
+
+	/*
+	 * The cxlmd is an RCD, the dport_dev of it is the PCI device
+	 * and the uport_dev is its host bridge which is the parent of
+	 * the PCI device.
+	 */
+	dev = &cxlmd->dev;			/* cxlmd */
+	dport_dev = dev->parent;		/* pci_dev */
+	uport_dev = dev->parent->parent;	/* pci_host_bridge */
+
+	count = find_port_attach_ep(cxlmd, uport_dev, dport_dev, dev);
+
+	/* If missing the host is not yet ready. */
+	if (!count)
+		return -EAGAIN;
+
+	return count;
+}
+
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
 	struct device *iter;
-	int rc;
+	int count, rc;
 
 	rc = devm_add_action_or_reset(&cxlmd->dev, cxl_detach_ep, cxlmd);
 	if (rc)
 		return rc;
+
+	count = restricted_host_enumerate_port(cxlmd);
+	if (count < 0)
+		return count;
+	if (count)
+		return 0;
 
 	/*
 	 * Scan for and add all cxl_ports in this device's ancestry.
@@ -1445,6 +1485,9 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_enumerate_ports, CXL);
 struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 				   struct cxl_dport **dport)
 {
+	if (is_cxl_restricted(cxlmd))
+		return find_cxl_port(cxlmd->dev.parent, dport);
+
 	return find_cxl_port(grandparent(&cxlmd->dev), dport);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_find_port, CXL);
