@@ -1395,6 +1395,7 @@ retry:
 				"found already registered port %s:%s\n",
 				dev_name(&port->dev), dev_name(port->uport));
 			rc = cxl_add_ep(dport, &cxlmd->dev);
+			put_device(&port->dev);
 
 			/*
 			 * If the endpoint already exists in the port's list,
@@ -1403,19 +1404,11 @@ retry:
 			 * the parent_port lock as the current port may be being
 			 * reaped.
 			 */
-			if (rc && rc != -EBUSY) {
-				put_device(&port->dev);
+			if (rc && rc != -EBUSY)
 				return rc;
-			}
 
 			/* Any more ports to add between this one and the root? */
-			if (!dev_is_cxl_root_child(&port->dev)) {
-				put_device(&port->dev);
-				continue;
-			}
-
-			put_device(&port->dev);
-			return 0;
+			continue;
 		}
 
 		rc = add_port_attach_ep(cxlmd, uport_dev, dport_dev);
