@@ -1354,6 +1354,14 @@ out:
 	return rc;
 }
 
+static inline bool is_cxl_restricted(struct cxl_memdev *cxlmd)
+{
+	struct device *parent = cxlmd->dev.parent;
+	if (!dev_is_pci(parent))
+		return false;
+	return pci_pcie_type(to_pci_dev(parent)) == PCI_EXP_TYPE_RC_END;
+}
+
 int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
@@ -1433,9 +1441,39 @@ retry:
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_enumerate_ports, CXL);
 
+/*
+ * CXL memory device and port hierarchy:
+ *
+ * VH mode:
+ *
+ * CXL memory device, cxl_memdev                               endpoint
+ * └──PCIe Endpoint (type 0), pci_dev                           |
+ *    └──Downstream Port (type 1), pci_dev (Nth switch)        portN
+ *       └──Upstream Port (type 1), pci_dev (Nth switch)        |
+ *          :                                                   :
+ *          └──Downstream Port (type 1), pci_dev (1st switch)  port1
+ *             └──Upstream Port (type 1), pci_dev (1st switch)  |
+ *                └──Root Port (type 1), pci_dev                |
+ *                   └──PCI host bridge, pci_host_bridge       port0
+ *                      :                                       |
+ *                      :..ACPI0017, acpi_dev                  root
+ *
+ * (There can be zero or any other number of switches in between.)
+ *
+ * RCD mode:
+ *
+ * CXL memory device, cxl_memdev                               endpoint
+ * └──PCIe Endpoint (type 0), pci_dev                           |
+ *    └──PCI host bridge, pci_host_bridge                      port0
+ *       :                                                      |
+ *       :..ACPI0017, acpi_dev                                 root
+ */
 struct cxl_port *cxl_mem_find_port(struct cxl_memdev *cxlmd,
 				   struct cxl_dport **dport)
 {
+	if (is_cxl_restricted(cxlmd))
+		return find_cxl_port(cxlmd->dev.parent, dport);
+
 	return find_cxl_port(grandparent(&cxlmd->dev), dport);
 }
 EXPORT_SYMBOL_NS_GPL(cxl_mem_find_port, CXL);
