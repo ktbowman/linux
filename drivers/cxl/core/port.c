@@ -1286,6 +1286,36 @@ static resource_size_t find_component_registers(struct device *dev)
 	return cxl_regmap_to_base(pdev, &map);
 }
 
+static int find_port_attach_ep(struct cxl_memdev *cxlmd,
+			      struct device *uport_dev,
+			      struct device *dport_dev,
+			      struct device *origin)
+{
+	struct device *dev = &cxlmd->dev;
+	struct cxl_dport *dport;
+	struct cxl_port *port;
+	int rc;
+
+	dev_dbg(dev, "scan: origin: %s dport_dev: %s parent: %s\n",
+		dev_name(origin), dev_name(dport_dev),
+		uport_dev ? dev_name(uport_dev) : "(null)");
+
+	port = find_cxl_port(dport_dev, &dport);
+	if (!port)
+		return 0;
+
+	dev_dbg(dev, "found already registered port %s:%s\n",
+		dev_name(&port->dev), dev_name(port->uport));
+
+	rc = cxl_add_ep(dport, &cxlmd->dev);
+	put_device(&port->dev);
+	if (rc)
+		return rc;
+
+	/* Continue to add more ports between this one and the root. */
+	return 1;
+}
+
 static int add_port_attach_ep(struct cxl_memdev *cxlmd,
 			      struct device *uport_dev,
 			      struct device *dport_dev)
@@ -1373,8 +1403,6 @@ retry:
 	for (iter = dev; iter; iter = grandparent(iter)) {
 		struct device *dport_dev = grandparent(iter);
 		struct device *uport_dev;
-		struct cxl_dport *dport;
-		struct cxl_port *port;
 
 		if (!dport_dev)
 			return 0;
@@ -1386,30 +1414,18 @@ retry:
 			return -ENXIO;
 		}
 
-		dev_dbg(dev, "scan: iter: %s dport_dev: %s parent: %s\n",
-			dev_name(iter), dev_name(dport_dev),
-			dev_name(uport_dev));
-		port = find_cxl_port(dport_dev, &dport);
-		if (port) {
-			dev_dbg(&cxlmd->dev,
-				"found already registered port %s:%s\n",
-				dev_name(&port->dev), dev_name(port->uport));
-			rc = cxl_add_ep(dport, &cxlmd->dev);
-			put_device(&port->dev);
-
-			/*
-			 * If the endpoint already exists in the port's list,
-			 * that's ok, it was added on a previous pass.
-			 * Otherwise, retry in add_port_attach_ep() after taking
-			 * the parent_port lock as the current port may be being
-			 * reaped.
-			 */
-			if (rc && rc != -EBUSY)
-				return rc;
-
-			/* Any more ports to add between this one and the root? */
+		rc = find_port_attach_ep(cxlmd, uport_dev, dport_dev, iter);
+		/*
+		 * If the endpoint already exists in the port's list,
+		 * that's ok, it was added on a previous pass.
+		 * Otherwise, retry in add_port_attach_ep() after taking
+		 * the parent_port lock as the current port may be being
+		 * reaped.
+		 */
+		if (rc > 0 || rc == -EBUSY)
 			continue;
-		}
+		if (rc)
+			return rc;
 
 		rc = add_port_attach_ep(cxlmd, uport_dev, dport_dev);
 		/* port missing, try to add parent */
