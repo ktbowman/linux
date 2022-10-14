@@ -47,7 +47,7 @@ static int match_add_dports(struct pci_dev *pdev, void *data)
 		return 0;
 	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
 				  &lnkcap))
-		return 0;
+		return -ENXIO;
 
 	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
 	if (rc)
