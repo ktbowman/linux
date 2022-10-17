@@ -9,6 +9,8 @@
 #include "cxlpci.h"
 #include "cxl.h"
 
+#define CXL_RCRB_SIZE	SZ_8K
+
 static unsigned long cfmws_to_decoder_flags(int restrictions)
 {
 	unsigned long flags = CXL_DECODER_F_ENABLE;
@@ -240,25 +242,44 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 struct cxl_chbs_context {
 	struct device *dev;
 	unsigned long long uid;
-	resource_size_t chbcr;
+	struct acpi_cedt_chbs chbs;
 };
 
-static int cxl_get_chbcr(union acpi_subtable_headers *header, void *arg,
-			 const unsigned long end)
+static int cxl_get_chbs(union acpi_subtable_headers *header, void *arg,
+			const unsigned long end)
 {
 	struct cxl_chbs_context *ctx = arg;
 	struct acpi_cedt_chbs *chbs;
 
-	if (ctx->chbcr)
+	if (ctx->chbs.base)
 		return 0;
 
 	chbs = (struct acpi_cedt_chbs *) header;
 
 	if (ctx->uid != chbs->uid)
 		return 0;
-	ctx->chbcr = chbs->base;
+	ctx->chbs = *chbs;
 
 	return 0;
+}
+
+static resource_size_t cxl_get_chbcr(struct cxl_chbs_context *ctx)
+{
+	struct acpi_cedt_chbs *chbs = &ctx->chbs;
+
+	if (!chbs->base)
+		return CXL_RESOURCE_NONE;
+
+	if (chbs->cxl_version != ACPI_CEDT_CHBS_VERSION_CXL11)
+		return chbs->base;
+
+	if (chbs->length != CXL_RCRB_SIZE)
+		return CXL_RESOURCE_NONE;
+
+	dev_dbg(ctx->dev, "RCRB found for UID %lld: 0x%08llx\n",
+		ctx->uid, (u64)chbs->base);
+
+	return cxl_rcrb_to_component(ctx->dev, chbs->base, CXL_RCRB_DOWNSTREAM);
 }
 
 static int add_host_bridge_dport(struct device *match, void *arg)
@@ -272,6 +293,7 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	struct acpi_pci_root *pci_root = to_cxl_pci_root(host, match);
 	struct device *bridge;
 	acpi_handle handle;
+	resource_size_t component_reg_phys;
 
 	if (!pci_root)
 		return 0;
@@ -287,19 +309,20 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	dev_dbg(match, "UID found: %lld\n", uid);
 
 	ctx = (struct cxl_chbs_context) {
-		.dev = host,
+		.dev = match,
 		.uid = uid,
 	};
-	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CHBS, cxl_get_chbcr, &ctx);
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CHBS, cxl_get_chbs, &ctx);
 
-	if (ctx.chbcr == 0) {
+	component_reg_phys = cxl_get_chbcr(&ctx);
+	if (component_reg_phys == CXL_RESOURCE_NONE) {
 		dev_warn(match, "No CHBS found for Host Bridge (UID %lld)\n", uid);
 		return 0;
 	}
 
-	dev_dbg(match, "CHBCR found: 0x%08llx\n", (u64)ctx.chbcr);
+	dev_dbg(match, "CHBCR found: 0x%08llx\n", (u64)component_reg_phys);
 
-	dport = devm_cxl_add_dport(root_port, bridge, uid, ctx.chbcr);
+	dport = devm_cxl_add_dport(root_port, bridge, uid, component_reg_phys);
 	if (IS_ERR(dport))
 		return PTR_ERR(dport);
 
