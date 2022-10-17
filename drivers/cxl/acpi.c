@@ -9,6 +9,8 @@
 #include "cxlpci.h"
 #include "cxl.h"
 
+#define CXL_RCRB_SIZE	SZ_8K
+
 static unsigned long cfmws_to_decoder_flags(int restrictions)
 {
 	unsigned long flags = CXL_DECODER_F_ENABLE;
@@ -229,25 +231,80 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 struct cxl_chbs_context {
 	struct device *dev;
 	unsigned long long uid;
-	resource_size_t chbcr;
+	struct acpi_cedt_chbs chbs;
 };
 
-static int cxl_get_chbcr(union acpi_subtable_headers *header, void *arg,
-			 const unsigned long end)
+static int cxl_get_chbs(union acpi_subtable_headers *header, void *arg,
+			const unsigned long end)
 {
 	struct cxl_chbs_context *ctx = arg;
 	struct acpi_cedt_chbs *chbs;
 
-	if (ctx->chbcr)
+	if (ctx->chbs.base)
 		return 0;
 
 	chbs = (struct acpi_cedt_chbs *) header;
 
 	if (ctx->uid != chbs->uid)
 		return 0;
-	ctx->chbcr = chbs->base;
+	ctx->chbs = *chbs;
 
 	return 0;
+}
+
+static resource_size_t cxl_get_chbcr(struct cxl_chbs_context *ctx)
+{
+	struct acpi_cedt_chbs *chbs = &ctx->chbs;
+	resource_size_t component_reg_phys, rcrb;
+	u32 bar0, bar1;
+	void *addr;
+
+	if (!chbs->base)
+		return CXL_RESOURCE_NONE;
+
+	if (chbs->cxl_version != ACPI_CEDT_CHBS_VERSION_CXL11)
+		return chbs->base;
+
+	/* Extract RCRB */
+
+	if (chbs->length != CXL_RCRB_SIZE)
+		return CXL_RESOURCE_NONE;
+
+	rcrb = chbs->base;
+
+	dev_dbg(ctx->dev, "RCRB found for UID %lld: 0x%08llx\n",
+		ctx->uid, (u64)rcrb);
+
+	/*
+	 * RCRB's BAR[0..1] point to component block containing CXL
+	 * subsystem component registers. MEMBAR extraction follows
+	 * the PCI Base spec here, esp. 64 bit extraction and memory
+	 * ranges alignment (6.0, 7.5.1.2.1).
+	 */
+	addr = ioremap(rcrb, PCI_BASE_ADDRESS_0 + SZ_8);
+	bar0 = readl(addr + PCI_BASE_ADDRESS_0);
+	bar1 = readl(addr + PCI_BASE_ADDRESS_1);
+	iounmap(addr);
+
+	/* sanity check */
+	if (bar0 & (PCI_BASE_ADDRESS_MEM_TYPE_1M | PCI_BASE_ADDRESS_SPACE_IO))
+		return CXL_RESOURCE_NONE;
+
+	component_reg_phys = bar0 & PCI_BASE_ADDRESS_MEM_MASK;
+	if (bar0 & PCI_BASE_ADDRESS_MEM_TYPE_64)
+		component_reg_phys |= ((u64)bar1) << 32;
+
+	if (!component_reg_phys)
+		return CXL_RESOURCE_NONE;
+
+	/*
+	 * Must be 8k aligned (size of combined CXL 1.1 Downstream and
+	 * Upstream Port RCRBs).
+	 */
+	if (component_reg_phys & (CXL_RCRB_SIZE - 1))
+		return CXL_RESOURCE_NONE;
+
+	return component_reg_phys;
 }
 
 static int add_host_bridge_dport(struct device *match, void *arg)
@@ -259,6 +316,7 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	struct cxl_port *root_port = arg;
 	struct device *host = root_port->dev.parent;
 	struct acpi_device *bridge = to_cxl_host_bridge(host, match);
+	resource_size_t component_reg_phys;
 
 	if (!bridge)
 		return 0;
@@ -273,19 +331,20 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	dev_dbg(match, "UID found: %lld\n", uid);
 
 	ctx = (struct cxl_chbs_context) {
-		.dev = host,
+		.dev = match,
 		.uid = uid,
 	};
-	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CHBS, cxl_get_chbcr, &ctx);
+	acpi_table_parse_cedt(ACPI_CEDT_TYPE_CHBS, cxl_get_chbs, &ctx);
 
-	if (ctx.chbcr == 0) {
+	component_reg_phys = cxl_get_chbcr(&ctx);
+	if (component_reg_phys == CXL_RESOURCE_NONE) {
 		dev_warn(match, "No CHBS found for Host Bridge (UID %lld)\n", uid);
 		return 0;
 	}
 
-	dev_dbg(match, "CHBCR found: 0x%08llx\n", (u64)ctx.chbcr);
+	dev_dbg(match, "CHBCR found: 0x%08llx\n", (u64)component_reg_phys);
 
-	dport = devm_cxl_add_dport(root_port, match, uid, ctx.chbcr);
+	dport = devm_cxl_add_dport(root_port, match, uid, component_reg_phys);
 	if (IS_ERR(dport))
 		return PTR_ERR(dport);
 
