@@ -428,11 +428,26 @@ static void devm_cxl_pci_create_doe(struct cxl_dev_state *cxlds)
 	}
 }
 
+static int check_restricted_device(struct pci_dev *pdev, u16 pcie_dvsec)
+{
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_END)
+		return 0;		/* no RCD */
+
+	if (pdev->devfn == PCI_DEVFN(0, 0) && pcie_dvsec)
+		return 0;		/* ok */
+
+	dev_warn(&pdev->dev, "Skipping RCD: devfn=0x%02x dvsec=%u\n",
+		pdev->devfn, pcie_dvsec);
+
+	return -ENODEV;
+}
+
 static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct cxl_register_map map;
 	struct cxl_memdev *cxlmd;
 	struct cxl_dev_state *cxlds;
+	u16 pcie_dvsec;
 	int rc;
 
 	/*
@@ -441,6 +456,13 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	 */
 	BUILD_BUG_ON(offsetof(struct cxl_regs, memdev) !=
 		     offsetof(struct cxl_regs, device_regs.memdev));
+
+	pcie_dvsec = pci_find_dvsec_capability(
+		pdev, PCI_DVSEC_VENDOR_ID_CXL, CXL_DVSEC_PCIE_DEVICE);
+
+	rc = check_restricted_device(pdev, pcie_dvsec);
+	if (rc)
+		return rc;
 
 	rc = pcim_enable_device(pdev);
 	if (rc)
@@ -451,8 +473,7 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		return PTR_ERR(cxlds);
 
 	cxlds->serial = pci_get_dsn(pdev);
-	cxlds->cxl_dvsec = pci_find_dvsec_capability(
-		pdev, PCI_DVSEC_VENDOR_ID_CXL, CXL_DVSEC_PCIE_DEVICE);
+	cxlds->cxl_dvsec = pcie_dvsec;
 	if (!cxlds->cxl_dvsec)
 		dev_warn(&pdev->dev,
 			 "Device DVSEC not present, skip CXL.mem init\n");
