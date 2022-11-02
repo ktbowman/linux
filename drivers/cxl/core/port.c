@@ -1366,7 +1366,23 @@ int devm_cxl_enumerate_ports(struct cxl_memdev *cxlmd)
 {
 	struct device *dev = &cxlmd->dev;
 	struct device *iter;
+	struct cxl_dport *dport;
+	struct cxl_port *port;
 	int rc;
+
+	/*
+	 * Skip intermediate port enumeration in the RCH case, there
+	 * are no ports in between a host bridge and an endpoint. Only
+	 * initialize the EP chain.
+	 */
+	if (is_cxl_restricted(cxlmd)) {
+		port = cxl_mem_find_port(cxlmd, &dport);
+		if (!port)
+			return -ENXIO;
+		rc = cxl_add_ep(dport, &cxlmd->dev);
+		put_device(&port->dev);
+		return rc;
+	}
 
 	rc = devm_add_action_or_reset(&cxlmd->dev, cxl_detach_ep, cxlmd);
 	if (rc)
@@ -1381,8 +1397,6 @@ retry:
 	for (iter = dev; iter; iter = grandparent(iter)) {
 		struct device *dport_dev = grandparent(iter);
 		struct device *uport_dev;
-		struct cxl_dport *dport;
-		struct cxl_port *port;
 
 		if (!dport_dev)
 			return 0;
