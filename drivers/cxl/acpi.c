@@ -185,6 +185,17 @@ __mock struct acpi_device *to_cxl_host_bridge(struct device *host,
 	return NULL;
 }
 
+static inline struct acpi_pci_root *to_cxl_pci_root(struct device *host,
+						    struct device *match)
+{
+	struct acpi_device *adev = to_cxl_host_bridge(host, match);
+
+	if (!adev)
+		return NULL;
+
+	return acpi_pci_find_root(adev->handle);
+}
+
 /*
  * A host bridge is a dport to a CFMWS decode and it is a uport to the
  * dport (PCIe Root Ports) in the host bridge.
@@ -193,35 +204,35 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 {
 	struct cxl_port *root_port = arg;
 	struct device *host = root_port->dev.parent;
-	struct acpi_device *bridge = to_cxl_host_bridge(host, match);
-	struct acpi_pci_root *pci_root;
+	struct acpi_pci_root *pci_root = to_cxl_pci_root(host, match);
 	struct cxl_dport *dport;
 	struct cxl_port *port;
+	struct device *bridge;
 	int rc;
 
-	if (!bridge)
+	if (!pci_root)
 		return 0;
 
-	dport = cxl_find_dport_by_dev(root_port, match);
+	/*
+	 * If it is a mock dev, the bridge can be NULL, use matching
+	 * device (&adev->dev) as a fallback then then.
+	 */
+	bridge = pci_root->bus->bridge ?: match;
+	dport = cxl_find_dport_by_dev(root_port, bridge);
 	if (!dport) {
 		dev_dbg(host, "host bridge expected and not found\n");
 		return 0;
 	}
 
-	/*
-	 * Note that this lookup already succeeded in
-	 * to_cxl_host_bridge(), so no need to check for failure here
-	 */
-	pci_root = acpi_pci_find_root(bridge->handle);
-	rc = devm_cxl_register_pci_bus(host, match, pci_root->bus);
+	rc = devm_cxl_register_pci_bus(host, bridge, pci_root->bus);
 	if (rc)
 		return rc;
 
-	port = devm_cxl_add_port(host, match, dport->component_reg_phys, dport);
+	port = devm_cxl_add_port(host, bridge, dport->component_reg_phys, dport);
 	if (IS_ERR(port))
 		return PTR_ERR(port);
 
-	dev_info(pci_root->bus->bridge, "host supports CXL\n");
+	dev_info(bridge, "host supports CXL\n");
 
 	return 0;
 }
@@ -258,13 +269,16 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	struct cxl_chbs_context ctx;
 	struct cxl_port *root_port = arg;
 	struct device *host = root_port->dev.parent;
-	struct acpi_device *bridge = to_cxl_host_bridge(host, match);
+	struct acpi_pci_root *pci_root = to_cxl_pci_root(host, match);
+	struct device *bridge;
+	acpi_handle handle;
 
-	if (!bridge)
+	if (!pci_root)
 		return 0;
 
-	status = acpi_evaluate_integer(bridge->handle, METHOD_NAME__UID, NULL,
-				       &uid);
+	bridge = pci_root->bus->bridge ?: match;
+	handle = pci_root->device->handle;
+	status = acpi_evaluate_integer(handle, METHOD_NAME__UID, NULL, &uid);
 	if (status != AE_OK) {
 		dev_err(match, "unable to retrieve _UID\n");
 		return -ENODEV;
@@ -285,7 +299,7 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 
 	dev_dbg(match, "CHBCR found: 0x%08llx\n", (u64)ctx.chbcr);
 
-	dport = devm_cxl_add_dport(root_port, match, uid, ctx.chbcr);
+	dport = devm_cxl_add_dport(root_port, bridge, uid, ctx.chbcr);
 	if (IS_ERR(dport))
 		return PTR_ERR(dport);
 
