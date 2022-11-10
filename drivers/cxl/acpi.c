@@ -483,6 +483,7 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	struct resource *cxl_res;
 	struct cxl_port *root_port;
 	struct device *host = &pdev->dev;
+	struct acpi_device *adev = ACPI_COMPANION(host);
 	struct cxl_cfmws_context ctx;
 
 	device_lock_set_class(&pdev->dev, &cxl_root_key);
@@ -503,7 +504,8 @@ static int cxl_acpi_probe(struct platform_device *pdev)
 	if (IS_ERR(root_port))
 		return PTR_ERR(root_port);
 
-	rc = acpi_bus_for_each_dev(add_host_bridge_dport, root_port);
+	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
+			      add_host_bridge_dport);
 	if (rc < 0)
 		return rc;
 
@@ -536,7 +538,8 @@ skip:
 	 * Root level scanned with host-bridge as dports, now scan host-bridges
 	 * for their role as CXL uports to their CXL-capable PCIe Root Ports.
 	 */
-	rc = acpi_bus_for_each_dev(add_host_bridge_uport, root_port);
+	rc = bus_for_each_dev(adev->dev.bus, NULL, root_port,
+			      add_host_bridge_uport);
 	if (rc < 0)
 		return rc;
 
