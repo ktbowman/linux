@@ -584,11 +584,8 @@ static struct platform_device cxl_rcd = {
 
 static int find_acpi0017_device(struct device *dev, void *unused)
 {
-	struct acpi_device *device = to_acpi_device(dev);
-
-	if (!acpi_match_device_ids(device, cxl_acpi_ids))
+	if (acpi_match_device(cxl_acpi_ids, dev))
 		return -EEXIST;
-
 	return 0;
 }
 
