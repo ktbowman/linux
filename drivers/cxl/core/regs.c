@@ -185,7 +185,7 @@ void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
 		return NULL;
 
 	res = devm_request_mem_region(dev, addr, length, dev_name(dev));
-	if (!res) {
+	if (res) {
 		resource_size_t end = addr + length - 1;
 
 		dev_err(dev, "Failed to request region %pa-%pa\n", &addr, &end);
