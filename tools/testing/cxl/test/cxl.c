@@ -320,46 +320,6 @@ static int populate_cedt(void)
 	return 0;
 }
 
-/*
- * WARNING, this hack assumes the format of 'struct
- * cxl_cfmws_context' and 'struct cxl_chbs_context' share the property that
- * the first struct member is the device being probed by the cxl_acpi
- * driver.
- */
-struct cxl_cedt_context {
-	struct device *dev;
-};
-
-static int mock_acpi_table_parse_cedt(enum acpi_cedt_type id,
-				      acpi_tbl_entry_handler_arg handler_arg,
-				      void *arg)
-{
-	struct cxl_cedt_context *ctx = arg;
-	struct device *dev = ctx->dev;
-	union acpi_subtable_headers *h;
-	unsigned long end;
-	int i;
-
-	if (dev != &cxl_acpi->dev)
-		return acpi_table_parse_cedt(id, handler_arg, arg);
-
-	if (id == ACPI_CEDT_TYPE_CHBS)
-		for (i = 0; i < ARRAY_SIZE(mock_cedt.chbs); i++) {
-			h = (union acpi_subtable_headers *)&mock_cedt.chbs[i];
-			end = (unsigned long)&mock_cedt.chbs[i + 1];
-			handler_arg(h, arg, end);
-		}
-
-	if (id == ACPI_CEDT_TYPE_CFMWS)
-		for (i = 0; i < ARRAY_SIZE(mock_cfmws); i++) {
-			h = (union acpi_subtable_headers *) mock_cfmws[i];
-			end = (unsigned long) h + mock_cfmws[i]->header.length;
-			handler_arg(h, arg, end);
-		}
-
-	return 0;
-}
-
 static bool is_mock_bridge(struct device *dev)
 {
 	int i;
@@ -408,6 +368,46 @@ static bool is_mock_port(struct device *dev)
 		return is_mock_dev(dev->parent);
 
 	return false;
+}
+
+/*
+ * WARNING, this hack assumes the format of 'struct cxl_cfmws_context'
+ * and 'struct cxl_chbs_context' share the property that the first
+ * struct member is cxl_test device being probed by the cxl_acpi
+ * driver.
+ */
+struct cxl_cedt_context {
+	struct device *dev;
+};
+
+static int mock_acpi_table_parse_cedt(enum acpi_cedt_type id,
+				      acpi_tbl_entry_handler_arg handler_arg,
+				      void *arg)
+{
+	struct cxl_cedt_context *ctx = arg;
+	struct device *dev = ctx->dev;
+	union acpi_subtable_headers *h;
+	unsigned long end;
+	int i;
+
+	if (!is_mock_port(dev) && !is_mock_dev(dev))
+		return acpi_table_parse_cedt(id, handler_arg, arg);
+
+	if (id == ACPI_CEDT_TYPE_CHBS)
+		for (i = 0; i < ARRAY_SIZE(mock_cedt.chbs); i++) {
+			h = (union acpi_subtable_headers *)&mock_cedt.chbs[i];
+			end = (unsigned long)&mock_cedt.chbs[i + 1];
+			handler_arg(h, arg, end);
+		}
+
+	if (id == ACPI_CEDT_TYPE_CFMWS)
+		for (i = 0; i < ARRAY_SIZE(mock_cfmws); i++) {
+			h = (union acpi_subtable_headers *) mock_cfmws[i];
+			end = (unsigned long) h + mock_cfmws[i]->header.length;
+			handler_arg(h, arg, end);
+		}
+
+	return 0;
 }
 
 static int host_bridge_index(struct acpi_device *adev)
