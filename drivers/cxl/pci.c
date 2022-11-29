@@ -1,3 +1,4 @@
+#define DEBUG
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2020 Intel Corporation. All rights reserved. */
 #include <linux/io-64-nonatomic-lo-hi.h>
@@ -628,10 +629,31 @@ static void cxl_error_resume(struct pci_dev *pdev)
 		 dev->driver ? "successful" : "failed");
 }
 
+static void cxl_correctable_error_log(struct pci_dev *pdev)
+{
+       struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
+       struct cxl_memdev *cxlmd = cxlds->cxlmd;
+       struct device *dev = &cxlmd->dev;
+       void __iomem *addr;
+       u32 status;
+
+      if (!cxlds->regs.ras)
+	       return;
+
+       addr = cxlds->regs.ras + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
+       status = le32_to_cpu(readl(addr));
+       if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
+	       writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
+	       trace_cxl_aer_correctable_error(dev_name(dev), status);
+       }
+}
+
+
 static const struct pci_error_handlers cxl_error_handlers = {
 	.error_detected = cxl_error_detected,
 	.slot_reset     = cxl_slot_reset,
 	.resume         = cxl_error_resume,
+	.cor_error_log  = cxl_correctable_error_log,
 };
 
 
