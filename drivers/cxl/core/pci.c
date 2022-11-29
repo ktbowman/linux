@@ -271,6 +271,8 @@ static bool __cxl_hdm_decode_init(struct cxl_dev_state *cxlds,
 	int i, rc, allowed;
 	u32 global_ctrl;
 
+	return true;
+
 	global_ctrl = readl(hdm + CXL_HDM_DECODER_CTRL_OFFSET);
 
 	/*
