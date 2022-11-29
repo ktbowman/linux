@@ -450,13 +450,19 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		dev_warn(&pdev->dev,
 			 "Device DVSEC not present, skip CXL.mem init\n");
 
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	rc = cxl_setup_regs(pdev, CXL_REGLOC_RBI_MEMDEV, &map);
 	if (rc)
 		return rc;
 
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	rc = cxl_map_device_regs(&pdev->dev, &cxlds->regs.device_regs, &map);
 	if (rc)
 		return rc;
+
+	pr_err("%s():%d: -", __func__, __LINE__);
 
 	/*
 	 * If the component registers can't be found, the cxl_pci driver may
@@ -467,7 +473,11 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_warn(&pdev->dev, "No component registers (%d)\n", rc);
 
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	cxlds->component_reg_phys = map.resource;
+
+	pr_err("%s():%d: -", __func__, __LINE__);
 
 	devm_cxl_pci_create_doe(cxlds);
 
@@ -476,25 +486,37 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (rc)
 		dev_dbg(&pdev->dev, "Failed to map RAS capability.\n");
 
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	rc = cxl_pci_setup_mailbox(cxlds);
 	if (rc)
 		return rc;
+
+	pr_err("%s():%d: -", __func__, __LINE__);
 
 	rc = cxl_enumerate_cmds(cxlds);
 	if (rc)
 		return rc;
 
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	rc = cxl_dev_state_identify(cxlds);
 	if (rc)
 		return rc;
+
+	pr_err("%s():%d: -", __func__, __LINE__);
 
 	rc = cxl_mem_create_range_info(cxlds);
 	if (rc)
 		return rc;
 
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	cxlmd = devm_cxl_add_memdev(cxlds);
 	if (IS_ERR(cxlmd))
 		return PTR_ERR(cxlmd);
+
+	pr_err("%s():%d: -", __func__, __LINE__);
 
 	if (cxlds->regs.ras) {
 		pci_enable_pcie_error_reporting(pdev);
@@ -502,6 +524,9 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		if (rc)
 			return rc;
 	}
+
+	pr_err("%s():%d: -", __func__, __LINE__);
+
 	pci_save_state(pdev);
 
 	return rc;
