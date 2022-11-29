@@ -1,3 +1,4 @@
+#define DEBUG
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2020 Intel Corporation. */
 #include <linux/io-64-nonatomic-lo-hi.h>
@@ -64,6 +65,8 @@ void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 		struct cxl_reg_map *rmap;
 		u16 cap_id, offset;
 		u32 length, hdr;
+
+		dev_err(dev, "%s():%d: cap = %d\n", __func__, __LINE__, cap);
 
 		hdr = readl(base + cap * 0x4);
 
