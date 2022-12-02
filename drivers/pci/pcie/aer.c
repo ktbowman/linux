@@ -942,6 +942,8 @@ static bool find_source_device(struct pci_dev *parent,
 	return true;
 }
 
+static int handle_rcec_error_source(struct pci_dev *dev, void *_e_info);
+
 /**
  * handle_error_source - handle logging error into an event log
  * @dev: pointer to pci_dev data structure of error source device
@@ -952,6 +954,9 @@ static bool find_source_device(struct pci_dev *parent,
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
 	int aer = dev->aer_cap;
+
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC)
+		pcie_walk_rcec(dev, handle_rcec_error_source, (void*)info);
 
 	if (info->severity == AER_CORRECTABLE) {
 		/*
@@ -974,6 +979,13 @@ static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 	else if (info->severity == AER_FATAL)
 		pcie_do_recovery(dev, pci_channel_io_frozen, aer_root_reset);
 	pci_dev_put(dev);
+}
+
+static int handle_rcec_error_source(struct pci_dev *dev, void *e_info)
+{
+	handle_error_source(dev, (struct aer_err_info *)e_info);
+
+	return 0;
 }
 
 #ifdef CONFIG_ACPI_APEI_PCIEAER

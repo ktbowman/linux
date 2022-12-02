@@ -525,6 +525,8 @@ static int cxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 			return rc;
 	}
 
+	pci_set_drvdata(pdev, cxlds);
+
 	pr_err("%s():%d: -", __func__, __LINE__);
 
 	pci_save_state(pdev);
