@@ -1,3 +1,4 @@
+#define DEBUG
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2021 Intel Corporation. All rights reserved. */
 #include <linux/platform_device.h>
@@ -316,10 +317,22 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 
 	pci_root = acpi_pci_find_root(hb->handle);
 	bridge = pci_root->bus->bridge;
-	if (ctx.chbs.cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11)
+	if (ctx.chbs.cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11) {
+		resource_size_t dport_aer_phys;
+
+		/* TODO - consider moving this into devm_cxl_add_rch_dport() */
+		dport_aer_phys = cxl_rcrb_to_dport_aer(ctx.dev, ctx.chbs.base);
+		if (dport_aer_phys == CXL_RESOURCE_NONE) {
+			dev_warn(match, "No dport AER found\n");
+			return 0;
+		}
+
+		dev_dbg(match, "dport_aer_phys found: %pa\n", &dport_aer_phys);
+
 		dport = devm_cxl_add_rch_dport(root_port, bridge, uid,
 					       component_reg_phys,
-					       ctx.chbs.base);
+					       ctx.chbs.base, dport_aer_phys);
+	}
 	else
 		dport = devm_cxl_add_dport(root_port, bridge, uid,
 					   component_reg_phys);

@@ -664,15 +664,23 @@ static void cxl_correctable_error_log(struct pci_dev *pdev)
        void __iomem *addr;
        u32 status;
 
-      if (!cxlds->regs.ras)
+       if (!cxlds->regs.ras)
 	       return;
 
        addr = cxlds->regs.ras + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
        status = le32_to_cpu(readl(addr));
+
        if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
+	       pr_err("%s():%d: -", __func__, __LINE__);
 	       writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
 	       trace_cxl_aer_correctable_error(dev_name(dev), status);
        }
+
+       /* Check for DP detected error 12.2.1.1 */
+       pr_err("%s():%d: cxlds->regs.dport_aer = %p", __func__, __LINE__, cxlds->regs.dport_aer);
+       pr_err("%s():%d: *((u32*)cxlds->regs.dport_aer) = %X", __func__, __LINE__,
+	      *((u32*)cxlds->regs.dport_aer));
+
 }
 
 

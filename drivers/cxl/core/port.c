@@ -99,7 +99,8 @@ static ssize_t name##_show(struct device *dev,                       \
 			   struct device_attribute *attr, char *buf) \
 {                                                                    \
 	struct cxl_decoder *cxld = to_cxl_decoder(dev);              \
-                                                                     \
+								     \
+								     \
 	return sysfs_emit(buf, "%s\n",                               \
 			  (cxld->flags & (flag)) ? "1" : "0");       \
 }                                                                    \
@@ -910,17 +911,22 @@ enum cxl_dport_mode {
 static struct cxl_dport *
 __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 		     int port_id, resource_size_t component_reg_phys,
-		     enum cxl_dport_mode mode, resource_size_t rcrb)
+		     enum cxl_dport_mode mode, resource_size_t rcrb,
+		     resource_size_t dport_aer_phys)
 {
 	char link_name[CXL_TARGET_STRLEN];
 	struct cxl_dport *dport;
 	struct device *host;
 	int rc;
 
+	pr_err("%s():%d: Enter", __func__, __LINE__);
+
 	if (is_cxl_root(port))
 		host = port->uport;
 	else
 		host = &port->dev;
+
+	pr_err("%s():%d: dev_name(&port->dev) = %s", __func__, __LINE__, dev_name(&port->dev));
 
 	if (!host->driver) {
 		dev_WARN_ONCE(&port->dev, 1, "dport:%s bad devm context\n",
@@ -939,6 +945,7 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	dport->dport = dport_dev;
 	dport->port_id = port_id;
 	dport->component_reg_phys = component_reg_phys;
+	dport->dport_aer_phys = dport_aer_phys;
 	dport->port = port;
 	if (mode == CXL_DPORT_RCH)
 		dport->rch = true;
@@ -985,7 +992,7 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 
 	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
 				     component_reg_phys, CXL_DPORT_VH,
-				     CXL_RESOURCE_NONE);
+				     CXL_RESOURCE_NONE, CXL_RESOURCE_NONE);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add dport to %s: %ld\n",
 			dev_name(&port->dev), PTR_ERR(dport));
@@ -1001,12 +1008,14 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_add_dport, CXL);
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 					 struct device *dport_dev, int port_id,
 					 resource_size_t component_reg_phys,
-					 resource_size_t rcrb)
+					 resource_size_t rcrb,
+					 resource_size_t dport_aer_phys)
 {
 	struct cxl_dport *dport;
 
 	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
-				     component_reg_phys, CXL_DPORT_RCH, rcrb);
+				     component_reg_phys, CXL_DPORT_RCH, rcrb,
+				     dport_aer_phys);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add RCH dport to %s: %ld\n",
 			dev_name(&port->dev), PTR_ERR(dport));

@@ -277,6 +277,28 @@ int cxl_map_device_regs(struct device *dev,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_map_device_regs, CXL);
 
+/* TODO - Should this be 'rch' instead of 'rcd' */
+int cxl_map_rcd_aer_regs(struct device *dev,
+			 struct cxl_regs *regs,
+			 resource_size_t dport_aer_phys)
+{
+	pr_err("%s():%d: -", __func__, __LINE__);
+
+	/* TODO - Change return value */
+	if (dport_aer_phys == CXL_RESOURCE_NONE)
+		return -ENOMEM;
+
+	regs->dport_aer = devm_cxl_iomap_block(dev, dport_aer_phys,
+					       PCI_AER_CAP_SIZE);
+	pr_err("%s():%d: regs->dport_aer = %pa", __func__, __LINE__, regs->dport_aer);
+
+	if (!regs->dport_aer)
+		return -ENOMEM;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_map_rcd_aer_regs, CXL);
+
 static bool cxl_decode_regblock(struct pci_dev *pdev, u32 reg_lo, u32 reg_hi,
 				struct cxl_register_map *map)
 {
@@ -399,3 +421,40 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 	return component_reg_phys;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_rcrb_to_component, CXL);
+
+#define PCI_CAP_ID(header)     (header & 0x000000ff)
+#define PCI_CAP_NEXT(header)   ((header >> 8) & 0xff)
+
+resource_size_t cxl_rcrb_to_dport_aer(struct device *dev,
+				      resource_size_t rcrb)
+{
+	u32 cap_id=PCI_CAP_ID_EXP;
+	resource_size_t offset;
+	void *rcrb_mapped;
+	u32 cap_hdr;
+
+	rcrb_mapped = ioremap(rcrb, SZ_4K);
+	if (!rcrb_mapped) {
+		pr_err("%s():%d: Error mapping rcrb", __func__, __LINE__);
+		return CXL_RESOURCE_NONE;
+	}
+
+	offset = readl(rcrb_mapped + PCI_CAPABILITY_LIST);
+	cap_hdr = readl(rcrb_mapped + offset);
+
+	while (PCI_EXT_CAP_ID(cap_hdr) && (PCI_CAP_ID(cap_hdr) != cap_id)) {
+
+		offset = PCI_CAP_NEXT(cap_hdr);
+		cap_hdr = readl(rcrb_mapped + offset);
+	}
+	iounmap((void *)rcrb_mapped);
+
+	if (PCI_CAP_ID(cap_hdr) != cap_id)
+		return CXL_RESOURCE_NONE;
+
+	pr_debug("Found capability %X @ %llX (%X)\n",
+		 cap_id, rcrb + offset, cap_hdr);
+
+	return rcrb + offset;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_rcrb_to_dport_aer, CXL);

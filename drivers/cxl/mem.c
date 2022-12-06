@@ -82,6 +82,14 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
 
+	if (parent_dport->rch) {
+		if (cxl_map_rcd_aer_regs(&cxlmd->dev, &cxlds->regs,
+					 parent_dport->dport_aer_phys)) {
+			dev_err(&cxlmd->dev, "Failed to map AER registers\n");
+			return -ENOMEM;
+		}
+	}
+
 	rc = cxl_endpoint_autoremove(cxlmd, endpoint);
 	if (rc)
 		return rc;

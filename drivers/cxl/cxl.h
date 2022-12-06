@@ -66,6 +66,8 @@
 #define CXL_DECODER_MIN_GRANULARITY 256
 #define CXL_DECODER_MAX_ENCODED_IG 6
 
+#define PCI_AER_CAP_SIZE 0x48
+
 static inline int cxl_hdm_decoder_count(u32 cap_hdr)
 {
 	int val = FIELD_GET(CXL_HDM_DECODER_COUNT_MASK, cap_hdr);
@@ -189,6 +191,9 @@ struct cxl_regs {
 	struct_group_tagged(cxl_device_regs, device_regs,
 		void __iomem *status, *mbox, *memdev;
 	);
+
+	void __iomem *dport_aer;
+
 };
 
 struct cxl_reg_map {
@@ -250,6 +255,11 @@ enum cxl_rcrb {
 resource_size_t cxl_rcrb_to_component(struct device *dev,
 				      resource_size_t rcrb,
 				      enum cxl_rcrb which);
+resource_size_t cxl_rcrb_to_dport_aer(struct device *dev,
+				      resource_size_t rcrb);
+int cxl_map_rcd_aer_regs(struct device *dev,
+			 struct cxl_regs *regs,
+			 resource_size_t dport_aer_phys);
 
 #define CXL_RESOURCE_NONE ((resource_size_t) -1)
 #define CXL_TARGET_STRLEN 20
@@ -523,6 +533,7 @@ struct cxl_dport {
 	int port_id;
 	resource_size_t component_reg_phys;
 	resource_size_t rcrb;
+	resource_size_t dport_aer_phys;
 	bool rch;
 	struct cxl_port *port;
 };
@@ -594,7 +605,8 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 					 struct device *dport_dev, int port_id,
 					 resource_size_t component_reg_phys,
-					 resource_size_t rcrb);
+					 resource_size_t rcrb,
+					 resource_size_t dport_aer_phys);
 
 struct cxl_decoder *to_cxl_decoder(struct device *dev);
 struct cxl_root_decoder *to_cxl_root_decoder(struct device *dev);
