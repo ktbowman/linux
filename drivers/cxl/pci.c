@@ -557,6 +557,37 @@ static void header_log_copy(struct cxl_dev_state *cxlds, u32 *log)
 	}
 }
 
+void cxl_report_rcd_errors(struct cxl_dev_state *cxlds)
+{
+
+	if (cxlds->regs.dport_aer) {
+		pr_err("RCD Down Port AER: \n");
+		pr_err("  UE Status       (0x4)   : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x4)));
+		pr_err("  UE Mask         (0x8)   : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x8)));
+		pr_err("  UE Severity     (0xC)   : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0xc)));
+		pr_err("  CE Status       (0x10)  : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x10)));
+		pr_err("  CE Mask         (0x14)  : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x14)));
+
+		pr_err("  Root Err Cmd    (0x2c)  : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x2c)));
+		pr_err("  Root Err Status (0x30)  : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x30)));
+		pr_err("  Err Src ID      (0x34)  : %08x\n", *((u32*)(cxlds->regs.dport_aer + 0x34)));
+
+		*((u32*)(cxlds->regs.dport_aer + 0x4)) = *((u32*)(cxlds->regs.dport_aer + 0x4));
+
+	}
+
+	if (cxlds->regs.ras) {
+		pr_err("RAS: \n");
+		pr_err("  UE Status       (0x0)   : %08x\n", *((u32*)(cxlds->regs.ras)));
+		pr_err("  UE Mask         (0x4)   : %08x\n", *((u32*)(cxlds->regs.ras + 0x4)));
+		pr_err("  UE Severity     (0x8)   : %08x\n", *((u32*)(cxlds->regs.ras + 0x8)));
+		pr_err("  CE Status       (0xC)   : %08x\n", *((u32*)(cxlds->regs.ras + 0xC)));
+		pr_err("  CE Mask         (0x10)  : %08x\n", *((u32*)(cxlds->regs.ras + 0x10)));
+		pr_err("  CE Severity     (0x14)  : %08x\n", *((u32*)(cxlds->regs.ras + 0x14)));
+
+		*((u32*)(cxlds->regs.ras)) = *((u32*)(cxlds->regs.ras));
+	}
+}
 
 /*
  * Log the state of the RAS status registers and prepare them to log the
@@ -609,7 +640,9 @@ static pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	 * chance the situation is recoverable dump the status of the RAS
 	 * capability registers and bounce the active state of the memdev.
 	 */
-	ue = cxl_report_and_clear(cxlds);
+	if (cxlds->rcd)
+		cxl_report_rcd_errors(cxlds);
+	//ue = cxl_report_and_clear(cxlds);
 
 	switch (state) {
 	case pci_channel_io_normal:
@@ -664,6 +697,7 @@ static void cxl_correctable_error_log(struct pci_dev *pdev)
        void __iomem *addr;
        u32 status;
 
+#if 0
        if (!cxlds->regs.ras)
 	       return;
 
@@ -675,14 +709,11 @@ static void cxl_correctable_error_log(struct pci_dev *pdev)
 	       writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
 	       trace_cxl_aer_correctable_error(dev_name(dev), status);
        }
+#endif
 
-       /* Check for DP detected error 12.2.1.1 */
-       pr_err("%s():%d: cxlds->regs.dport_aer = %p", __func__, __LINE__, cxlds->regs.dport_aer);
-       pr_err("%s():%d: *((u32*)cxlds->regs.dport_aer) = %X", __func__, __LINE__,
-	      *((u32*)cxlds->regs.dport_aer));
-
+	if (cxlds->rcd)
+		cxl_report_rcd_errors(cxlds);
 }
-
 
 static const struct pci_error_handlers cxl_error_handlers = {
 	.error_detected = cxl_error_detected,
@@ -690,7 +721,6 @@ static const struct pci_error_handlers cxl_error_handlers = {
 	.resume         = cxl_error_resume,
 	.cor_error_log  = cxl_correctable_error_log,
 };
-
 
 static struct pci_driver cxl_pci_driver = {
 	.name			= KBUILD_MODNAME,
