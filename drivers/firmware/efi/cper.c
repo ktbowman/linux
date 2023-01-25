@@ -350,6 +350,7 @@ const char *cper_mem_err_unpack(struct trace_seq *p,
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(cper_mem_err_unpack);
 
 static void cper_print_mem(const char *pfx, const struct cper_sec_mem_err *mem,
 	int len)
