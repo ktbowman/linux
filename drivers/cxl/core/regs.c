@@ -332,10 +332,36 @@ int cxl_find_regblock(struct pci_dev *pdev, enum cxl_regloc_type type,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_find_regblock, CXL);
 
+static void __iomem *cxl_map_reg(struct device *dev, struct cxl_register_map *map,
+				 char *name)
+{
+
+	if (!request_mem_region(map->resource, map->max_size, name))
+		return NULL;
+
+	map->base = ioremap(map->resource, map->max_size);
+	if (!map->base) {
+		release_mem_region(map->resource, map->max_size);
+		return NULL;
+	}
+
+	return map->base;
+}
+
+static void cxl_unmap_reg(struct device *dev, struct cxl_register_map *map)
+{
+	iounmap(map->base);
+	release_mem_region(map->resource, map->max_size);
+}
+
 resource_size_t cxl_rcrb_to_component(struct device *dev,
 				      resource_size_t rcrb,
 				      enum cxl_rcrb which)
 {
+	struct cxl_register_map map = {
+		.resource = rcrb,
+		.max_size = SZ_4K
+	};
 	resource_size_t component_reg_phys;
 	void __iomem *addr;
 	u32 bar0, bar1;
@@ -343,7 +369,10 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 	u32 id;
 
 	if (which == CXL_RCRB_UPSTREAM)
-		rcrb += SZ_4K;
+		map.resource += SZ_4K;
+
+	if (!cxl_map_reg(dev, &map, "CXL RCRB"))
+		return CXL_RESOURCE_NONE;
 
 	/*
 	 * RCRB's BAR[0..1] point to component block containing CXL
@@ -351,21 +380,12 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 	 * the PCI Base spec here, esp. 64 bit extraction and memory
 	 * ranges alignment (6.0, 7.5.1.2.1).
 	 */
-	if (!request_mem_region(rcrb, SZ_4K, "CXL RCRB"))
-		return CXL_RESOURCE_NONE;
-	addr = ioremap(rcrb, SZ_4K);
-	if (!addr) {
-		dev_err(dev, "Failed to map region %pr\n", addr);
-		release_mem_region(rcrb, SZ_4K);
-		return CXL_RESOURCE_NONE;
-	}
-
+	addr = map.base;
 	id = readl(addr + PCI_VENDOR_ID);
 	cmd = readw(addr + PCI_COMMAND);
 	bar0 = readl(addr + PCI_BASE_ADDRESS_0);
 	bar1 = readl(addr + PCI_BASE_ADDRESS_1);
-	iounmap(addr);
-	release_mem_region(rcrb, SZ_4K);
+	cxl_unmap_reg(dev, &map);
 
 	/*
 	 * Sanity check, see CXL 3.0 Figure 9-8 CXL Device that Does Not
@@ -396,3 +416,52 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 	return component_reg_phys;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_rcrb_to_component, CXL);
+
+u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb)
+{
+	struct cxl_register_map map = {
+		.resource = rcrb,
+		.max_size = SZ_4K,
+	};
+	u32 cap_hdr;
+	u16 offset = 0;
+
+	if (!cxl_map_reg(dev, &map, "CXL RCRB"))
+		return 0;
+
+	cap_hdr = readl(map.base + offset);
+	while (PCI_EXT_CAP_ID(cap_hdr) != PCI_EXT_CAP_ID_ERR) {
+
+		offset = PCI_EXT_CAP_NEXT(cap_hdr);
+		if (!offset) {
+			cxl_unmap_reg(dev, &map);
+			return 0;
+		}
+		cap_hdr = readl(map.base + offset);
+	}
+
+	dev_dbg(dev, "found AER extended capability (0x%x)\n", offset);
+	cxl_unmap_reg(dev, &map);
+
+	return offset;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_rcrb_to_aer, CXL);
+
+u16 cxl_component_to_ras(struct device *dev, resource_size_t component_reg_phys)
+{
+	struct cxl_register_map map = {
+		.resource = component_reg_phys,
+		.max_size = CXL_COMPONENT_REG_BLOCK_SIZE,
+	};
+
+	if (!cxl_map_reg(dev, &map, "component"))
+		return 0;
+
+	cxl_probe_component_regs(dev, map.base, &map.component_map);
+	cxl_unmap_reg(dev, &map);
+	if (!map.component_map.ras.valid)
+		return 0;
+
+	return map.component_map.ras.offset;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_component_to_ras, CXL);

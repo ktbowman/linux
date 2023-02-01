@@ -270,6 +270,9 @@ enum cxl_rcrb {
 resource_size_t cxl_rcrb_to_component(struct device *dev,
 				      resource_size_t rcrb,
 				      enum cxl_rcrb which);
+u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb);
+u16 cxl_component_to_ras(struct device *dev,
+			 resource_size_t component_reg_phys);
 
 #define CXL_RESOURCE_NONE ((resource_size_t) -1)
 #define CXL_TARGET_STRLEN 20
@@ -601,6 +604,8 @@ struct cxl_dport {
 	int port_id;
 	resource_size_t component_reg_phys;
 	resource_size_t rcrb;
+	u16 aer_cap;
+	u16 ras_cap;
 	bool rch;
 	struct cxl_port *port;
 };

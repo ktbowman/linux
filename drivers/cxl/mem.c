@@ -45,13 +45,38 @@ static int cxl_mem_dpa_show(struct seq_file *file, void *data)
 	return 0;
 }
 
+static void cxl_rcrb_setup(struct cxl_dev_state *cxlds,
+			   struct cxl_dport *parent_dport)
+{
+	struct cxl_memdev *cxlmd  = cxlds->cxlmd;
+
+	if (!parent_dport->rch)
+		return;
+
+	/*
+	 * The component registers for an RCD might come from the
+	 * host-bridge RCRB if they are not already mapped via the
+	 * typical register locator mechanism.
+	 */
+	if (cxlds->component_reg_phys == CXL_RESOURCE_NONE)
+		cxlds->component_reg_phys = cxl_rcrb_to_component(
+			&cxlmd->dev, parent_dport->rcrb, CXL_RCRB_UPSTREAM);
+
+	/* RCH AER is required. CXL3.0 Spec Table 8-12 */
+	parent_dport->aer_cap = cxl_rcrb_to_aer(parent_dport->dport,
+						parent_dport->rcrb);
+
+	/* RCH RAS is required. CXL3.0 Spec Table 8-22 */
+	parent_dport->ras_cap = cxl_component_to_ras(parent_dport->dport,
+						     parent_dport->component_reg_phys);
+}
+
 static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 				 struct cxl_dport *parent_dport)
 {
 	struct cxl_port *parent_port = parent_dport->port;
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_port *endpoint, *iter, *down;
-	resource_size_t component_reg_phys;
 	int rc;
 
 	/*
@@ -66,17 +91,9 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 		ep->next = down;
 	}
 
-	/*
-	 * The component registers for an RCD might come from the
-	 * host-bridge RCRB if they are not already mapped via the
-	 * typical register locator mechanism.
-	 */
-	if (parent_dport->rch && cxlds->component_reg_phys == CXL_RESOURCE_NONE)
-		component_reg_phys = cxl_rcrb_to_component(
-			&cxlmd->dev, parent_dport->rcrb, CXL_RCRB_UPSTREAM);
-	else
-		component_reg_phys = cxlds->component_reg_phys;
-	endpoint = devm_cxl_add_port(host, &cxlmd->dev, component_reg_phys,
+	cxl_rcrb_setup(cxlds, parent_dport);
+
+	endpoint = devm_cxl_add_port(host, &cxlmd->dev, cxlds->component_reg_phys,
 				     parent_dport);
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
