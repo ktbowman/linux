@@ -85,14 +85,6 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	struct cxl_port *root;
 	int rc;
 
-	rc = cxl_dvsec_rr_decode(cxlds->dev, cxlds->cxl_dvsec, &info);
-	if (rc < 0)
-		return rc;
-
-	cxlhdm = devm_cxl_setup_hdm(port, &info);
-	if (IS_ERR(cxlhdm))
-		return PTR_ERR(cxlhdm);
-
 	/* Cache the data early to ensure is_visible() works */
 	read_cdat_data(port);
 
@@ -100,6 +92,23 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	rc = devm_add_action_or_reset(&port->dev, schedule_detach, cxlmd);
 	if (rc)
 		return rc;
+
+	/*
+	 * The HDM decoder capability may not exist. Do not
+	 * use decoders in RCD mode, instead rely on firmware
+	 * to setup the range or decoder registers and to
+	 * enable memory.
+	 */
+	if (cxlds->rcd)
+		return cxl_await_media_ready(cxlds);
+
+	rc = cxl_dvsec_rr_decode(cxlds->dev, cxlds->cxl_dvsec, &info);
+	if (rc < 0)
+		return rc;
+
+	cxlhdm = devm_cxl_setup_hdm(port, &info);
+	if (IS_ERR(cxlhdm))
+		return PTR_ERR(cxlhdm);
 
 	rc = cxl_hdm_decode_init(cxlds, cxlhdm, &info);
 	if (rc)
