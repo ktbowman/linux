@@ -66,6 +66,8 @@
 #define CXL_DECODER_MIN_GRANULARITY 256
 #define CXL_DECODER_MAX_ENCODED_IG 6
 
+#define PCI_AER_CAPABILITY_LENGTH 56
+
 static inline int cxl_hdm_decoder_count(u32 cap_hdr)
 {
 	int val = FIELD_GET(CXL_HDM_DECODER_COUNT_MASK, cap_hdr);
@@ -209,6 +211,15 @@ struct cxl_regs {
 	struct_group_tagged(cxl_device_regs, device_regs,
 		void __iomem *status, *mbox, *memdev;
 	);
+
+	/*
+	 * Pointer to RCH cxl_dport AER. (only for RCH/RCD mode)
+	 * @dport_aer: CXL 2.0 12.2.11 RCH Downstream Port-detected Errors
+	 */
+	struct_group_tagged(cxl_rch_regs, rch_regs,
+		void __iomem *aer;
+		void __iomem *dport_ras;
+	);
 };
 
 struct cxl_reg_map {
@@ -249,6 +260,8 @@ struct cxl_register_map {
 	};
 };
 
+void __iomem *devm_cxl_iomap_block(struct device *dev, resource_size_t addr,
+				   resource_size_t length);
 void cxl_probe_component_regs(struct device *dev, void __iomem *base,
 			      struct cxl_component_reg_map *map);
 void cxl_probe_device_regs(struct device *dev, void __iomem *base,
