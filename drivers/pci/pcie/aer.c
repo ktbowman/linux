@@ -943,6 +943,49 @@ static bool find_source_device(struct pci_dev *parent,
 	return true;
 }
 
+#if IS_ENABLED(CONFIG_CXL_PCI)
+
+static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info);
+
+static int handle_cxl_error_iter(struct pci_dev *dev, void *data)
+{
+	struct aer_err_info *e_info = (struct aer_err_info *)data;
+
+	if (dev->devfn != PCI_DEVFN(0, 0))
+		return 0;
+
+	/* Right now there is only a CXL.mem driver */
+	if ((dev->class >> 8) != PCI_CLASS_MEMORY_CXL)
+		return 0;
+
+	/* pci_dev_put() in handle_error_source() */
+	dev = pci_dev_get(dev);
+	if (dev)
+		handle_error_source(dev, e_info);
+
+	return 0;
+}
+
+static bool is_internal_error(struct aer_err_info *info)
+{
+	if (info->severity == AER_CORRECTABLE)
+		return info->status & PCI_ERR_COR_INTERNAL;
+
+	return info->status & PCI_ERR_UNC_INTN;
+}
+
+static void handle_cxl_error(struct pci_dev *dev, struct aer_err_info *info)
+{
+	if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC &&
+	    is_internal_error(info))
+		pcie_walk_rcec(dev, handle_cxl_error_iter, info);
+}
+
+#else
+static inline void handle_cxl_error(struct pci_dev *dev,
+				    struct aer_err_info *info) { }
+#endif
+
 /**
  * handle_error_source - handle logging error into an event log
  * @dev: pointer to pci_dev data structure of error source device
@@ -953,6 +996,8 @@ static bool find_source_device(struct pci_dev *parent,
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
 	int aer = dev->aer_cap;
+
+	handle_cxl_error(dev, info);
 
 	if (info->severity == AER_CORRECTABLE) {
 		/*
