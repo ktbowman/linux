@@ -49,6 +49,14 @@ config PCIEAER_INJECT
 	  gotten from:
 	     https://git.kernel.org/cgit/linux/kernel/git/gong.chen/aer-inject.git/
 
+config PCIEAER_CXL
+	bool "PCI Express CXL RAS support"
+	default y
+	depends on PCIEAER && CXL_PCI
+	help
+	  This enables CXL error handling for Restricted CXL Hosts
+	  (RCHs).
+
 #
 # PCI Express ECRC
 #
