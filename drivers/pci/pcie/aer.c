@@ -956,6 +956,16 @@ static bool is_cxl_mem_dev(struct pci_dev *dev)
 	return true;
 }
 
+static bool cxl_error_is_native(struct pci_dev *dev)
+{
+	struct pci_host_bridge *host = pci_find_host_bridge(dev->bus);
+
+	if (pcie_ports_native)
+		return true;
+
+	return host->native_aer && host->native_cxl_error;
+}
+
 static bool is_internal_error(struct aer_err_info *info)
 {
 	if (info->severity == AER_CORRECTABLE)
@@ -988,7 +998,69 @@ static void cxl_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 		pcie_walk_rcec(dev, cxl_handle_error_iter, info);
 }
 
+static int handles_cxl_error_iter(struct pci_dev *dev, void *data)
+{
+	int *handles_cxl = data;
+
+	*handles_cxl = is_cxl_mem_dev(dev) && cxl_error_is_native(dev);
+
+	return *handles_cxl;
+}
+
+static bool handles_cxl_errors(struct pci_dev *rcec)
+{
+	int handles_cxl = 0;
+
+	if (!rcec->aer_cap)
+		return false;
+
+	if (pci_pcie_type(rcec) == PCI_EXP_TYPE_RC_EC)
+		pcie_walk_rcec(rcec, handles_cxl_error_iter, &handles_cxl);
+
+	return !!handles_cxl;
+}
+
+static int __cxl_unmask_internal_errors(struct pci_dev *rcec)
+{
+	int aer, rc;
+	u32 mask;
+
+	/*
+	 * Internal errors are masked by default, unmask RCEC's here
+	 * PCI6.0 7.8.4.3 Uncorrectable Error Mask Register (Offset 08h)
+	 * PCI6.0 7.8.4.6 Correctable Error Mask Register (Offset 14h)
+	 */
+	aer = rcec->aer_cap;
+	rc = pci_read_config_dword(rcec, aer + PCI_ERR_UNCOR_MASK, &mask);
+	if (rc)
+		return rc;
+	mask &= ~PCI_ERR_UNC_INTN;
+	rc = pci_write_config_dword(rcec, aer + PCI_ERR_UNCOR_MASK, mask);
+	if (rc)
+		return rc;
+
+	rc = pci_read_config_dword(rcec, aer + PCI_ERR_COR_MASK, &mask);
+	if (rc)
+		return rc;
+	mask &= ~PCI_ERR_COR_INTERNAL;
+	rc = pci_write_config_dword(rcec, aer + PCI_ERR_COR_MASK, mask);
+
+	return rc;
+}
+
+static void cxl_unmask_internal_errors(struct pci_dev *rcec)
+{
+	if (!handles_cxl_errors(rcec))
+		return;
+
+	if (__cxl_unmask_internal_errors(rcec))
+		dev_err(&rcec->dev, "cxl: Failed to unmask internal errors");
+	else
+		dev_dbg(&rcec->dev, "cxl: Internal errors unmasked");
+}
+
 #else
+static inline void cxl_unmask_internal_errors(struct pci_dev *dev) { }
 static inline void cxl_handle_error(struct pci_dev *dev,
 				    struct aer_err_info *info) { }
 #endif
@@ -1433,6 +1505,7 @@ static int aer_probe(struct pcie_device *dev)
 		return status;
 	}
 
+	cxl_unmask_internal_errors(port);
 	aer_enable_rootport(rpc);
 	pci_info(port, "enabled with IRQ %d\n", dev->irq);
 	return 0;
