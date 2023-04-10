@@ -4,7 +4,6 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#include <linux/aer.h>
 
 #include "cxlmem.h"
 #include "cxlpci.h"
@@ -46,117 +45,7 @@ static int cxl_mem_dpa_show(struct seq_file *file, void *data)
 	return 0;
 }
 
-#if defined(CONFIG_PCIEPORTBUS) && defined(CONFIG_PCIEAER)
-static int rcec_enable_aer_ints(struct pci_dev *pdev)
-{
-	struct pci_dev *rcec = pdev->rcec;
-	int aer, rc;
-	u32 mask;
-
-	if (!rcec)
-		return -ENODEV;
-
-	/*
-	 * Internal errors are masked by default, unmask RCEC's here
-	 * PCI6.0 7.8.4.3 Uncorrectable Error Mask Register (Offset 08h)
-	 * PCI6.0 7.8.4.6 Correctable Error Mask Register (Offset 14h)
-	 */
-	aer = rcec->aer_cap;
-	rc = pci_read_config_dword(rcec, aer + PCI_ERR_UNCOR_MASK, &mask);
-	if (rc)
-		return rc;
-	mask &= ~PCI_ERR_UNC_INTN;
-	rc = pci_write_config_dword(rcec, aer + PCI_ERR_UNCOR_MASK, mask);
-	if (rc)
-		return rc;
-
-	rc = pci_read_config_dword(rcec, aer + PCI_ERR_COR_MASK, &mask);
-	if (rc)
-		return rc;
-	mask &= ~PCI_ERR_COR_INTERNAL;
-	rc = pci_write_config_dword(rcec, aer + PCI_ERR_COR_MASK, mask);
-
-	return rc;
-}
-#else
-static int rcec_enable_aer_ints(struct pci_dev *pdev)
-{
-	return -ENODEV;
-}
-#endif
-
-static void rch_disable_root_ints(void __iomem *aer_base)
-{
-	u32 aer_cmd_mask, aer_cmd;
-
-	/*
-	 * Disable RCH root port command interrupts.
-	 * CXL3.0 12.2.1.1 - RCH Downstream Port-detected Errors
-	 */
-	aer_cmd_mask = (PCI_ERR_ROOT_CMD_COR_EN |
-			PCI_ERR_ROOT_CMD_NONFATAL_EN |
-			PCI_ERR_ROOT_CMD_FATAL_EN);
-	aer_cmd = readl(aer_base + PCI_ERR_ROOT_COMMAND);
-	aer_cmd &= ~aer_cmd_mask;
-	writel(aer_cmd, aer_base + PCI_ERR_ROOT_COMMAND);
-}
-
-static int cxl_rch_map_ras(struct cxl_dev_state *cxlds,
-			   struct cxl_dport *parent_dport)
-{
-	struct device *dev = parent_dport->dport;
-	resource_size_t aer_phys, ras_phys;
-	void __iomem *aer, *dport_ras;
-
-	if (!parent_dport->rch)
-		return 0;
-
-	if (!parent_dport->aer_cap || !parent_dport->ras_cap ||
-	    parent_dport->component_reg_phys == CXL_RESOURCE_NONE)
-		return -ENODEV;
-
-	aer_phys = parent_dport->aer_cap + parent_dport->rcrb;
-	aer = devm_cxl_iomap_block(dev, aer_phys,
-				   PCI_AER_CAPABILITY_LENGTH);
-
-	if (!aer)
-		return -ENOMEM;
-
-	ras_phys = parent_dport->ras_cap + parent_dport->component_reg_phys;
-	dport_ras = devm_cxl_iomap_block(dev, ras_phys,
-					 CXL_RAS_CAPABILITY_LENGTH);
-
-	if (!dport_ras)
-		return -ENOMEM;
-
-	cxlds->regs.aer = aer;
-	cxlds->regs.dport_ras = dport_ras;
-
-	return 0;
-}
-
-static int cxl_setup_ras(struct cxl_dev_state *cxlds,
-			 struct cxl_dport *parent_dport)
-{
-	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
-	int rc;
-
-	rc = cxl_rch_map_ras(cxlds, parent_dport);
-	if (rc)
-		return rc;
-
-	if (cxlds->rcd) {
-		rch_disable_root_ints(cxlds->regs.aer);
-
-		rc = rcec_enable_aer_ints(pdev);
-		if (rc)
-			return rc;
-	}
-
-	return rc;
-}
-
-static void cxl_setup_rcrb(struct cxl_dev_state *cxlds,
+static void cxl_rcrb_setup(struct cxl_dev_state *cxlds,
 			   struct cxl_dport *parent_dport)
 {
 	struct cxl_memdev *cxlmd  = cxlds->cxlmd;
@@ -202,14 +91,7 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 		ep->next = down;
 	}
 
-	cxl_setup_rcrb(cxlds, parent_dport);
-
-	rc = cxl_setup_ras(cxlds, parent_dport);
-	/* Continue with RAS setup errors */
-	if (rc)
-		dev_warn(&cxlmd->dev, "CXL RAS setup failed: %d\n", rc);
-	else
-		dev_info(&cxlmd->dev, "CXL error handling enabled\n");
+	cxl_rcrb_setup(cxlds, parent_dport);
 
 	endpoint = devm_cxl_add_port(host, &cxlmd->dev, cxlds->component_reg_phys,
 				     parent_dport);
