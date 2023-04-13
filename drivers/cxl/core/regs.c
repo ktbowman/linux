@@ -355,6 +355,32 @@ static void cxl_unmap_reg(void __iomem *base, resource_size_t addr,
 	release_mem_region(addr, length);
 }
 
+u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb)
+{
+	void __iomem *addr;
+	u16 offset = 0;
+	u32 cap_hdr;
+
+	addr = cxl_map_reg(dev, rcrb, SZ_4K);
+	if (!addr)
+		return 0;
+
+	cap_hdr = readl(addr + offset);
+	while (PCI_EXT_CAP_ID(cap_hdr) != PCI_EXT_CAP_ID_ERR) {
+
+		offset = PCI_EXT_CAP_NEXT(cap_hdr);
+		if (!offset)
+			break;
+		cap_hdr = readl(addr + offset);
+	}
+
+	if (offset)
+		dev_dbg(dev, "found AER extended capability (0x%x)\n", offset);
+	cxl_unmap_reg(addr, rcrb, SZ_4K);
+
+	return offset;
+}
+
 resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 			       struct cxl_rcrb_info *ri, enum cxl_rcrb which)
 
@@ -386,6 +412,8 @@ resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 	bar1 = readl(addr + PCI_BASE_ADDRESS_1);
 	cxl_unmap_reg(addr, rcrb, SZ_4K);
 
+	ri->aer_cap = cxl_rcrb_to_aer(dev, ri->base);
+
 	/*
 	 * Sanity check, see CXL 3.0 Figure 9-8 CXL Device that Does Not
 	 * Remap Upstream Port and Component Registers
@@ -415,3 +443,21 @@ resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 	return component_reg_phys;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_probe_rcrb, CXL);
+
+u16 cxl_component_to_ras(struct device *dev, resource_size_t component_reg_phys)
+{
+	struct cxl_component_reg_map map;
+	void __iomem *base;
+
+	base = cxl_map_reg(dev, component_reg_phys, CXL_COMPONENT_REG_BLOCK_SIZE);
+	if (!base)
+		return 0;
+
+	cxl_probe_component_regs(dev, base, &map);
+	cxl_unmap_reg(base, component_reg_phys, CXL_COMPONENT_REG_BLOCK_SIZE);
+	if (!map.ras.valid)
+		return 0;
+
+	return map.ras.offset;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_component_to_ras, CXL);

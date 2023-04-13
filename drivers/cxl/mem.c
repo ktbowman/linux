@@ -50,11 +50,13 @@ static void cxl_setup_rcrb(struct cxl_dev_state *cxlds,
 {
 	struct cxl_memdev *cxlmd = cxlds->cxlmd;
 	struct cxl_rch_dport *rdport;
+	struct cxl_rcrb_info *ri;
 
 	if (!parent_dport->rch)
 		return;
 
 	rdport = container_of(parent_dport, typeof(*rdport), dport);
+	ri = &rdport->rcrb;
 
 	/*
 	 * The component registers for an RCD might come from the
@@ -65,6 +67,9 @@ static void cxl_setup_rcrb(struct cxl_dev_state *cxlds,
 		cxlds->component_reg_phys =
 			cxl_probe_rcrb(&cxlmd->dev, rdport->rcrb.base,
 				       &rdport->rcrb, CXL_RCRB_UPSTREAM);
+
+	ri->ras_cap = cxl_component_to_ras(parent_dport->dport,
+					   parent_dport->component_reg_phys);
 }
 
 static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
