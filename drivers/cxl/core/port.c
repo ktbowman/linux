@@ -944,6 +944,8 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 			return ERR_PTR(-ENOMEM);
 
 		rdport->rcrb.base = ri->base;
+		rdport->rcrb.aer_cap = ri->aer_cap;
+		rdport->rcrb.ras_cap = ri->ras_cap;
 		dport = &rdport->dport;
 		dport->rch = true;
 	} else {
