@@ -332,6 +332,29 @@ int cxl_find_regblock(struct pci_dev *pdev, enum cxl_regloc_type type,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_find_regblock, CXL);
 
+static void __iomem *cxl_map_reg(struct device *dev, resource_size_t addr,
+				 resource_size_t length)
+
+{
+	struct resource *res;
+
+	if (WARN_ON_ONCE(addr == CXL_RESOURCE_NONE))
+		return NULL;
+
+	res = request_mem_region(addr, length, dev_name(dev));
+	if (!res)
+		return NULL;
+
+	return ioremap(addr, length);
+}
+
+static void cxl_unmap_reg(void __iomem *base, resource_size_t addr,
+			  resource_size_t length)
+{
+	iounmap(base);
+	release_mem_region(addr, length);
+}
+
 resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 			       struct cxl_rcrb_info *ri, enum cxl_rcrb which)
 {
@@ -346,28 +369,21 @@ resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 	else
 		ri->base = rcrb;
 
+	addr = cxl_map_reg(dev, rcrb, SZ_4K);
+	if (!addr)
+		return CXL_RESOURCE_NONE;
+
 	/*
 	 * RCRB's BAR[0..1] point to component block containing CXL
 	 * subsystem component registers. MEMBAR extraction follows
 	 * the PCI Base spec here, esp. 64 bit extraction and memory
 	 * ranges alignment (6.0, 7.5.1.2.1).
 	 */
-	if (!request_mem_region(rcrb, SZ_4K, "CXL RCRB"))
-		return CXL_RESOURCE_NONE;
-	addr = ioremap(rcrb, SZ_4K);
-	if (!addr) {
-		dev_err(dev, "Failed to map region %pr\n", addr);
-		release_mem_region(rcrb, SZ_4K);
-		return CXL_RESOURCE_NONE;
-	}
-
 	id = readl(addr + PCI_VENDOR_ID);
 	cmd = readw(addr + PCI_COMMAND);
 	bar0 = readl(addr + PCI_BASE_ADDRESS_0);
 	bar1 = readl(addr + PCI_BASE_ADDRESS_1);
-
-	iounmap(addr);
-	release_mem_region(rcrb, SZ_4K);
+	cxl_unmap_reg(addr, rcrb, SZ_4K);
 
 	/*
 	 * Sanity check, see CXL 3.0 Figure 9-8 CXL Device that Does Not
