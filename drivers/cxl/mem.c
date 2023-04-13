@@ -45,13 +45,34 @@ static int cxl_mem_dpa_show(struct seq_file *file, void *data)
 	return 0;
 }
 
+static void cxl_setup_rcrb(struct cxl_dev_state *cxlds,
+			   struct cxl_dport *parent_dport)
+{
+	struct cxl_memdev *cxlmd = cxlds->cxlmd;
+	struct cxl_rch_dport *rdport;
+
+	if (!parent_dport->rch)
+		return;
+
+	rdport = container_of(parent_dport, typeof(*rdport), dport);
+
+	/*
+	 * The component registers for an RCD might come from the
+	 * host-bridge RCRB if they are not already mapped via the
+	 * typical register locator mechanism.
+	 */
+	if (cxlds->component_reg_phys == CXL_RESOURCE_NONE)
+		cxlds->component_reg_phys =
+			cxl_probe_rcrb(&cxlmd->dev, rdport->rcrb.base,
+				       &rdport->rcrb, CXL_RCRB_UPSTREAM);
+}
+
 static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 				 struct cxl_dport *parent_dport)
 {
 	struct cxl_port *parent_port = parent_dport->port;
 	struct cxl_dev_state *cxlds = cxlmd->cxlds;
 	struct cxl_port *endpoint, *iter, *down;
-	resource_size_t component_reg_phys;
 	int rc;
 
 	/*
@@ -66,22 +87,8 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 		ep->next = down;
 	}
 
-	/*
-	 * The component registers for an RCD might come from the
-	 * host-bridge RCRB if they are not already mapped via the
-	 * typical register locator mechanism.
-	 */
-	if (parent_dport->rch &&
-	    cxlds->component_reg_phys == CXL_RESOURCE_NONE) {
-		struct cxl_rch_dport *rdport =
-			container_of(parent_dport, typeof(*rdport), dport);
-
-		component_reg_phys =
-			cxl_probe_rcrb(&cxlmd->dev, rdport->rcrb.base,
-				       &rdport->rcrb, CXL_RCRB_UPSTREAM);
-	} else
-		component_reg_phys = cxlds->component_reg_phys;
-	endpoint = devm_cxl_add_port(host, &cxlmd->dev, component_reg_phys,
+	cxl_setup_rcrb(cxlds, parent_dport);
+	endpoint = devm_cxl_add_port(host, &cxlmd->dev, cxlds->component_reg_phys,
 				     parent_dport);
 	if (IS_ERR(endpoint))
 		return PTR_ERR(endpoint);
