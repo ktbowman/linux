@@ -71,10 +71,15 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 	 * host-bridge RCRB if they are not already mapped via the
 	 * typical register locator mechanism.
 	 */
-	if (parent_dport->rch && cxlds->component_reg_phys == CXL_RESOURCE_NONE)
-		component_reg_phys = cxl_rcrb_to_component(
-			&cxlmd->dev, parent_dport->rcrb, CXL_RCRB_UPSTREAM);
-	else
+	if (parent_dport->rch &&
+	    cxlds->component_reg_phys == CXL_RESOURCE_NONE) {
+		struct cxl_rch_dport *rdport =
+			container_of(parent_dport, typeof(*rdport), dport);
+
+		component_reg_phys =
+			cxl_probe_rcrb(&cxlmd->dev, rdport->rcrb.base,
+				       &rdport->rcrb, CXL_RCRB_UPSTREAM);
+	} else
 		component_reg_phys = cxlds->component_reg_phys;
 	endpoint = devm_cxl_add_port(host, &cxlmd->dev, component_reg_phys,
 				     parent_dport);
