@@ -4,6 +4,7 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/pci.h>
+#include <linux/aer.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
 
@@ -461,3 +462,40 @@ u16 cxl_component_to_ras(struct device *dev, resource_size_t component_reg_phys)
 	return map.ras.offset;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_component_to_ras, CXL);
+
+int cxl_rch_map_ras(struct cxl_dev_state *cxlds,
+		    struct cxl_dport *parent_dport)
+{
+	struct device *dev = parent_dport->dport;
+	resource_size_t aer_phys, ras_phys;
+	struct cxl_rch_dport *rdport;
+	void __iomem *aer, *dport_ras;
+	struct cxl_rcrb_info *ri;
+
+	rdport = container_of(parent_dport, typeof(*rdport), dport);
+	ri = &rdport->rcrb;
+
+	if (!ri->aer_cap || !ri->ras_cap ||
+	    parent_dport->component_reg_phys == CXL_RESOURCE_NONE)
+		return -ENODEV;
+
+	aer_phys = ri->aer_cap + ri->base;
+	aer = devm_cxl_iomap_block(dev, aer_phys,
+				   sizeof(struct aer_capability_regs));
+
+	if (!aer)
+		return -ENOMEM;
+
+	ras_phys = ri->ras_cap + parent_dport->component_reg_phys;
+	dport_ras = devm_cxl_iomap_block(dev, ras_phys,
+					 CXL_RAS_CAPABILITY_LENGTH);
+
+	if (!dport_ras)
+		return -ENOMEM;
+
+	cxlds->regs.aer = aer;
+	cxlds->regs.dport_ras = dport_ras;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_rch_map_ras, CXL);
