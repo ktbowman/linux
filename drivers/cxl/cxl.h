@@ -209,6 +209,16 @@ struct cxl_regs {
 	struct_group_tagged(cxl_device_regs, device_regs,
 		void __iomem *status, *mbox, *memdev;
 	);
+
+	/*
+	 * RCH downstream port specific RAS register
+	 * @aer: CXL 3.0 8.2.1.1 RCH Downstream Port RCRB
+	 * @dport_ras CXL 3.0 8.2.4.16 CXL RAS Capability Structure
+	 */
+	struct_group_tagged(cxl_rch_regs, rch_regs,
+		void __iomem *dport_aer;
+		void __iomem *dport_ras;
+	);
 };
 
 struct cxl_reg_map {
