@@ -45,6 +45,43 @@ static int cxl_mem_dpa_show(struct seq_file *file, void *data)
 	return 0;
 }
 
+static void rch_disable_root_ints(void __iomem *aer_base)
+{
+	u32 aer_cmd_mask, aer_cmd;
+
+	/*
+	 * Disable RCH root port command interrupts.
+	 * CXL3.0 12.2.1.1 - RCH Downstream Port-detected Errors
+	 *
+	 * This sequnce may not be necessary. CXL spec states disabling
+	 * the root cmd register's interrupts is required. But, PCI spec
+	 * shows these are disabled by default on reset.
+	 */
+	aer_cmd_mask = (PCI_ERR_ROOT_CMD_COR_EN |
+			PCI_ERR_ROOT_CMD_NONFATAL_EN |
+			PCI_ERR_ROOT_CMD_FATAL_EN);
+	aer_cmd = readl(aer_base + PCI_ERR_ROOT_COMMAND);
+	aer_cmd &= ~aer_cmd_mask;
+	writel(aer_cmd, aer_base + PCI_ERR_ROOT_COMMAND);
+}
+
+static int rch_setup_ras(struct cxl_dev_state *cxlds,
+			 struct cxl_dport *parent_dport)
+{
+	int rc;
+
+	if (!parent_dport->rch)
+		return 0;
+
+	rc = cxl_rch_map_ras(cxlds, parent_dport);
+	if (rc)
+		return rc;
+
+	rch_disable_root_ints(cxlds->regs.dport_aer);
+
+	return 0;
+}
+
 static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 				 struct cxl_dport *parent_dport)
 {
@@ -76,6 +113,13 @@ static int devm_cxl_add_endpoint(struct device *host, struct cxl_memdev *cxlmd,
 			cxl_probe_rcrb(&cxlmd->dev, parent_dport->rcrb.base,
 				       NULL, CXL_RCRB_UPSTREAM);
 	}
+
+	rc = rch_setup_ras(cxlds, parent_dport);
+	/* Continue with RAS setup errors */
+	if (rc)
+		dev_warn(&cxlmd->dev, "CXL RAS setup failed: %d\n", rc);
+	else
+		dev_dbg(&cxlmd->dev, "CXL error handling enabled\n");
 
 	endpoint = devm_cxl_add_port(host, &cxlmd->dev,
 				     cxlds->component_reg_phys,

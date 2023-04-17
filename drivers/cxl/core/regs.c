@@ -4,6 +4,7 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/pci.h>
+#include <linux/aer.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
 
@@ -459,3 +460,34 @@ resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 	return component_reg_phys;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_probe_rcrb, CXL);
+
+int cxl_rch_map_ras(struct cxl_dev_state *cxlds,
+		    struct cxl_dport *parent_dport)
+{
+	struct device *dev = parent_dport->dport;
+	void __iomem *dport_aer, *dport_ras;
+	resource_size_t aer_phys, ras_phys;
+	struct cxl_rcrb_info *ri = &parent_dport->rcrb;
+
+	if (!ri->aer_cap || !ri->ras_cap ||
+	    parent_dport->component_reg_phys == CXL_RESOURCE_NONE)
+		return -ENODEV;
+
+	aer_phys = ri->aer_cap + ri->base;
+	dport_aer = devm_cxl_iomap_block(dev, aer_phys,
+					 sizeof(struct aer_capability_regs));
+	if (!dport_aer)
+		return -ENOMEM;
+
+	ras_phys = ri->ras_cap + parent_dport->component_reg_phys;
+	dport_ras = devm_cxl_iomap_block(dev, ras_phys,
+					 CXL_RAS_CAPABILITY_LENGTH);
+	if (!dport_ras)
+		return -ENOMEM;
+
+	cxlds->regs.dport_aer = dport_aer;
+	cxlds->regs.dport_ras = dport_ras;
+
+	return 0;
+}
+EXPORT_SYMBOL_NS_GPL(cxl_rch_map_ras, CXL);
