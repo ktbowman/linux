@@ -332,9 +332,8 @@ int cxl_find_regblock(struct pci_dev *pdev, enum cxl_regloc_type type,
 }
 EXPORT_SYMBOL_NS_GPL(cxl_find_regblock, CXL);
 
-resource_size_t cxl_rcrb_to_component(struct device *dev,
-				      resource_size_t rcrb,
-				      enum cxl_rcrb which)
+resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
+			       struct cxl_rcrb_info *ri, enum cxl_rcrb which)
 {
 	resource_size_t component_reg_phys;
 	void __iomem *addr;
@@ -344,6 +343,8 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 
 	if (which == CXL_RCRB_UPSTREAM)
 		rcrb += SZ_4K;
+	else if (ri)
+		ri->base = rcrb;
 
 	/*
 	 * RCRB's BAR[0..1] point to component block containing CXL
@@ -364,6 +365,7 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 	cmd = readw(addr + PCI_COMMAND);
 	bar0 = readl(addr + PCI_BASE_ADDRESS_0);
 	bar1 = readl(addr + PCI_BASE_ADDRESS_1);
+
 	iounmap(addr);
 	release_mem_region(rcrb, SZ_4K);
 
@@ -395,4 +397,4 @@ resource_size_t cxl_rcrb_to_component(struct device *dev,
 
 	return component_reg_phys;
 }
-EXPORT_SYMBOL_NS_GPL(cxl_rcrb_to_component, CXL);
+EXPORT_SYMBOL_NS_GPL(cxl_probe_rcrb, CXL);

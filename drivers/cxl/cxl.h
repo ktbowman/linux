@@ -267,9 +267,9 @@ enum cxl_rcrb {
 	CXL_RCRB_DOWNSTREAM,
 	CXL_RCRB_UPSTREAM,
 };
-resource_size_t cxl_rcrb_to_component(struct device *dev,
-				      resource_size_t rcrb,
-				      enum cxl_rcrb which);
+struct cxl_rcrb_info;
+resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
+			       struct cxl_rcrb_info *ri, enum cxl_rcrb which);
 
 #define CXL_RESOURCE_NONE ((resource_size_t) -1)
 #define CXL_TARGET_STRLEN 20
@@ -587,22 +587,27 @@ cxl_find_dport_by_dev(struct cxl_port *port, const struct device *dport_dev)
 	return xa_load(&port->dports, (unsigned long)dport_dev);
 }
 
+struct cxl_rcrb_info {
+	resource_size_t base;
+	u16 aer_cap;
+};
+
 /**
  * struct cxl_dport - CXL downstream port
  * @dport: PCI bridge or firmware device representing the downstream link
+ * @port: reference to cxl_port that contains this downstream port
  * @port_id: unique hardware identifier for dport in decoder target list
  * @component_reg_phys: downstream port component registers
- * @rcrb: base address for the Root Complex Register Block
  * @rch: Indicate whether this dport was enumerated in RCH or VH mode
- * @port: reference to cxl_port that contains this downstream port
+ * @rcrb: Data about the Root Complex Register Block layout
  */
 struct cxl_dport {
 	struct device *dport;
+	struct cxl_port *port;
 	int port_id;
 	resource_size_t component_reg_phys;
-	resource_size_t rcrb;
 	bool rch;
-	struct cxl_port *port;
+	struct cxl_rcrb_info rcrb;
 };
 
 /**

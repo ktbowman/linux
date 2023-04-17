@@ -259,9 +259,9 @@ int __wrap_cxl_dvsec_rr_decode(struct device *dev, int dvsec,
 }
 EXPORT_SYMBOL_NS_GPL(__wrap_cxl_dvsec_rr_decode, CXL);
 
-resource_size_t __wrap_cxl_rcrb_to_component(struct device *dev,
-					     resource_size_t rcrb,
-					     enum cxl_rcrb which)
+resource_size_t __wrap_cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
+				      struct cxl_rcrb_info *ri,
+				      enum cxl_rcrb which)
 {
 	int index;
 	resource_size_t component_reg_phys;
@@ -269,14 +269,14 @@ resource_size_t __wrap_cxl_rcrb_to_component(struct device *dev,
 
 	if (ops && ops->is_mock_port(dev))
 		component_reg_phys =
-			ops->cxl_rcrb_to_component(dev, rcrb, which);
+			ops->cxl_probe_rcrb(dev, rcrb, ri, which);
 	else
-		component_reg_phys = cxl_rcrb_to_component(dev, rcrb, which);
+		component_reg_phys = cxl_probe_rcrb(dev, rcrb, ri, which);
 	put_cxl_mock_ops(index);
 
 	return component_reg_phys;
 }
-EXPORT_SYMBOL_NS_GPL(__wrap_cxl_rcrb_to_component, CXL);
+EXPORT_SYMBOL_NS_GPL(__wrap_cxl_probe_rcrb, CXL);
 
 MODULE_LICENSE("GPL v2");
 MODULE_IMPORT_NS(ACPI);
