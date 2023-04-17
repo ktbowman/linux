@@ -375,7 +375,7 @@ static int add_host_bridge_uport(struct device *match, void *arg)
 struct cxl_chbs_context {
 	struct device *dev;
 	unsigned long long uid;
-	resource_size_t rcrb;
+	struct cxl_rcrb_info rcrb;
 	resource_size_t chbcr;
 	u32 cxl_version;
 };
@@ -395,7 +395,7 @@ static int cxl_get_chbcr(union acpi_subtable_headers *header, void *arg,
 		return 0;
 
 	ctx->cxl_version = chbs->cxl_version;
-	ctx->rcrb = CXL_RESOURCE_NONE;
+	ctx->rcrb.base = CXL_RESOURCE_NONE;
 	ctx->chbcr = CXL_RESOURCE_NONE;
 
 	if (!chbs->base)
@@ -409,9 +409,8 @@ static int cxl_get_chbcr(union acpi_subtable_headers *header, void *arg,
 	if (chbs->length != CXL_RCRB_SIZE)
 		return 0;
 
-	ctx->rcrb = chbs->base;
-	ctx->chbcr = cxl_rcrb_to_component(ctx->dev, chbs->base,
-					   CXL_RCRB_DOWNSTREAM);
+	ctx->chbcr = cxl_probe_rcrb(ctx->dev, chbs->base, &ctx->rcrb,
+				    CXL_RCRB_DOWNSTREAM);
 
 	return 0;
 }
@@ -451,8 +450,9 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 		return 0;
 	}
 
-	if (ctx.rcrb != CXL_RESOURCE_NONE)
-		dev_dbg(match, "RCRB found for UID %lld: %pa\n", uid, &ctx.rcrb);
+	if (ctx.rcrb.base != CXL_RESOURCE_NONE)
+		dev_dbg(match, "RCRB found for UID %lld: %pa\n", uid,
+			&ctx.rcrb.base);
 
 	if (ctx.chbcr == CXL_RESOURCE_NONE) {
 		dev_warn(match, "CHBCR invalid for Host Bridge (UID %lld)\n",
@@ -466,7 +466,7 @@ static int add_host_bridge_dport(struct device *match, void *arg)
 	bridge = pci_root->bus->bridge;
 	if (ctx.cxl_version == ACPI_CEDT_CHBS_VERSION_CXL11)
 		dport = devm_cxl_add_rch_dport(root_port, bridge, uid,
-					       ctx.chbcr, ctx.rcrb);
+					       ctx.chbcr, &ctx.rcrb);
 	else
 		dport = devm_cxl_add_dport(root_port, bridge, uid,
 					   ctx.chbcr);

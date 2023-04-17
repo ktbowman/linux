@@ -914,7 +914,7 @@ static void cxl_dport_unlink(void *data)
 static struct cxl_dport *
 __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 		     int port_id, resource_size_t component_reg_phys,
-		     resource_size_t rcrb)
+		     struct cxl_rcrb_info *ri)
 {
 	char link_name[CXL_TARGET_STRLEN];
 	struct cxl_dport *dport;
@@ -936,17 +936,26 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	    CXL_TARGET_STRLEN)
 		return ERR_PTR(-EINVAL);
 
-	dport = devm_kzalloc(host, sizeof(*dport), GFP_KERNEL);
-	if (!dport)
-		return ERR_PTR(-ENOMEM);
+	if (ri && ri->base != CXL_RESOURCE_NONE) {
+		struct cxl_rch_dport *rdport;
+
+		rdport = devm_kzalloc(host, sizeof(*rdport), GFP_KERNEL);
+		if (!rdport)
+			return ERR_PTR(-ENOMEM);
+
+		rdport->rcrb.base = ri->base;
+		dport = &rdport->dport;
+		dport->rch = true;
+	} else {
+		dport = devm_kzalloc(host, sizeof(*dport), GFP_KERNEL);
+		if (!dport)
+			return ERR_PTR(-ENOMEM);
+	}
 
 	dport->dport = dport_dev;
 	dport->port_id = port_id;
 	dport->component_reg_phys = component_reg_phys;
 	dport->port = port;
-	if (rcrb != CXL_RESOURCE_NONE)
-		dport->rch = true;
-	dport->rcrb = rcrb;
 
 	cond_cxl_root_lock(port);
 	rc = add_dport(port, dport);
@@ -988,7 +997,7 @@ struct cxl_dport *devm_cxl_add_dport(struct cxl_port *port,
 	struct cxl_dport *dport;
 
 	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
-				     component_reg_phys, CXL_RESOURCE_NONE);
+				     component_reg_phys, NULL);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add dport to %s: %ld\n",
 			dev_name(&port->dev), PTR_ERR(dport));
@@ -1007,24 +1016,24 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_add_dport, CXL);
  * @dport_dev: firmware or PCI device representing the dport
  * @port_id: identifier for this dport in a decoder's target list
  * @component_reg_phys: optional location of CXL component registers
- * @rcrb: mandatory location of a Root Complex Register Block
+ * @ri: mandatory data about the Root Complex Register Block layout
  *
  * See CXL 3.0 9.11.8 CXL Devices Attached to an RCH
  */
 struct cxl_dport *devm_cxl_add_rch_dport(struct cxl_port *port,
 					 struct device *dport_dev, int port_id,
 					 resource_size_t component_reg_phys,
-					 resource_size_t rcrb)
+					 struct cxl_rcrb_info *ri)
 {
 	struct cxl_dport *dport;
 
-	if (rcrb == CXL_RESOURCE_NONE) {
+	if (!ri || ri->base == CXL_RESOURCE_NONE) {
 		dev_dbg(&port->dev, "failed to add RCH dport, missing RCRB\n");
 		return ERR_PTR(-EINVAL);
 	}
 
 	dport = __devm_cxl_add_dport(port, dport_dev, port_id,
-				     component_reg_phys, rcrb);
+				     component_reg_phys, ri);
 	if (IS_ERR(dport)) {
 		dev_dbg(dport_dev, "failed to add RCH dport to %s: %ld\n",
 			dev_name(&port->dev), PTR_ERR(dport));
