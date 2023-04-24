@@ -590,6 +590,7 @@ cxl_find_dport_by_dev(struct cxl_port *port, const struct device *dport_dev)
 struct cxl_rcrb_info {
 	resource_size_t base;
 	u16 aer_cap;
+	u16 ras_cap;
 };
 
 /**
