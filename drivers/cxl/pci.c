@@ -274,13 +274,39 @@ static int cxl_pci_setup_mailbox(struct cxl_dev_state *cxlds)
 	return 0;
 }
 
+/* Extract RCRB, use same function interface as cxl_find_regblock(). */
+static int cxl_rcrb_get_comp_regs(struct pci_dev *pdev,
+				  enum cxl_regloc_type type,
+				  struct cxl_register_map *map)
+{
+	struct cxl_dport *dport;
+
+	map->resource = CXL_RESOURCE_NONE;
+
+	if (type != CXL_REGLOC_RBI_COMPONENT)
+		return -ENODEV;
+
+	if (!cxl_pci_find_port(pdev, &dport) || !dport->rch)
+		return -ENXIO;
+
+	map->resource = cxl_probe_rcrb(&pdev->dev, dport->rcrb.base,
+					    NULL, CXL_RCRB_UPSTREAM);
+	if (map->resource == CXL_RESOURCE_NONE)
+		return -ENXIO;
+
+	map->reg_type = type;
+	map->max_size = CXL_COMPONENT_REG_BLOCK_SIZE;
+
+	return 0;
+}
+
 static int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 			      struct cxl_register_map *map)
 {
 	int rc;
 
 	rc = cxl_find_regblock(pdev, type, map);
-	if (rc)
+	if (rc && cxl_rcrb_get_comp_regs(pdev, type, map))
 		return rc;
 
 	return cxl_setup_regs(map);
