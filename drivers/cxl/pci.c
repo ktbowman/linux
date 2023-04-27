@@ -274,13 +274,48 @@ static int cxl_pci_setup_mailbox(struct cxl_dev_state *cxlds)
 	return 0;
 }
 
+/* Extract RCRB, use same function interface as cxl_find_regblock(). */
+static int cxl_rcrb_get_comp_regs(struct pci_dev *pdev,
+				  enum cxl_regloc_type type,
+				  struct cxl_register_map *map)
+{
+	struct cxl_dport *dport;
+	resource_size_t component_reg_phys;
+
+	memset(map, 0, sizeof(*map));
+	map->dev = &pdev->dev;
+	map->resource = CXL_RESOURCE_NONE;
+
+	if (type != CXL_REGLOC_RBI_COMPONENT)
+		return -ENODEV;
+
+	if (!cxl_pci_find_port(pdev, &dport) || !dport->rch)
+		return -ENXIO;
+
+	component_reg_phys = cxl_probe_rcrb(&pdev->dev, dport->rcrb.base,
+					    NULL, CXL_RCRB_UPSTREAM);
+	if (component_reg_phys == CXL_RESOURCE_NONE)
+		return -ENXIO;
+
+	map->resource = component_reg_phys;
+	map->reg_type = type;
+	map->max_size = CXL_COMPONENT_REG_BLOCK_SIZE;
+
+	return 0;
+}
+
 static int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
 			      struct cxl_register_map *map)
 {
 	int rc;
 
+	/*
+	 * If the Register Locator DVSEC does not contain the
+	 * Component Registers, assume it is an RCH and try to extract
+	 * them from an RCRB.
+	 */
 	rc = cxl_find_regblock(pdev, type, map);
-	if (rc)
+	if (rc && cxl_rcrb_get_comp_regs(pdev, type, map))
 		return rc;
 
 	return cxl_setup_regs(map);
