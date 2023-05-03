@@ -381,6 +381,8 @@ static u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb)
 	return offset;
 }
 
+/* TODO: generalize cxl_component_to_ras() */
+
 static u16 cxl_component_to_ras(struct device *dev, resource_size_t component_reg_phys)
 {
 	struct cxl_component_reg_map map;
@@ -485,6 +487,7 @@ int cxl_rch_map_ras(struct cxl_dev_state *cxlds,
 	if (!dport_ras)
 		return -ENOMEM;
 
+	/* TODO: dport_ras - is there a better location? */
 	cxlds->regs.dport_aer = dport_aer;
 	cxlds->regs.dport_ras = dport_ras;
 

@@ -45,6 +45,8 @@ static int cxl_mem_dpa_show(struct seq_file *file, void *data)
 	return 0;
 }
 
+/* TODO: Move to cxl pci, acpi or port */
+
 static void rch_disable_root_ints(void __iomem *aer_base)
 {
 	u32 aer_cmd_mask, aer_cmd;
