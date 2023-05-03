@@ -387,6 +387,8 @@ static int cxl_pci_ras_unmask(struct pci_dev *pdev)
 	u16 cap;
 	int rc;
 
+	/* TODO: unmask rcec here */
+
 	if (!cxlds->regs.ras) {
 		dev_dbg(&pdev->dev, "No RAS registers.\n");
 		return 0;
