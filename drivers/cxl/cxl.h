@@ -264,6 +264,7 @@ int cxl_map_device_regs(struct cxl_register_map *map,
 enum cxl_regloc_type;
 int cxl_find_regblock(struct pci_dev *pdev, enum cxl_regloc_type type,
 		      struct cxl_register_map *map);
+int cxl_setup_regs(struct cxl_register_map *map);
 
 enum cxl_rcrb {
 	CXL_RCRB_DOWNSTREAM,
