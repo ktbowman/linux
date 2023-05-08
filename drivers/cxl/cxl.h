@@ -594,7 +594,7 @@ struct cxl_rcrb_info {
 
 /**
  * struct cxl_dport - CXL downstream port
- * @dport: PCI bridge or firmware device representing the downstream link
+ * @dev: PCI bridge or firmware device representing the downstream link
  * @port: reference to cxl_port that contains this downstream port
  * @port_id: unique hardware identifier for dport in decoder target list
  * @component_reg_phys: downstream port component registers
@@ -602,7 +602,7 @@ struct cxl_rcrb_info {
  * @rcrb: Data about the Root Complex Register Block layout
  */
 struct cxl_dport {
-	struct device *dport;
+	struct device *dev;
 	struct cxl_port *port;
 	int port_id;
 	resource_size_t component_reg_phys;
