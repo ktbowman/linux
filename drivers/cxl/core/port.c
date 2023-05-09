@@ -872,6 +872,23 @@ static int add_dport(struct cxl_port *port, struct cxl_dport *dport)
 	return 0;
 }
 
+static int cxl_dport_setup_regs(struct cxl_dport *dport,
+				resource_size_t component_reg_phys)
+{
+	struct cxl_register_map *map = &dport->comp_map;
+
+	if (component_reg_phys == CXL_RESOURCE_NONE)
+		return -ENODEV;
+
+	memset(map, 0, sizeof(*map));
+	map->dev = dport->dev;
+	map->reg_type = CXL_REGLOC_RBI_COMPONENT;
+	map->resource = component_reg_phys;
+	map->max_size = CXL_COMPONENT_REG_BLOCK_SIZE;
+
+       return cxl_setup_regs(map);
+}
+
 /*
  * Since root-level CXL dports cannot be enumerated by PCI they are not
  * enumerated by the common port driver that acquires the port lock over
@@ -954,9 +971,12 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 
 	dport->dev = dport_dev;
 	dport->port_id = port_id;
-	dport->component_reg_phys = component_reg_phys;
 	dport->port = port;
 	dport->rcrb.base = rcrb;
+
+	rc = cxl_dport_setup_regs(dport, component_reg_phys);
+	if (rc && rc != -ENODEV)
+		return ERR_PTR(rc);
 
 	cond_cxl_root_lock(port);
 	rc = add_dport(port, dport);
