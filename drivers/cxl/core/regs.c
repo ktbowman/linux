@@ -366,14 +366,6 @@ static int cxl_probe_regs(struct cxl_register_map *map)
 	case CXL_REGLOC_RBI_COMPONENT:
 		comp_map = &map->component_map;
 		cxl_probe_component_regs(map->dev, base, comp_map);
-		if (!comp_map->hdm_decoder.valid) {
-			dev_err(map->dev, "HDM decoder registers not found\n");
-			return -ENXIO;
-		}
-
-		if (!comp_map->ras.valid)
-			dev_dbg(map->dev, "RAS registers not found\n");
-
 		dev_dbg(map->dev, "Set up component registers\n");
 		break;
 	case CXL_REGLOC_RBI_MEMDEV:
