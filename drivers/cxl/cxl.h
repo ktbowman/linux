@@ -606,8 +606,8 @@ struct cxl_rcrb_info {
 struct cxl_dport {
 	struct device *dev;
 	struct cxl_port *port;
+	struct cxl_register_map comp_map;
 	int port_id;
-	resource_size_t component_reg_phys;
 	bool rch;
 	struct cxl_rcrb_info rcrb;
 };
