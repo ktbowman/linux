@@ -125,6 +125,22 @@ static bool should_emulate_decoders(struct cxl_endpoint_dvsec_info *info)
 	return true;
 }
 
+struct cxl_register_map *cxl_port_get_comp_map(struct cxl_port *port)
+{
+	/*
+	 * HDM capability applies to Endpoints, USPs and VH Host
+	 * Bridges. The Endpoint's component register mappings are
+	 * located in the cxlds.
+	 */
+	if (is_cxl_endpoint(port)) {
+		struct cxl_memdev *memdev = to_cxl_memdev(port->uport);
+
+		return &memdev->cxlds->comp_map;
+	}
+
+	return &port->comp_map;
+}
+
 /**
  * devm_cxl_setup_hdm - map HDM decoder component registers
  * @port: cxl_port to map
@@ -144,16 +160,7 @@ struct cxl_hdm *devm_cxl_setup_hdm(struct cxl_port *port,
 	cxlhdm->port = port;
 	dev_set_drvdata(dev, cxlhdm);
 
-	/*
-	 * HDM capability applies to Endpoints, USPs and VH Host
-	 * Bridges. The Endpoint's component register mappings are
-	 * located in the cxlds.
-	 */
-	if (is_cxl_endpoint(port))
-		/* TODO */
-		comp_map = &port->comp_map;
-	else
-		comp_map = &port->comp_map;
+	comp_map = cxl_port_get_comp_map(port);
 
 	if (!comp_map->component_map.hdm_decoder.valid) {
 		dev_dbg(&port->dev, "HDM decoder registers not implemented\n");
