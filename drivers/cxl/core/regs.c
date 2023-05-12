@@ -408,6 +408,54 @@ int cxl_setup_regs(struct cxl_register_map *map)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_setup_regs, CXL);
 
+static void __iomem *cxl_map_reg(struct device *dev, resource_size_t addr,
+				resource_size_t length)
+{
+	struct resource *res;
+
+	if (WARN_ON_ONCE(addr == CXL_RESOURCE_NONE))
+		return NULL;
+
+	res = request_mem_region(addr, length, dev_name(dev));
+	if (!res)
+		return NULL;
+
+	return ioremap(addr, length);
+}
+
+static void cxl_unmap_reg(void __iomem *base, resource_size_t addr,
+			 resource_size_t length)
+{
+	iounmap(base);
+	release_mem_region(addr, length);
+}
+
+static u16 cxl_rcrb_to_aer(struct device *dev, resource_size_t rcrb)
+{
+	void __iomem *addr;
+	u16 offset = 0;
+	u32 cap_hdr;
+
+	addr = cxl_map_reg(dev, rcrb, SZ_4K);
+	if (!addr)
+		return 0;
+
+	cap_hdr = readl(addr + offset);
+	while (PCI_EXT_CAP_ID(cap_hdr) != PCI_EXT_CAP_ID_ERR) {
+		offset = PCI_EXT_CAP_NEXT(cap_hdr);
+		if (!offset)
+			break;
+		cap_hdr = readl(addr + offset);
+	}
+
+	if (offset)
+		dev_dbg(dev, "found AER extended capability (0x%x)\n", offset);
+
+	cxl_unmap_reg(addr, rcrb, SZ_4K);
+
+	return offset;
+}
+
 resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 			       struct cxl_rcrb_info *ri, enum cxl_rcrb which)
 {
@@ -470,6 +518,9 @@ resource_size_t cxl_probe_rcrb(struct device *dev, resource_size_t rcrb,
 	/* MEMBAR is block size (64k) aligned. */
 	if (!IS_ALIGNED(component_reg_phys, CXL_COMPONENT_REG_BLOCK_SIZE))
 		return CXL_RESOURCE_NONE;
+
+	if (ri)
+		ri->aer_cap = cxl_rcrb_to_aer(dev, ri->base);
 
 	return component_reg_phys;
 }
