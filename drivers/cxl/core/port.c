@@ -615,7 +615,6 @@ static int devm_cxl_link_parent_dport(struct device *host,
 static struct lock_class_key cxl_port_key;
 
 static struct cxl_port *cxl_port_alloc(struct device *uport,
-				       resource_size_t component_reg_phys,
 				       struct cxl_dport *parent_dport)
 {
 	struct cxl_port *port;
@@ -665,7 +664,6 @@ static struct cxl_port *cxl_port_alloc(struct device *uport,
 	} else
 		dev->parent = uport;
 
-	port->component_reg_phys = component_reg_phys;
 	ida_init(&port->decoder_ida);
 	port->hdm_end = -1;
 	port->commit_end = -1;
@@ -686,6 +684,28 @@ err:
 	return ERR_PTR(rc);
 }
 
+static int cxl_setup_comp_regs(struct device *dev, struct cxl_register_map *map,
+			       resource_size_t component_reg_phys)
+{
+	if (component_reg_phys == CXL_RESOURCE_NONE)
+		return -ENODEV;
+
+	memset(map, 0, sizeof(*map));
+	map->dev = dev;
+	map->reg_type = CXL_REGLOC_RBI_COMPONENT;
+	map->resource = component_reg_phys;
+	map->max_size = CXL_COMPONENT_REG_BLOCK_SIZE;
+
+       return cxl_setup_regs(map);
+}
+
+static inline int cxl_port_setup_regs(struct cxl_port *port,
+				      resource_size_t component_reg_phys)
+{
+	return cxl_setup_comp_regs(&port->dev, &port->comp_map,
+				   component_reg_phys);
+}
+
 static struct cxl_port *__devm_cxl_add_port(struct device *host,
 					    struct device *uport,
 					    resource_size_t component_reg_phys,
@@ -695,7 +715,7 @@ static struct cxl_port *__devm_cxl_add_port(struct device *host,
 	struct device *dev;
 	int rc;
 
-	port = cxl_port_alloc(uport, component_reg_phys, parent_dport);
+	port = cxl_port_alloc(uport, parent_dport);
 	if (IS_ERR(port))
 		return port;
 
@@ -707,6 +727,10 @@ static struct cxl_port *__devm_cxl_add_port(struct device *host,
 	else
 		rc = dev_set_name(dev, "root%d", port->id);
 	if (rc)
+		goto err;
+
+	rc = cxl_port_setup_regs(port, component_reg_phys);
+	if (rc && rc != -ENODEV)
 		goto err;
 
 	rc = device_add(dev);
