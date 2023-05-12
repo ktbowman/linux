@@ -781,8 +781,7 @@ struct cxl_port *devm_cxl_add_port(struct device *host, struct device *uport,
 
 	parent_port = parent_dport ? parent_dport->port : NULL;
 	if (IS_ERR(port)) {
-		dev_dbg(uport, "Failed to add %s%s%s%s: %ld\n",
-			dev_name(&port->dev),
+		dev_dbg(uport, "Failed to add port%s%s%s: %ld\n",
 			parent_port ? " to " : "",
 			parent_port ? dev_name(&parent_port->dev) : "",
 			parent_port ? "" : " (root port)",
