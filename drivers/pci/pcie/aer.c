@@ -1370,6 +1370,10 @@ static irqreturn_t aer_irq(int irq, void *context)
 	pci_read_config_dword(rp, aer + PCI_ERR_ROOT_ERR_SRC, &e_src.id);
 	pci_write_config_dword(rp, aer + PCI_ERR_ROOT_STATUS, e_src.status);
 
+	/* Force source id to RCEC BDF - Workaround for broken BIOS*/
+	if (pci_pcie_type(rp) == PCI_EXP_TYPE_RC_EC)
+		e_src.id = ((rp->bus->number << 8) | rp->devfn);
+
 	if (!kfifo_put(&rpc->aer_fifo, e_src))
 		return IRQ_HANDLED;
 
