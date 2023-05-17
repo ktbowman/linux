@@ -8,6 +8,7 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/idr.h>
+#include <linux/aer.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
 #include <cxl.h>
@@ -947,6 +948,39 @@ static void cxl_dport_unlink(void *data)
 	sysfs_remove_link(&port->dev.kobj, link_name);
 }
 
+static int cxl_dport_map_rch_aer(struct cxl_dport *dport)
+{
+	struct cxl_rcrb_info *ri = &dport->rcrb;
+	resource_size_t aer_phys;
+	void __iomem *dport_aer;
+
+	if (!dport->rch || !ri->aer_cap)
+		return -ENODEV;
+
+	aer_phys = ri->aer_cap + ri->base;
+	dport_aer = devm_cxl_iomap_block(dport->dev, aer_phys,
+					 sizeof(struct aer_capability_regs));
+	if (!dport_aer)
+		return -ENOMEM;
+
+	dport->regs.dport_aer = dport_aer;
+
+	return 0;
+}
+
+static int cxl_dport_map_regs(struct cxl_dport *dport)
+{
+	struct cxl_register_map *map = &dport->comp_map;
+
+	if (!map->component_map.ras.valid)
+		dev_dbg(map->dev, "RAS registers not found\n");
+	else if (cxl_map_component_regs(map, &dport->regs.component,
+					BIT(CXL_CM_CAP_CAP_ID_RAS)))
+		dev_dbg(dport->dev, "Failed to map RAS capability.\n");
+
+	return cxl_dport_map_rch_aer(dport);
+}
+
 static struct cxl_dport *
 __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 		     int port_id, resource_size_t component_reg_phys,
@@ -997,6 +1031,10 @@ __devm_cxl_add_dport(struct cxl_port *port, struct device *dport_dev,
 	dport->port = port;
 
 	rc = cxl_dport_setup_regs(dport, component_reg_phys);
+	if (rc && rc != -ENODEV)
+		return ERR_PTR(rc);
+
+	rc = cxl_dport_map_regs(dport);
 	if (rc && rc != -ENODEV)
 		return ERR_PTR(rc);
 
