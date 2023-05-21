@@ -601,6 +601,7 @@ struct cxl_rcrb_info {
  * struct cxl_dport - CXL downstream port
  * @dev: PCI bridge or firmware device representing the downstream link
  * @port: reference to cxl_port that contains this downstream port
+ * @comp_map: component register capability mappings
  * @port_id: unique hardware identifier for dport in decoder target list
  * @component_reg_phys: downstream port component registers
  * @rch: Indicate whether this dport was enumerated in RCH or VH mode
@@ -609,6 +610,7 @@ struct cxl_rcrb_info {
 struct cxl_dport {
 	struct device *dev;
 	struct cxl_port *port;
+	struct cxl_register_map comp_map;
 	int port_id;
 	resource_size_t component_reg_phys;
 	bool rch;
