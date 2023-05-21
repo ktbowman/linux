@@ -601,7 +601,6 @@ struct cxl_rcrb_info {
  * @port: reference to cxl_port that contains this downstream port
  * @comp_map: component register capability mappings
  * @port_id: unique hardware identifier for dport in decoder target list
- * @component_reg_phys: downstream port component registers
  * @rch: Indicate whether this dport was enumerated in RCH or VH mode
  * @rcrb: Data about the Root Complex Register Block layout
  */
@@ -610,7 +609,6 @@ struct cxl_dport {
 	struct cxl_port *port;
 	struct cxl_register_map comp_map;
 	int port_id;
-	resource_size_t component_reg_phys;
 	bool rch;
 	struct cxl_rcrb_info rcrb;
 };
