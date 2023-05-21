@@ -686,6 +686,28 @@ err:
 	return ERR_PTR(rc);
 }
 
+static int cxl_setup_comp_regs(struct device *dev, struct cxl_register_map *map,
+			       resource_size_t component_reg_phys)
+{
+	if (component_reg_phys == CXL_RESOURCE_NONE)
+		return -ENODEV;
+
+	memset(map, 0, sizeof(*map));
+	map->dev = dev;
+	map->reg_type = CXL_REGLOC_RBI_COMPONENT;
+	map->resource = component_reg_phys;
+	map->max_size = CXL_COMPONENT_REG_BLOCK_SIZE;
+
+       return cxl_setup_regs(map);
+}
+
+static inline int cxl_port_setup_regs(struct cxl_port *port,
+				      resource_size_t component_reg_phys)
+{
+	return cxl_setup_comp_regs(&port->dev, &port->comp_map,
+				   component_reg_phys);
+}
+
 static struct cxl_port *__devm_cxl_add_port(struct device *host,
 					    struct device *uport,
 					    resource_size_t component_reg_phys,
@@ -707,6 +729,10 @@ static struct cxl_port *__devm_cxl_add_port(struct device *host,
 	else
 		rc = dev_set_name(dev, "root%d", port->id);
 	if (rc)
+		goto err;
+
+	rc = cxl_port_setup_regs(port, component_reg_phys);
+	if (rc && rc != -ENODEV)
 		goto err;
 
 	rc = device_add(dev);
