@@ -88,6 +88,10 @@ void cxl_rch_enable_rcec(struct cxl_port *endpoint)
 	if (!pcie_aer_is_native(rcec))
 		return;
 
+	/*
+	 * Not re-masked on RCD unbind: the RCEC outlives the RCD and may
+	 * still serve others, so it is only masked at RCEC removal.
+	 */
 	pci_aer_unmask_internal_errors(rcec);
 	pci_info(rcec, "CXL: Internal errors unmasked\n");
 }
