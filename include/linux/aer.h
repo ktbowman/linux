@@ -60,6 +60,7 @@ int pcie_aer_is_native(struct pci_dev *dev);
 void pci_aer_unmask_internal_errors(struct pci_dev *dev);
 u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
 			    u32 uncor_mask, u32 uncor_severity);
+void pci_aer_mask_internal_errors(struct pci_dev *dev);
 #else
 static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 {
@@ -72,6 +73,7 @@ static inline u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
 {
 	return 0;
 }
+static inline void pci_aer_mask_internal_errors(struct pci_dev *dev) { }
 #endif
 
 #ifdef CONFIG_CXL_RAS
