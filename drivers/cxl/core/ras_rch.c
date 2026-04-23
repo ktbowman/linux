@@ -180,7 +180,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	/* Handle CE and UCE errors independently, in the same pass */
 	if (aer_regs.cor_status & ~aer_regs.cor_mask) {
 		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
-		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport));
+		cxl_handle_proto_error(pdev, port, dport, AER_CORRECTABLE);
 	}
 
 	if (uncor_status) {
@@ -188,7 +188,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 			       AER_FATAL : AER_NONFATAL;
 
 		pci_print_aer(pdev, severity, &uncor_regs);
-		cxl_do_recovery(pdev, dport->port, dport);
+		cxl_handle_proto_error(pdev, port, dport, severity);
 	}
 }
 
