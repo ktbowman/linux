@@ -2645,6 +2645,27 @@ void pcie_report_downtraining(struct pci_dev *dev)
 	__pcie_print_link_status(dev, false);
 }
 
+/*
+ * Cache the Device Serial Number for use in contexts where config-space reads
+ * are unsafe (interrupt, panic). Process-context callers that need a fresh
+ * value (e.g. hotplug device replacement) call pci_get_dsn() and compare it
+ * against this cached pdev->dsn to detect a changed device. Note pdev->dsn
+ * is 0 when the device has no DSN capability. Zero is not a valid serial
+ * number -- the DSN is an EUI-64 (PCIe r7.0, sec 7.9.3.2) and all-zeros is
+ * the reserved NULL EUI -- so a cached value of 0 simply means there is no
+ * DSN to compare against. Consumers that cannot re-read config space (e.g.
+ * trace events emitted from interrupt or panic context) must treat this as a
+ * probe-time snapshot: it identifies the device that was probed, but it is
+ * not refreshed if the device later gains or changes its DSN.
+ */
+static void pci_dsn_init(struct pci_dev *dev)
+{
+	u64 dsn = pci_get_dsn(dev);
+
+	if (dsn)
+		dev->dsn = dsn;
+}
+
 static void pci_imm_ready_init(struct pci_dev *dev)
 {
 	u16 status;
@@ -2681,6 +2702,7 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	pci_rebar_init(dev);		/* Resizable BAR */
 	pci_dev3_init(dev);		/* Device 3 capabilities */
 	pci_ide_init(dev);		/* Link Integrity and Data Encryption */
+	pci_dsn_init(dev);		/* Serial number */
 
 	pcie_report_downtraining(dev);
 	pci_init_reset_methods(dev);
