@@ -1606,6 +1606,35 @@ struct cxl_port *find_cxl_port_by_uport(struct device *uport_dev)
 	return NULL;
 }
 
+/**
+ * find_cxl_port_by_dev - Use @dev as hint to do a _by_dport or _by_uport lookup
+ * @dev: generic device that may either be a companion of port or target dport
+ * @dport: optional output; if non-NULL, set to the matched dport for
+ * Root Port and Downstream Port lookups, NULL for all other types.
+ *
+ * Return a 'struct cxl_port' with an elevated reference if found. Use
+ * __free(put_cxl_port) to release.
+ */
+struct cxl_port *find_cxl_port_by_dev(struct device *dev, struct cxl_dport **dport)
+{
+	if (dport)
+		*dport = NULL;
+	if (!dev_is_pci(dev))
+		return NULL;
+
+	switch (pci_pcie_type(to_pci_dev(dev))) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		return find_cxl_port_by_dport(dev, dport);
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END:
+		return find_cxl_port_by_uport(dev);
+	}
+
+	return NULL;
+}
+
 static int update_decoder_targets(struct device *dev, void *data)
 {
 	struct cxl_dport *dport = data;
@@ -2501,7 +2530,7 @@ const struct bus_type cxl_bus_type = {
 };
 EXPORT_SYMBOL_NS_GPL(cxl_bus_type, "CXL");
 
-static struct dentry *cxl_debugfs;
+struct dentry *cxl_debugfs;
 
 struct dentry *cxl_debugfs_create_dir(const char *dir)
 {
