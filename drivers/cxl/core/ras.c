@@ -3,9 +3,11 @@
 
 #include <linux/pci.h>
 #include <linux/aer.h>
+#include <linux/debugfs.h>
 #include <cxl/event.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
+#include "core.h"
 #include "trace.h"
 
 /* Check that UCE header definition is maintained to keep ABI intact  */
@@ -43,35 +45,6 @@ static void cxl_cper_trace_corr_prot_err(struct cxl_port *port, struct cxl_dport
 	u32 status = ras_cap->cor_status & ~ras_cap->cor_mask;
 
 	trace_cxl_aer_correctable_error(port, dport, status, serial);
-}
-
-/**
- * find_cxl_port_by_dev - Use @dev as hint to do a _by_dport or _by_uport lookup
- * @dev: generic device that may either be a companion of port or target dport
- * @dport: optional output; if non-NULL, set to the matched dport for
- * Root Port and Downstream Port lookups, NULL for all other types.
- *
- * Return a 'struct cxl_port' with an elevated reference if found. Use
- * __free(put_cxl_port) to release.
- */
-static struct cxl_port *find_cxl_port_by_dev(struct device *dev, struct cxl_dport **dport)
-{
-	if (dport)
-		*dport = NULL;
-	if (!dev_is_pci(dev))
-		return NULL;
-
-	switch (pci_pcie_type(to_pci_dev(dev))) {
-	case PCI_EXP_TYPE_ROOT_PORT:
-	case PCI_EXP_TYPE_DOWNSTREAM:
-		return find_cxl_port_by_dport(dev, dport);
-	case PCI_EXP_TYPE_UPSTREAM:
-	case PCI_EXP_TYPE_ENDPOINT:
-	case PCI_EXP_TYPE_RC_END:
-		return find_cxl_port_by_uport(dev);
-	}
-
-	return NULL;
 }
 
 void cxl_cper_handle_prot_err(struct cxl_cper_prot_err_work_data *data)
@@ -233,6 +206,13 @@ void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
 {
 	if (!port)
 		return NULL;
+
+	if (IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)) {
+		void __iomem *einj = to_einj_ras_base(port, dport);
+
+		if (einj)
+			return einj;
+	}
 
 	if (dport)
 		return dport->regs.ras;
@@ -454,10 +434,12 @@ void cxl_ras_init(void)
 	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
 	cxl_register_proto_err_work(&cxl_proto_err_work,
 				   cxl_proto_err_do_flush);
+	cxl_ras_einj_init();
 }
 
 void cxl_ras_exit(void)
 {
 	cxl_unregister_proto_err_work();
 	cxl_cper_unregister_prot_err_work();
+	cxl_ras_einj_exit();
 }

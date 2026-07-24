@@ -89,6 +89,18 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
+static void __iomem *to_rch_aer_base(struct cxl_dport *dport)
+{
+	if (IS_ENABLED(CONFIG_CXL_PROTO_AER_EINJ)) {
+		void __iomem *einj = to_einj_aer_base(dport);
+
+		if (einj)
+			return einj;
+	}
+
+	return dport->regs.dport_aer;
+}
+
 void cxl_handle_rdport_errors(struct pci_dev *pdev)
 {
 	struct aer_capability_regs aer_regs;
@@ -103,7 +115,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	if (!dport)
 		return;
 
-	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
+	if (!cxl_rch_get_aer_info(to_rch_aer_base(dport), &aer_regs))
 		return;
 
 	/*
@@ -113,7 +125,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	 */
 	if (aer_regs.cor_status & ~aer_regs.cor_mask) {
 		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
-		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport),
+		cxl_handle_cor_ras(dport->port, dport, to_ras_base(port, dport),
 			pdev->dsn);
 	}
 

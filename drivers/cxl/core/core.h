@@ -182,6 +182,9 @@ static inline struct device *dport_to_host(struct cxl_dport *dport)
 		return port->uport_dev;
 	return &port->dev;
 }
+
+extern struct dentry *cxl_debugfs;
+
 #ifdef CONFIG_CXL_RAS
 void cxl_ras_init(void);
 void cxl_ras_exit(void);
@@ -219,10 +222,30 @@ static inline void __iomem *to_ras_base(struct cxl_port *port,
 static inline void devm_cxl_dport_ras_setup(struct cxl_dport *dport) { }
 #endif /* CONFIG_CXL_RAS */
 
+#ifdef CONFIG_CXL_PROTO_AER_EINJ
+void __iomem *to_einj_ras_base(struct cxl_port *port, struct cxl_dport *dport);
+void __iomem *to_einj_aer_base(struct cxl_dport *dport);
+void cxl_ras_einj_init(void);
+void cxl_ras_einj_exit(void);
+#else
+static inline void cxl_ras_einj_init(void) { }
+static inline void cxl_ras_einj_exit(void) { }
+static inline void __iomem *to_einj_ras_base(struct cxl_port *port, struct cxl_dport *dport)
+{
+	return NULL;
+}
+static inline void __iomem *to_einj_aer_base(struct cxl_dport *dport)
+{
+	return NULL;
+}
+#endif
+
 int cxl_gpf_port_setup(struct cxl_dport *dport);
 struct cxl_port *find_cxl_port_by_dport(struct device *dport_dev,
 					struct cxl_dport **dport);
 struct cxl_port *find_cxl_port_by_uport(struct device *uport_dev);
+struct cxl_port *find_cxl_port_by_dev(struct device *dev,
+				      struct cxl_dport **dport);
 
 struct cxl_hdm;
 int cxl_hdm_decode_init(struct cxl_dev_state *cxlds, struct cxl_hdm *cxlhdm,
@@ -244,4 +267,5 @@ int cxl_set_feature(struct cxl_mailbox *cxl_mbox, const uuid_t *feat_uuid,
 
 resource_size_t cxl_rcd_component_reg_phys(struct device *dev,
 					   struct cxl_dport *dport);
+
 #endif /* __CXL_CORE_H__ */

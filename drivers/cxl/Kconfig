@@ -238,6 +238,22 @@ config CXL_RAS
 	def_bool y
 	depends on ACPI_APEI_GHES && PCIEAER && CXL_BUS
 
+config CXL_PROTO_AER_EINJ
+	def_bool (CXL_RAS && PCIEAER_INJECT = y) || (CXL_BUS = m && PCIEAER_INJECT = m)
+	help
+	  CXL RAS protocol error injection for testing the CXL protocol
+	  error handling paths, built on top of the PCIe AER software
+	  error injector.
+
+	  This is derived automatically from CXL_RAS, CXL_BUS and
+	  PCIEAER_INJECT rather than offered as a separate option: it is
+	  available whenever the injection helpers can link against
+	  aer_inject() from the PCIEAER_INJECT code.  The helpers live in
+	  cxl_core, so a built-in cxl_core (CXL_BUS=y) requires
+	  PCIEAER_INJECT=y; a modular cxl_core (CXL_BUS=m) also allows
+	  PCIEAER_INJECT=m (module-to-module).  A built-in cxl_core with a
+	  modular PCIEAER_INJECT would be unlinkable and is excluded.
+
 config CXL_ATL
 	def_bool y
 	depends on CXL_REGION
