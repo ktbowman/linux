@@ -48,6 +48,26 @@ static bool is_aer_internal_error(struct aer_err_info *info)
 	return status & PCI_ERR_UNC_INTN;
 }
 
+/**
+ * is_aer_cxl_only_error - Check if Internal Error is the only unmasked error
+ * @info: AER error info
+ *
+ * Only the status register matching @info->severity is checked (Correctable
+ * or Uncorrectable), and masked bits are ignored.
+ *
+ * Return: true if no unmasked status bit other than Internal Error is set,
+ * false otherwise.
+ */
+bool is_aer_cxl_only_error(struct aer_err_info *info)
+{
+	u32 status = info->status & ~info->mask;
+
+	if (info->severity == AER_CORRECTABLE)
+		return !(status & ~PCI_ERR_COR_INTERNAL);
+
+	return !(status & ~PCI_ERR_UNC_INTN);
+}
+
 bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 {
 	if (!info)
