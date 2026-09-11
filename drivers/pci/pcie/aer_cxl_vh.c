@@ -50,6 +50,23 @@ static bool is_aer_internal_error(struct aer_err_info *info)
 	return status & PCI_ERR_UNC_INTN;
 }
 
+/*
+ * True when the Internal Error conveying a CXL protocol error is the only
+ * error reported. An RCH Downstream Port has no BDF of its own, so its CXL
+ * protocol errors surface as an Internal Error on the associated RCEC (CXL
+ * r4.0 sec 12.2.1.1). Anything else in the same record is the RCEC's own
+ * problem and still needs normal AER recovery.
+ */
+bool is_aer_cxl_only_error(struct aer_err_info *info)
+{
+	u32 status = info->status & ~info->mask;
+
+	if (info->severity == AER_CORRECTABLE)
+		return !(status & ~PCI_ERR_COR_INTERNAL);
+
+	return !(status & ~PCI_ERR_UNC_INTN);
+}
+
 bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 {
 	if (!info)
