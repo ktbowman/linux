@@ -1290,13 +1290,31 @@ void pci_aer_unmask_internal_errors(struct pci_dev *dev)
 EXPORT_SYMBOL_FOR_MODULES(pci_aer_unmask_internal_errors, "cxl_core");
 
 /**
+ * aer_skip_reset - reset_subordinates callback that performs no reset
+ * @dev: device being recovered (unused)
+ *
+ * For callers using the AER recovery flow where @dev and anything below it
+ * do not need resetting, so a reset would serve no purpose. For example,
+ * @dev did not itself fail and the error is handled elsewhere, as with an
+ * RCEC that only conveys CXL protocol errors on behalf of CXL devices.
+ *
+ * Return: PCI_ERS_RESULT_RECOVERED
+ */
+static pci_ers_result_t aer_skip_reset(struct pci_dev *dev)
+{
+	return PCI_ERS_RESULT_RECOVERED;
+}
+
+/**
  * pci_aer_handle_error - handle logging error into an event log
  * @dev: pointer to pci_dev data structure of error source device
  * @info: comprehensive error information
+ * @reset_subordinates: callback used to reset @dev and anything below it
  *
  * Invoked when an error being detected by Root Port.
  */
-static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
+static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info,
+		pci_ers_result_t (*reset_subordinates)(struct pci_dev *pdev))
 {
 	int aer = dev->aer_cap;
 
@@ -1322,18 +1340,26 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 			pcie_clear_device_status(dev);
 		}
 	} else if (info->severity == AER_NONFATAL)
-		pcie_do_recovery(dev, pci_channel_io_normal, aer_root_reset);
+		pcie_do_recovery(dev, pci_channel_io_normal, reset_subordinates);
 	else if (info->severity == AER_FATAL)
-		pcie_do_recovery(dev, pci_channel_io_frozen, aer_root_reset);
+		pcie_do_recovery(dev, pci_channel_io_frozen, reset_subordinates);
 }
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
+	pci_ers_result_t (*reset_subordinates)(struct pci_dev *pdev) =
+		aer_root_reset;
 
-	if (is_cxl_error(dev, info))
+	if (is_cxl_error(dev, info)) {
 		cxl_forward_error(dev, info);
 
-	pci_aer_handle_error(dev, info);
+		/* An RCEC conveying only CXL errors doesn't fail */
+		if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC &&
+		    is_aer_cxl_only_error(info))
+			reset_subordinates = aer_skip_reset;
+	}
+
+	pci_aer_handle_error(dev, info, reset_subordinates);
 	pci_dev_put(dev);
 }
 
