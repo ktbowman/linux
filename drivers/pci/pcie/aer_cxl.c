@@ -48,6 +48,49 @@ static bool is_aer_internal_error(struct aer_err_info *info)
 	return status & PCI_ERR_UNC_INTN;
 }
 
+/*
+ * Clear the internal-error bits this error is being handed off for. Only
+ * the internal-error bits are written, so an event that latched after the
+ * AER handler read the status is left alone. The mask is not applied, to
+ * match how pci_aer_handle_error() clears the status register.
+ */
+static void cxl_clear_internal_error(struct pci_dev *pdev,
+				     struct aer_err_info *info)
+{
+	int aer = pdev->aer_cap;
+
+	if (info->severity == AER_CORRECTABLE)
+		pci_write_config_dword(pdev, aer + PCI_ERR_COR_STATUS,
+				       info->status & (PCI_ERR_COR_INTERNAL |
+						       PCI_ERR_COR_LOG_OVER));
+	else
+		pci_write_config_dword(pdev, aer + PCI_ERR_UNCOR_STATUS,
+				       info->status & PCI_ERR_UNC_INTN);
+}
+
+/**
+ * is_aer_cxl_only_error - Check if Internal Error is the only unmasked error
+ * @info: AER error info
+ *
+ * Only the status register matching @info->severity is checked (Correctable
+ * or Uncorrectable), and masked bits are ignored.
+ *
+ * Return: true if no unmasked status bit other than Internal Error is set,
+ * false otherwise.
+ */
+bool is_aer_cxl_only_error(struct aer_err_info *info)
+{
+	u32 status = info->status & ~info->mask;
+
+	if (!status)
+		return false;
+
+	if (info->severity == AER_CORRECTABLE)
+		return !(status & ~(PCI_ERR_COR_INTERNAL | PCI_ERR_COR_LOG_OVER));
+
+	return !(status & ~PCI_ERR_UNC_INTN);
+}
+
 bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 {
 	if (!info)
@@ -99,6 +142,8 @@ void cxl_forward_error(struct pci_dev *pdev, struct aer_err_info *info)
 		.severity = info->severity,
 		.pdev = pdev,
 	};
+
+	cxl_clear_internal_error(pdev, info);
 
 	scoped_guard(rwsem_read, &cxl_proto_err_kfifo.rwsem) {
 		work = cxl_proto_err_kfifo.work;

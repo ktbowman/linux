@@ -1331,8 +1331,18 @@ static void pci_aer_handle_error(struct pci_dev *dev, struct aer_err_info *info)
 
 static void handle_error_source(struct pci_dev *dev, struct aer_err_info *info)
 {
-	if (is_cxl_error(dev, info))
+	if (is_cxl_error(dev, info)) {
 		cxl_forward_error(dev, info);
+
+		/* An RCEC conveying only CXL errors doesn't fail */
+		if (pci_pcie_type(dev) == PCI_EXP_TYPE_RC_EC &&
+		    is_aer_cxl_only_error(info)) {
+			pci_aer_clear_status(dev);
+			pci_aer_clear_nonfatal_status(dev);
+			pcie_clear_device_status(dev);
+			return;
+		}
+	}
 
 	pci_aer_handle_error(dev, info);
 }
