@@ -17,9 +17,15 @@ void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 	if (aer_cap) {
 		host = dport->reg_map.host;
 		aer_phys = aer_cap + dport->rcrb.base;
+		/*
+		 * Map the physical AER capability, header through the Error
+		 * Source Identification register. struct aer_capability_regs
+		 * is a software layout whose embedded struct pcie_tlp_log is
+		 * larger than the on-wire capability.
+		 */
 		dport->regs.dport_aer =
 			devm_cxl_iomap_block(host, aer_phys,
-					     sizeof(struct aer_capability_regs));
+					     PCI_ERR_ROOT_ERR_SRC + sizeof(u32));
 	}
 }
 
