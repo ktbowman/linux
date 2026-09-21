@@ -19,7 +19,7 @@ void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 		aer_phys = aer_cap + dport->rcrb.base;
 		dport->regs.dport_aer =
 			devm_cxl_iomap_block(host, aer_phys,
-					     sizeof(struct aer_capability_regs));
+					     PCI_ERR_ROOT_ERR_SRC + sizeof(u32));
 	}
 }
 
