@@ -129,10 +129,8 @@ struct aer_err_info;
 #ifdef CONFIG_CXL_RAS
 bool is_aer_internal_error(struct aer_err_info *info);
 void cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info);
-void cxl_rch_enable_rcec(struct pci_dev *rcec);
 #else
 static inline bool is_aer_internal_error(struct aer_err_info *info) { return false; }
 static inline void cxl_rch_handle_error(struct pci_dev *dev, struct aer_err_info *info) { }
-static inline void cxl_rch_enable_rcec(struct pci_dev *rcec) { }
 #endif /* CONFIG_CXL_RAS */
 #endif /* _PORTDRV_H_ */
