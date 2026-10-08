@@ -146,6 +146,101 @@ void pcie_walk_rcec(struct pci_dev *rcec, int (*cb)(struct pci_dev *, void *),
 	walk_rcec(walk_rcec_helper, &rcec_data);
 }
 
+struct find_rcec_data {
+	struct pci_dev *rciep;	/* RCiEP we are resolving */
+	struct pci_dev *rcec;	/* resolved RCEC, or NULL */
+};
+
+/*
+ * rcec_covers_rciep_bus - Does @rcec's Endpoint Association range cover
+ * @rciep's bus?
+ *
+ * rcec_assoc_rciep()'s "different bus => associated" shortcut is only valid
+ * for callers (walk_rcec()) that have already restricted the candidate set to
+ * the RCEC's [nextbusn, lastbusn] range. find_rcec_for_rciep() walks the whole
+ * host bridge, so it must apply the range gate itself before trusting that
+ * shortcut; otherwise, with multiple RCECs under one host bridge, an RCiEP
+ * could be matched to an RCEC whose EA range does not cover the RCiEP's bus.
+ */
+static bool rcec_covers_rciep_bus(struct pci_dev *rcec, struct pci_dev *rciep)
+{
+	u8 nextbusn = rcec->rcec_ea->nextbusn;
+	u8 lastbusn = rcec->rcec_ea->lastbusn;
+	u8 busn = rciep->bus->number;
+
+	/* Same bus is resolved by the EA bitmap, not the bus range. */
+	if (rcec->bus->number == busn)
+		return true;
+
+	/* All RCiEPs on the RCEC's own bus (PCIe 5.0-1, 7.9.10.3). */
+	if (nextbusn == 0xff && lastbusn == 0x00)
+		return false;
+
+	return busn >= nextbusn && busn <= lastbusn;
+}
+
+/*
+ * Callback for pci_walk_bus(): for each candidate RC_EC, apply the same
+ * RCEC Endpoint Association rule used by the core walk (rcec_assoc_rciep())
+ * and record the first RCEC that covers @rciep.
+ *
+ * This runs with pci_bus_sem read-held by pci_walk_bus(). It must not call
+ * into pci_walk_bus() or pci_find_bus() again (both re-acquire pci_bus_sem),
+ * so the match is performed inline against the cached rcec_ea rather than by
+ * nesting pcie_walk_rcec(). A reference is taken on the matched RCEC while
+ * the lock is still held so the returned pointer remains valid after
+ * pci_walk_bus() drops pci_bus_sem.
+ */
+static int find_rcec_for_rciep(struct pci_dev *dev, void *data)
+{
+	struct find_rcec_data *fd = data;
+
+	if (pci_pcie_type(dev) != PCI_EXP_TYPE_RC_EC)
+		return 0;
+
+	if (!dev->rcec_ea)
+		return 0;
+
+	if (!rcec_covers_rciep_bus(dev, fd->rciep))
+		return 0;
+
+	if (rcec_assoc_rciep(dev, fd->rciep)) {
+		fd->rcec = pci_dev_get(dev);
+		return 1;	/* stop the host-bridge walk */
+	}
+	return 0;
+}
+
+/**
+ * pci_rciep_to_rcec - Find the RCEC associated with an RCiEP.
+ * @rciep: Root Complex Integrated Endpoint (PCI_EXP_TYPE_RC_END).
+ *
+ * Return the RCEC whose RCEC Endpoint Association (cached at enumeration in
+ * rcec_ea) covers @rciep, or NULL if none is found. This is read-only and
+ * does not depend on pcie_link_rcec() having populated pdev->rcec, so it is
+ * valid regardless of enumeration or driver-bind ordering.
+ *
+ * The returned pci_dev has its reference count incremented; the caller must
+ * drop it with pci_dev_put().
+ */
+struct pci_dev *pci_rciep_to_rcec(struct pci_dev *rciep)
+{
+	struct find_rcec_data fd = { .rciep = rciep };
+	struct pci_host_bridge *hb;
+
+	if (pci_pcie_type(rciep) != PCI_EXP_TYPE_RC_END)
+		return NULL;
+
+	hb = pci_find_host_bridge(rciep->bus);
+	if (!hb)
+		return NULL;
+
+	pci_walk_bus(hb->bus, find_rcec_for_rciep, &fd);
+
+	return fd.rcec;
+}
+EXPORT_SYMBOL_FOR_MODULES(pci_rciep_to_rcec, "cxl_core");
+
 void pci_rcec_init(struct pci_dev *dev)
 {
 	struct rcec_ea *rcec_ea;

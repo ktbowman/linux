@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #include <linux/aer.h>
 #include "cxl.h"
+#include "cxlpci.h"
 #include "core.h"
 #include "cxlmem.h"
 
@@ -46,6 +47,56 @@ void cxl_disable_rch_root_ints(struct cxl_dport *dport)
 	aer_cmd &= ~aer_cmd_mask;
 	writel(aer_cmd, aer_base + PCI_ERR_ROOT_COMMAND);
 }
+
+void cxl_rch_enable_rcec(struct cxl_port *endpoint)
+{
+	struct device *dev = endpoint->uport_dev->parent;
+	struct pci_dev *pdev;
+
+	if (!dev_is_pci(dev))
+		return;
+
+	pdev = to_pci_dev(dev);
+	if (pci_pcie_type(pdev) != PCI_EXP_TYPE_RC_END)
+		return;
+
+	struct pci_dev *rcec __free(pci_dev_put) = pci_rciep_to_rcec(pdev);
+	if (!rcec) {
+		pci_warn(pdev,
+			 "CXL: No associated RCEC found, internal errors not unmasked\n");
+		return;
+	}
+
+	if (!pcie_aer_is_native(rcec))
+		return;
+
+	pci_aer_unmask_internal_errors(rcec);
+	pci_info(rcec, "CXL: Internal errors unmasked\n");
+}
+EXPORT_SYMBOL_NS_GPL(cxl_rch_enable_rcec, "CXL");
+
+/*
+ * RCH RAS setup lives here alongside the AER mapping helpers it drives. The
+ * RCRB is not mapped until the cxl_pci driver attaches to the RCIeP, so this
+ * runs from the Endpoint Port probe rather than at dport add time.
+ */
+void devm_cxl_dport_rch_ras_setup(struct cxl_dport *dport)
+{
+	struct pci_host_bridge *host_bridge;
+
+	if (!dev_is_pci(dport->dport_dev))
+		return;
+
+	devm_cxl_dport_ras_setup(dport);
+
+	host_bridge = to_pci_host_bridge(dport->dport_dev);
+	if (!host_bridge->native_aer)
+		return;
+
+	cxl_dport_map_rch_aer(dport);
+	cxl_disable_rch_root_ints(dport);
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_dport_rch_ras_setup, "CXL");
 
 /*
  * Copy the AER capability registers using 32 bit read accesses.

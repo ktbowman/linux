@@ -301,6 +301,18 @@ int __wrap_walk_hmem_resources(struct device *host, walk_hmem_fn fn)
 }
 EXPORT_SYMBOL_GPL(__wrap_walk_hmem_resources);
 
+void __wrap_cxl_rch_enable_rcec(struct cxl_port *endpoint)
+{
+	int index;
+	struct cxl_mock_ops *ops = get_cxl_mock_ops(&index);
+
+	if (!ops || !ops->is_mock_port(endpoint->parent_dport->dport_dev))
+		cxl_rch_enable_rcec(endpoint);
+
+	put_cxl_mock_ops(index);
+}
+EXPORT_SYMBOL_NS_GPL(__wrap_cxl_rch_enable_rcec, "CXL");
+
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("cxl_test: emulation module");
 MODULE_IMPORT_NS("ACPI");

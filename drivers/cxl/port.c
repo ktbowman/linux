@@ -145,8 +145,10 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	 * until after the cxl_pci driver attaches to the RCIeP (root complex
 	 * integrated endpoint).
 	 */
-	if (dport->rch)
+	if (dport->rch) {
 		devm_cxl_dport_rch_ras_setup(dport);
+		cxl_rch_enable_rcec(port);
+	}
 
 	devm_cxl_port_ras_setup(port);
 	if (cxl_ras_unmask(port))
