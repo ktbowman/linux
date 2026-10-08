@@ -146,7 +146,7 @@ static int cxl_endpoint_port_probe(struct cxl_port *port)
 	 * integrated endpoint).
 	 */
 	if (dport->rch)
-		devm_cxl_dport_rch_ras_setup(dport);
+		devm_cxl_dport_rch_ras_setup(port);
 
 	devm_cxl_port_ras_setup(port);
 	if (cxl_ras_unmask(port))
