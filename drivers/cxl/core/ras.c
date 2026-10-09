@@ -3,7 +3,6 @@
 
 #include <linux/pci.h>
 #include <linux/aer.h>
-#include <cxl/event.h>
 #include <cxlmem.h>
 #include <cxlpci.h>
 #include "trace.h"
@@ -127,16 +126,6 @@ static void cxl_cper_prot_err_work_fn(struct work_struct *work)
 		cxl_cper_handle_prot_err(&wd);
 }
 static DECLARE_WORK(cxl_cper_prot_err_work, cxl_cper_prot_err_work_fn);
-
-void cxl_ras_init(void)
-{
-	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
-}
-
-void cxl_ras_exit(void)
-{
-	cxl_cper_unregister_prot_err_work();
-}
 
 static void cxl_dport_map_ras(struct cxl_dport *dport)
 {
@@ -370,3 +359,82 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	return PCI_ERS_RESULT_NEED_RESET;
 }
 EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
+
+static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
+				   struct cxl_dport *dport, int severity)
+{
+	struct device *dev = dport ? dport->dport_dev : port->uport_dev;
+
+	if (severity == AER_CORRECTABLE)
+		cxl_handle_cor_ras(dev, to_ras_base(port, dport));
+	else
+		cxl_do_recovery(pdev, port, dport);
+}
+
+/*
+ * Find the CXL Port, and for a Root Port or Downstream Port the dport, of
+ * @pdev. Hold the Port host lock with the driver bound across the RAS access.
+ */
+static void cxl_handle_pdev_proto_error(struct pci_dev *pdev, int severity)
+{
+	struct cxl_dport *dport;
+	struct device *host;
+
+	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_dev(&pdev->dev, NULL);
+	if (!port) {
+		dev_err_ratelimited(&pdev->dev,
+				    "Failed to find parent port device in CXL topology\n");
+		return;
+	}
+
+	host = is_cxl_root(port) ? port->uport_dev : &port->dev;
+
+	guard(device)(host);
+	if (!host->driver) {
+		dev_err_ratelimited(host,
+				    "Port host device is unbound, abort error handling\n");
+		return;
+	}
+
+	dport = cxl_find_dport_by_dev(port, &pdev->dev);
+	if (!dport && (pci_pcie_type(pdev) == PCI_EXP_TYPE_ROOT_PORT ||
+		       pci_pcie_type(pdev) == PCI_EXP_TYPE_DOWNSTREAM)) {
+		dev_err_ratelimited(&pdev->dev,
+				    "Failed to find dport device in CXL topology\n");
+		return;
+	}
+
+	cxl_handle_proto_error(pdev, port, dport, severity);
+}
+
+static void __cxl_proto_err_work_fn(struct cxl_proto_err_work_data *wd)
+{
+	cxl_handle_pdev_proto_error(wd->pdev, wd->severity);
+}
+
+static void cxl_proto_err_work_fn(struct work_struct *work)
+{
+	struct cxl_proto_err_work_data wd;
+
+	for_each_cxl_proto_err(&wd, __cxl_proto_err_work_fn);
+}
+
+static DECLARE_WORK(cxl_proto_err_work, cxl_proto_err_work_fn);
+
+static void cxl_proto_err_do_flush(void)
+{
+	flush_work(&cxl_proto_err_work);
+}
+
+void cxl_ras_init(void)
+{
+	cxl_cper_register_prot_err_work(&cxl_cper_prot_err_work);
+	cxl_register_proto_err_work(&cxl_proto_err_work,
+				   cxl_proto_err_do_flush);
+}
+
+void cxl_ras_exit(void)
+{
+	cxl_unregister_proto_err_work();
+	cxl_cper_unregister_prot_err_work();
+}

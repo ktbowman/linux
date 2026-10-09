@@ -48,6 +48,24 @@ bool is_aer_internal_error(struct aer_err_info *info)
 	return status & PCI_ERR_UNC_INTN;
 }
 
+bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
+{
+	if (!info || !info->is_cxl)
+		return false;
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		break;
+	default:
+		return false;
+	}
+
+	return is_aer_internal_error(info);
+}
+
 /**
  * cxl_forward_error - Forward a CXL protocol error to the CXL subsystem via kfifo
  * @pdev: PCI device that reported the AER error

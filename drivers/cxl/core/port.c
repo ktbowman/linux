@@ -1458,6 +1458,42 @@ static struct cxl_port *find_cxl_port_by_dport(struct device *dport_dev)
 	return __find_cxl_port_by_dport(&ctx);
 }
 
+/**
+ * find_cxl_port_by_dev - find the parent CXL Port of a PCI device
+ * @dev: device whose parent CXL Port is being queried
+ * @dport: optional output, always set to NULL (the port reference does not
+ *	   pin a dport; re-look it up under the host lock with
+ *	   cxl_find_dport_by_dev() if needed)
+ *
+ * Return a 'struct cxl_port' with an elevated reference if found. Use
+ * __free(put_cxl_port) to release.
+ */
+struct cxl_port *find_cxl_port_by_dev(struct device *dev,
+				      struct cxl_dport **dport)
+{
+	struct pci_dev *pdev;
+
+	if (dport)
+		*dport = NULL;
+
+	if (!dev_is_pci(dev))
+		return NULL;
+
+	pdev = to_pci_dev(dev);
+
+	switch (pci_pcie_type(pdev)) {
+	case PCI_EXP_TYPE_ROOT_PORT:
+	case PCI_EXP_TYPE_DOWNSTREAM:
+		return find_cxl_port_by_dport(dev);
+	case PCI_EXP_TYPE_UPSTREAM:
+	case PCI_EXP_TYPE_ENDPOINT:
+	case PCI_EXP_TYPE_RC_END:
+		return find_cxl_port_by_uport(dev);
+	}
+
+	return NULL;
+}
+
 /*
  * All users of grandparent() are using it to walk PCIe-like switch port
  * hierarchy. A PCIe switch is comprised of a bridge device representing the
