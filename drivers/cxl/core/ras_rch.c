@@ -169,6 +169,6 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 			       AER_FATAL : AER_NONFATAL;
 
 		pci_print_aer(pdev, severity, &uncor_regs);
-		cxl_handle_ras(dport->dport_dev, to_ras_base(port, dport));
+		cxl_do_recovery(pdev, dport->port, dport);
 	}
 }
