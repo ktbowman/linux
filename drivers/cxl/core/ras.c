@@ -292,28 +292,6 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 	return true;
 }
 
-void cxl_cor_error_detected(struct pci_dev *pdev)
-{
-	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-	struct cxl_memdev *cxlmd = cxlds->cxlmd;
-	struct device *dev = &cxlds->cxlmd->dev;
-
-	if (is_cxl_restricted(pdev))
-		cxl_handle_rdport_errors(pdev);
-
-	scoped_guard(device, dev) {
-		if (!dev->driver) {
-			dev_warn(&pdev->dev,
-				 "%s: memdev disabled, abort error handling\n",
-				 dev_name(dev));
-			return;
-		}
-
-		cxl_handle_cor_ras(&cxlds->cxlmd->dev, cxlmd->endpoint->regs.ras);
-	}
-}
-EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, "CXL");
-
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 				    pci_channel_state_t state)
 {
@@ -382,6 +360,15 @@ static void __cxl_proto_err_work_fn(struct cxl_proto_err_work_data *wd)
 {
 	struct cxl_dport *dport;
 	struct device *host;
+
+	/*
+	 * An RCEC AER internal error indicates an error in an
+	 * associated RCH Downstream Port or RCD device or both.
+	 */
+	if (pci_pcie_type(wd->pdev) == PCI_EXP_TYPE_RC_EC) {
+		pcie_walk_rcec(wd->pdev, cxl_rch_handle_error_iter, NULL);
+		return;
+	}
 
 	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_dev(&wd->pdev->dev, NULL);
 	if (!port) {

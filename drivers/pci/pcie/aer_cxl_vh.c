@@ -40,7 +40,7 @@ subsys_initcall(cxl_proto_err_kfifo_init);
 
 static void cxl_proto_err_wait_for_empty(void);
 
-bool is_aer_internal_error(struct aer_err_info *info)
+static bool is_aer_internal_error(struct aer_err_info *info)
 {
 	u32 status = info->status & ~info->mask;
 
@@ -52,7 +52,14 @@ bool is_aer_internal_error(struct aer_err_info *info)
 
 bool is_cxl_error(struct pci_dev *pdev, struct aer_err_info *info)
 {
-	if (!info || !info->is_cxl)
+	if (!info)
+		return false;
+
+	/* RCEC lacks Flex Bus DVSEC; unmasked internal error marks CXL RCH */
+	if (pci_pcie_type(pdev) == PCI_EXP_TYPE_RC_EC)
+		return is_aer_internal_error(info);
+
+	if (!info->is_cxl)
 		return false;
 
 	switch (pci_pcie_type(pdev)) {
