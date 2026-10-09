@@ -1,12 +1,31 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2025 AMD Corporation. All rights reserved. */
 
-#include <linux/types.h>
 #include <linux/aer.h>
 #include "cxl.h"
 #include "cxlpci.h"
 #include "core.h"
 #include "cxlmem.h"
+
+static bool is_cxl_mem_dev(struct pci_dev *dev)
+{
+	/*
+	 * The capability, status, and control fields in Device 0,
+	 * Function 0 DVSEC control the CXL functionality of the
+	 * entire device (CXL 3.0, 8.1.3).
+	 */
+	if (dev->devfn != PCI_DEVFN(0, 0))
+		return false;
+
+	/*
+	 * CXL Memory Devices must have the 502h class code set (CXL
+	 * 3.0, 8.1.12.1).
+	 */
+	if ((dev->class >> 8) != PCI_CLASS_MEMORY_CXL)
+		return false;
+
+	return true;
+}
 
 void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {
@@ -171,4 +190,20 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 		pci_print_aer(pdev, severity, &uncor_regs);
 		cxl_do_recovery(pdev, dport->port, dport);
 	}
+}
+
+int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
+{
+	struct cxl_proto_err_work_data *wd = data;
+
+	if (!is_cxl_mem_dev(pdev))
+		return 0;
+
+	/* RCH Downstream Port, located through the RCD */
+	cxl_handle_rdport_errors(pdev);
+
+	/* RCD Endpoint */
+	cxl_handle_pdev_proto_error(pdev, wd->severity);
+
+	return 0;
 }

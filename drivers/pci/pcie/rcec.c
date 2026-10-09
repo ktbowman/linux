@@ -145,6 +145,7 @@ void pcie_walk_rcec(struct pci_dev *rcec, int (*cb)(struct pci_dev *, void *),
 
 	walk_rcec(walk_rcec_helper, &rcec_data);
 }
+EXPORT_SYMBOL_FOR_MODULES(pcie_walk_rcec, "cxl_core");
 
 void pci_rcec_init(struct pci_dev *dev)
 {
