@@ -187,11 +187,15 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base);
 void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port,
 		     struct cxl_dport *dport);
 void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base);
+void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
+			    struct cxl_dport *dport, int severity);
 void cxl_dport_map_rch_aer(struct cxl_dport *dport);
 void cxl_disable_rch_root_ints(struct cxl_dport *dport);
 void cxl_handle_rdport_errors(struct pci_dev *pdev);
 void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport);
 void devm_cxl_dport_ras_setup(struct cxl_dport *dport);
+int cxl_rch_handle_error_iter(struct pci_dev *dev, void *data);
+void cxl_handle_pdev_proto_error(struct pci_dev *pdev, int severity);
 #else
 static inline void cxl_ras_init(void) { }
 static inline void cxl_ras_exit(void) { }

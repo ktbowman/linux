@@ -145,6 +145,7 @@ void pcie_walk_rcec(struct pci_dev *rcec, int (*cb)(struct pci_dev *, void *),
 
 	walk_rcec(walk_rcec_helper, &rcec_data);
 }
+EXPORT_SYMBOL_FOR_MODULES(pcie_walk_rcec, "cxl_core");
 
 struct find_rcec_data {
 	struct pci_dev *rciep;	/* RCiEP we are resolving */

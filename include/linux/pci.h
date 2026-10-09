@@ -1736,8 +1736,14 @@ void pci_walk_bus_reverse(struct pci_bus *top,
 			  int (*cb)(struct pci_dev *, void *), void *userdata);
 
 #ifdef CONFIG_PCIEPORTBUS
+void pcie_walk_rcec(struct pci_dev *rcec,
+		    int (*cb)(struct pci_dev *, void *),
+		    void *userdata);
 struct pci_dev *pci_rciep_to_rcec(struct pci_dev *rciep);
 #else
+static inline void pcie_walk_rcec(struct pci_dev *rcec,
+				  int (*cb)(struct pci_dev *, void *),
+				  void *userdata) { }
 static inline struct pci_dev *pci_rciep_to_rcec(struct pci_dev *rciep)
 {
 	return NULL;

@@ -1,12 +1,31 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Copyright(c) 2025 AMD Corporation. All rights reserved. */
 
-#include <linux/types.h>
 #include <linux/aer.h>
 #include "cxl.h"
 #include "cxlpci.h"
 #include "core.h"
 #include "cxlmem.h"
+
+static bool is_cxl_mem_dev(struct pci_dev *dev)
+{
+	/*
+	 * The capability, status, and control fields in Device 0,
+	 * Function 0 DVSEC control the CXL functionality of the
+	 * entire device (CXL 3.0, 8.1.3).
+	 */
+	if (dev->devfn != PCI_DEVFN(0, 0))
+		return false;
+
+	/*
+	 * CXL Memory Devices must have the 502h class code set (CXL
+	 * 3.0, 8.1.12.1).
+	 */
+	if ((dev->class >> 8) != PCI_CLASS_MEMORY_CXL)
+		return false;
+
+	return true;
+}
 
 void cxl_dport_map_rch_aer(struct cxl_dport *dport)
 {
@@ -133,6 +152,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 {
 	struct aer_capability_regs aer_regs, uncor_regs;
 	u32 cor_status, cor_mask, raw_uncor, print_uncor;
+	u32 cor_proto, uncor_proto;
 	struct cxl_dport *dport;
 
 	struct cxl_port *port __free(put_cxl_port) =
@@ -160,10 +180,24 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	raw_uncor = uncor_regs.uncor_status & ~uncor_regs.uncor_mask;
 	print_uncor = raw_uncor;
 
+	/*
+	 * Only the internal-error bits carry a CXL protocol error (CXL
+	 * r4.0 12.2.1.1). The RCRB AER block holds the Downstream Port's
+	 * full PCIe status, so a PCIe uncorrectable error on the RCH link
+	 * is not CXL's to handle and must not reach the CXL panic policy.
+	 * Every bit is still read, logged and W1C-cleared; only the
+	 * protocol-error dispatch is narrowed.
+	 */
+	cor_proto = cor_status & ~cor_mask & PCI_ERR_COR_INTERNAL;
+	uncor_proto = raw_uncor & PCI_ERR_UNC_INTN;
+
 	/* Handle CE and UCE errors independently, in the same pass */
 	if (cor_status & ~cor_mask) {
 		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
-		cxl_handle_cor_ras(dport->dport_dev, dport->regs.ras);
+
+		if (cor_proto)
+			cxl_handle_proto_error(pdev, port, dport,
+					       AER_CORRECTABLE);
 
 		if (cor_status & ~cor_mask & PCI_ERR_COR_ADV_NFAT) {
 			/*
@@ -191,6 +225,26 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 		pci_print_aer(pdev, severity, &uncor_regs);
 	}
 
-	if (raw_uncor)
-		cxl_do_recovery(pdev, port, dport);
+	if (uncor_proto) {
+		int severity = (uncor_proto & uncor_regs.uncor_severity) ?
+			       AER_FATAL : AER_NONFATAL;
+
+		cxl_handle_proto_error(pdev, port, dport, severity);
+	}
+}
+
+int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
+{
+	struct cxl_proto_err_work_data *wd = data;
+
+	if (!is_cxl_mem_dev(pdev))
+		return 0;
+
+	/* RCH Downstream Port, located through the RCD */
+	cxl_handle_rdport_errors(pdev);
+
+	/* RCD Endpoint */
+	cxl_handle_pdev_proto_error(pdev, wd->severity);
+
+	return 0;
 }
