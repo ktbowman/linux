@@ -209,7 +209,8 @@ void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
 
 void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port, struct cxl_dport *dport)
 {
-	struct device *dev = dport ? dport->dport_dev : port->uport_dev;
+	struct device *ras_dev = dport ? dport->dport_dev :
+					 (port ? port->uport_dev : &pdev->dev);
 	void __iomem *ras_base = to_ras_base(port, dport);
 
 	/*
@@ -219,16 +220,16 @@ void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port, struct cxl_dpo
 	 */
 	if (!ras_base)
 		panic("CXL: uncorrectable protocol error on %s with unmapped RAS (reported by %s)",
-		      dev_name(dev), dev_name(&pdev->dev));
+		      dev_name(ras_dev), dev_name(&pdev->dev));
 
-	if (cxl_handle_ras(dev, ras_base))
+	if (cxl_handle_ras(port, dport, ras_base))
 		panic("CXL cachemem error");
 
 	dev_dbg(&pdev->dev,
 		"CXL UCE signaled but no CXL RAS status bits set\n");
 }
 
-void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
+void cxl_handle_cor_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem *ras_base)
 {
 	void __iomem *addr;
 	u32 status, mask;
@@ -238,6 +239,9 @@ void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 
 	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
+	if (!status)
+		return;
+
 	mask = readl(ras_base + CXL_RAS_CORRECTABLE_MASK_OFFSET);
 
 	/*
@@ -247,8 +251,18 @@ void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 	 * what the platform is currently asking to be told about.
 	 */
 	writel(status, addr);
-	if (status & ~mask)
-		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status & ~mask);
+
+	if (status & ~mask) {
+		if (is_cxl_endpoint(port))
+			trace_cxl_aer_correctable_error(to_cxl_memdev(port->uport_dev),
+							status & ~mask);
+		else if (dport)
+			trace_cxl_port_aer_correctable_error(dport->dport_dev,
+							     status & ~mask);
+		else
+			trace_cxl_port_aer_correctable_error(port->uport_dev,
+							     status & ~mask);
+	}
 }
 
 /* CXL spec rev3.0 8.2.4.16.1 */
@@ -272,12 +286,12 @@ static void header_log_copy(void __iomem *ras_base, u32 *log)
  * Log the state of the RAS status registers and prepare them to log the
  * next error status. Return 1 if reset needed.
  */
-bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
+bool cxl_handle_ras(struct cxl_port *port, struct cxl_dport *dport, void __iomem *ras_base)
 {
 	u32 hl[CXL_HEADERLOG_TRACE_SIZE_U32] = {};
 	void __iomem *addr;
-	u32 status, mask;
-	u32 fe;
+	u32 status, mask, err;
+	bool reported = false;
 
 	if (!ras_base)
 		return false;
@@ -288,6 +302,7 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 	/* A dead link returns all 1s from both registers, treat as unmasked */
 	if (status == ~0U)
 		mask = 0;
+	err = status & ~mask;
 
 	/*
 	 * The mask gates logging when the error is detected, so a bit that is
@@ -299,28 +314,33 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 	 * The acknowledge has to come after the header log copy: clearing the
 	 * bit named by First Error Pointer releases the recorded header.
 	 */
-	if (!(status & ~mask)) {
-		writel(status, addr);
-		return false;
+	if (err) {
+		u32 fe;
+
+		/* If multiple errors, log header points to first error from ctrl reg */
+		if (hweight32(err) > 1) {
+			void __iomem *rcc_addr =
+				ras_base + CXL_RAS_CAP_CONTROL_OFFSET;
+
+			fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
+					   readl(rcc_addr)));
+		} else {
+			fe = err;
+		}
+
+		header_log_copy(ras_base, hl);
+		if (is_cxl_endpoint(port))
+			trace_cxl_aer_uncorrectable_error(to_cxl_memdev(port->uport_dev), err, fe, hl);
+		else if (dport)
+			trace_cxl_port_aer_uncorrectable_error(dport->dport_dev, err, fe, hl);
+		else
+			trace_cxl_port_aer_uncorrectable_error(port->uport_dev, err, fe, hl);
+		reported = true;
 	}
 
-	/* If multiple errors, log header points to first error from ctrl reg */
-	if (hweight32(status & ~mask) > 1) {
-		void __iomem *rcc_addr =
-			ras_base + CXL_RAS_CAP_CONTROL_OFFSET;
-
-		fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
-				   readl(rcc_addr)));
-	} else {
-		fe = status & ~mask;
-	}
-
-	header_log_copy(ras_base, hl);
-	trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status & ~mask,
-					  fe, hl);
 	writel(status, addr);
 
-	return true;
+	return reported;
 }
 
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
@@ -348,7 +368,7 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 		 * state. Any uncorrectable error bit set in the CXL RAS
 		 * status register triggers a panic below.
 		 */
-		ue = cxl_handle_ras(port->uport_dev, to_ras_base(port, NULL));
+		ue = cxl_handle_ras(port, NULL, to_ras_base(port, NULL));
 	}
 
 	/*
@@ -379,10 +399,8 @@ EXPORT_SYMBOL_NS_GPL(cxl_error_detected, "CXL");
 static void cxl_handle_proto_error(struct pci_dev *pdev, struct cxl_port *port,
 				   struct cxl_dport *dport, int severity)
 {
-	struct device *dev = dport ? dport->dport_dev : port->uport_dev;
-
 	if (severity == AER_CORRECTABLE)
-		cxl_handle_cor_ras(dev, to_ras_base(port, dport));
+		cxl_handle_cor_ras(port, dport, to_ras_base(port, dport));
 	else
 		cxl_do_recovery(pdev, port, dport);
 }
