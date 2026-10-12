@@ -129,9 +129,8 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
-void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
+void cxl_handle_rdport_errors(struct pci_dev *pdev)
 {
-	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
 	struct aer_capability_regs aer_regs, uncor_regs;
 	u32 cor_status, cor_mask, raw_uncor, print_uncor;
 	struct cxl_dport *dport;
@@ -164,7 +163,7 @@ void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 	/* Handle CE and UCE errors independently, in the same pass */
 	if (cor_status & ~cor_mask) {
 		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
-		cxl_handle_cor_ras(&cxlds->cxlmd->dev, dport->regs.ras);
+		cxl_handle_cor_ras(dport->dport_dev, dport->regs.ras);
 
 		if (cor_status & ~cor_mask & PCI_ERR_COR_ADV_NFAT) {
 			/*
@@ -193,5 +192,5 @@ void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 	}
 
 	if (raw_uncor)
-		cxl_handle_ras(&cxlds->cxlmd->dev, dport->regs.ras);
+		cxl_do_recovery(pdev, port, dport);
 }

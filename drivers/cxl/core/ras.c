@@ -177,6 +177,39 @@ void devm_cxl_port_ras_setup(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
 
+void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
+{
+	if (!port)
+		return NULL;
+
+	if (dport)
+		return dport->regs.ras;
+
+	return port->regs.ras;
+}
+
+void cxl_do_recovery(struct pci_dev *pdev, struct cxl_port *port, struct cxl_dport *dport)
+{
+	struct device *dev = dport ? dport->dport_dev : port->uport_dev;
+	void __iomem *ras_base = to_ras_base(port, dport);
+
+	/*
+	 * Reached only after is_aer_internal_error() confirmed INTN, so the
+	 * error is known to be a CXL internal UCE. Without a RAS mapping the
+	 * status cannot be read, and a CXL.mem UCE means coherency is lost.
+	 */
+	if (!ras_base)
+		panic("CXL: UCE with unmapped RAS registers on %s (reported by %s)",
+		      dev_name(dev), dev_name(&pdev->dev));
+
+	if (cxl_handle_ras(dev, ras_base))
+		panic("CXL: uncorrectable protocol error on %s (reported by %s)",
+		      dev_name(dev), dev_name(&pdev->dev));
+
+	dev_dbg(&pdev->dev,
+		"CXL UCE signaled but no CXL RAS status bits set\n");
+}
+
 void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 {
 	void __iomem *addr;
@@ -193,7 +226,11 @@ void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 
 	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
 		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
-		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status);
+		if (is_cxl_memdev(dev))
+			trace_cxl_aer_correctable_error(to_cxl_memdev(dev),
+							status);
+		else
+			trace_cxl_port_aer_correctable_error(dev, status);
 	}
 }
 
@@ -248,7 +285,11 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 	}
 
 	header_log_copy(ras_base, hl);
-	trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status, fe, hl);
+	if (is_cxl_memdev(dev))
+		trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev),
+						  status, fe, hl);
+	else
+		trace_cxl_port_aer_uncorrectable_error(dev, status, fe, hl);
 	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
 
 	return true;
@@ -260,6 +301,9 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 	struct cxl_memdev *cxlmd = cxlds->cxlmd;
 	struct device *dev = &cxlds->cxlmd->dev;
 
+	if (is_cxl_restricted(pdev))
+		cxl_handle_rdport_errors(pdev);
+
 	scoped_guard(device, dev) {
 		if (!dev->driver) {
 			dev_warn(&pdev->dev,
@@ -267,9 +311,6 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 				 dev_name(dev));
 			return;
 		}
-
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
 
 		cxl_handle_cor_ras(&cxlds->cxlmd->dev, cxlmd->endpoint->regs.ras);
 	}
@@ -279,42 +320,47 @@ EXPORT_SYMBOL_NS_GPL(cxl_cor_error_detected, "CXL");
 pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 				    pci_channel_state_t state)
 {
-	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
-	struct cxl_memdev *cxlmd = cxlds->cxlmd;
-	struct device *dev = &cxlmd->dev;
-	bool ue;
+	struct cxl_port *port __free(put_cxl_port) = find_cxl_port_by_uport(&pdev->dev);
+	bool ue = false;
 
-	scoped_guard(device, dev) {
-		if (!dev->driver) {
+	if (!port)
+		return PCI_ERS_RESULT_DISCONNECT;
+
+	if (is_cxl_restricted(pdev))
+		cxl_handle_rdport_errors(pdev);
+
+	scoped_guard(device, &port->dev) {
+		if (!port->dev.driver) {
 			dev_warn(&pdev->dev,
-				 "%s: memdev disabled, abort error handling\n",
-				 dev_name(dev));
+				 "%s: port disabled, abort error handling\n",
+				 dev_name(&port->dev));
 			return PCI_ERS_RESULT_DISCONNECT;
 		}
 
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
 		/*
-		 * A frozen channel indicates an impending reset which is fatal to
-		 * CXL.mem operation, and will likely crash the system. On the off
-		 * chance the situation is recoverable dump the status of the RAS
-		 * capability registers and bounce the active state of the memdev.
+		 * The CXL RAS read is unconditional regardless of channel
+		 * state. Any uncorrectable error bit set in the CXL RAS
+		 * status register triggers a panic below.
 		 */
-		ue = cxl_handle_ras(&cxlds->cxlmd->dev, cxlmd->endpoint->regs.ras);
+		ue = cxl_handle_ras(port->uport_dev, to_ras_base(port, NULL));
 	}
+
+	/*
+	 * CXL.mem UCE means cache coherency is lost. Continuing risks
+	 * silent data corruption.
+	 */
+	if (ue)
+		panic("CXL: uncorrectable protocol error on %s (reported by %s)",
+		      dev_name(&port->dev), dev_name(&pdev->dev));
 
 	switch (state) {
 	case pci_channel_io_normal:
-		if (ue) {
-			device_release_driver(dev);
-			return PCI_ERS_RESULT_NEED_RESET;
-		}
 		return PCI_ERS_RESULT_CAN_RECOVER;
 	case pci_channel_io_frozen:
 		dev_warn(&pdev->dev,
 			 "%s: frozen state error detected, disable CXL.mem\n",
-			 dev_name(dev));
-		device_release_driver(dev);
+			 dev_name(&port->dev));
+		device_release_driver(port->uport_dev);
 		return PCI_ERS_RESULT_NEED_RESET;
 	case pci_channel_io_perm_failure:
 		dev_warn(&pdev->dev,
