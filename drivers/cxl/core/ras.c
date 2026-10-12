@@ -177,6 +177,17 @@ void devm_cxl_port_ras_setup(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
 
+void __iomem *to_ras_base(struct cxl_port *port, struct cxl_dport *dport)
+{
+	if (!port)
+		return NULL;
+
+	if (dport)
+		return dport->regs.ras;
+
+	return port->regs.ras;
+}
+
 void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 {
 	void __iomem *addr;
@@ -253,6 +264,9 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 	struct cxl_memdev *cxlmd = cxlds->cxlmd;
 	struct device *dev = &cxlds->cxlmd->dev;
 
+	if (is_cxl_restricted(pdev))
+		cxl_handle_rdport_errors(pdev);
+
 	scoped_guard(device, dev) {
 		if (!dev->driver) {
 			dev_warn(&pdev->dev,
@@ -260,9 +274,6 @@ void cxl_cor_error_detected(struct pci_dev *pdev)
 				 dev_name(dev));
 			return;
 		}
-
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
 
 		cxl_handle_cor_ras(&cxlds->cxlmd->dev, cxlmd->endpoint->regs.ras);
 	}
@@ -277,6 +288,9 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	struct device *dev = &cxlmd->dev;
 	bool ue;
 
+	if (is_cxl_restricted(pdev))
+		cxl_handle_rdport_errors(pdev);
+
 	scoped_guard(device, dev) {
 		if (!dev->driver) {
 			dev_warn(&pdev->dev,
@@ -285,8 +299,6 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 			return PCI_ERS_RESULT_DISCONNECT;
 		}
 
-		if (cxlds->rcd)
-			cxl_handle_rdport_errors(cxlds);
 		/*
 		 * A frozen channel indicates an impending reset which is fatal to
 		 * CXL.mem operation, and will likely crash the system. On the off
