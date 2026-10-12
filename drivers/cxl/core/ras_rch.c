@@ -141,16 +141,21 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
-void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
+void cxl_handle_rdport_errors(struct pci_dev *pdev)
 {
-	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
+	struct cxl_dev_state *cxlds = pci_get_drvdata(pdev);
 	struct aer_capability_regs aer_regs, uncor_regs;
 	u32 cor_status, cor_mask, raw_uncor, print_uncor;
 	struct cxl_dport *dport;
 
 	struct cxl_port *port __free(put_cxl_port) =
-		cxl_pci_find_port(pdev, &dport);
+		cxl_pci_find_port(pdev, NULL);
 	if (!port)
+		return;
+
+	guard(device)(&port->dev);
+	dport = cxl_find_dport_by_dev(port, pdev->dev.parent);
+	if (!dport)
 		return;
 
 	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
