@@ -90,32 +90,12 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
-/* Get AER severity. Return false if there is no error. */
-static bool cxl_rch_get_aer_severity(struct aer_capability_regs *aer_regs,
-				     int *severity)
-{
-	u32 uncor_status = aer_regs->uncor_status & ~aer_regs->uncor_mask;
-
-	if (uncor_status) {
-		*severity = (uncor_status & aer_regs->uncor_severity) ?
-			     AER_FATAL : AER_NONFATAL;
-		return true;
-	}
-
-	if (aer_regs->cor_status & ~aer_regs->cor_mask) {
-		*severity = AER_CORRECTABLE;
-		return true;
-	}
-
-	return false;
-}
-
 void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 {
 	struct pci_dev *pdev = to_pci_dev(cxlds->dev);
-	struct aer_capability_regs aer_regs;
+	struct aer_capability_regs aer_regs, uncor_regs;
 	struct cxl_dport *dport;
-	int severity;
+	u32 uncor_status;
 
 	struct cxl_port *port __free(put_cxl_port) =
 		cxl_pci_find_port(pdev, &dport);
@@ -125,12 +105,21 @@ void cxl_handle_rdport_errors(struct cxl_dev_state *cxlds)
 	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
 		return;
 
-	if (!cxl_rch_get_aer_severity(&aer_regs, &severity))
-		return;
+	/* pci_print_aer() modifies aer_regs status. Make copy for UCE */
+	uncor_regs = aer_regs;
+	uncor_status = uncor_regs.uncor_status & ~uncor_regs.uncor_mask;
 
-	pci_print_aer(pdev, severity, &aer_regs);
-	if (severity == AER_CORRECTABLE)
+	/* Handle CE and UCE errors independently, in the same pass */
+	if (aer_regs.cor_status & ~aer_regs.cor_mask) {
+		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
 		cxl_handle_cor_ras(&cxlds->cxlmd->dev, dport->regs.ras);
-	else
+	}
+
+	if (uncor_status) {
+		int severity = (uncor_status & uncor_regs.uncor_severity) ?
+			       AER_FATAL : AER_NONFATAL;
+
+		pci_print_aer(pdev, severity, &uncor_regs);
 		cxl_handle_ras(&cxlds->cxlmd->dev, dport->regs.ras);
+	}
 }
