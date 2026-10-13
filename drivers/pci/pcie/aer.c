@@ -860,8 +860,8 @@ static int aer_ratelimit(struct pci_dev *dev, unsigned int severity)
 	}
 }
 
-static u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
-				   u32 uncor_mask, u32 uncor_severity)
+u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
+			    u32 uncor_mask, u32 uncor_severity)
 {
 	u32 anfe_status;
 
@@ -885,6 +885,7 @@ static u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
 
 	return anfe_status;
 }
+EXPORT_SYMBOL_NS_GPL(aer_compute_anfe_status, "CXL");
 
 static u32 aer_get_anfe_status(struct pci_dev *dev)
 {

@@ -57,6 +57,8 @@ struct aer_capability_regs {
 int pci_aer_clear_nonfatal_status(struct pci_dev *dev);
 int pcie_aer_is_native(struct pci_dev *dev);
 void pci_aer_unmask_internal_errors(struct pci_dev *dev);
+u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
+			    u32 uncor_mask, u32 uncor_severity);
 #else
 static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 {
@@ -64,6 +66,11 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 }
 static inline int pcie_aer_is_native(struct pci_dev *dev) { return 0; }
 static inline void pci_aer_unmask_internal_errors(struct pci_dev *dev) { }
+static inline u32 aer_compute_anfe_status(u16 devsta, u32 uncor_status,
+					  u32 uncor_mask, u32 uncor_severity)
+{
+	return 0;
+}
 #endif
 
 void pci_print_aer(struct pci_dev *dev, int aer_severity,
