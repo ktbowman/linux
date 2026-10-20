@@ -198,17 +198,21 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
 void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 {
 	void __iomem *addr;
-	u32 status;
+	u32 status, mask;
 
 	if (!ras_base)
 		return;
 
+	mask = readl(ras_base + CXL_RAS_CORRECTABLE_MASK_OFFSET);
 	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
-	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
-		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
-		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status);
-	}
+	if (status == ~0U)
+		return; /* Link gone mid error */
+
+	status &= CXL_RAS_CORRECTABLE_STATUS_MASK;
+	writel(status, addr);
+	if (status & ~mask)
+		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status & ~mask);
 }
 
 /* CXL spec rev3.0 8.2.4.16.1 */
@@ -236,33 +240,42 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 {
 	u32 hl[CXL_HEADERLOG_TRACE_SIZE_U32] = {};
 	void __iomem *addr;
-	u32 status;
-	u32 fe;
+	u32 status, mask, err;
 
 	if (!ras_base)
 		return false;
 
+	mask = readl(ras_base + CXL_RAS_UNCORRECTABLE_MASK_OFFSET);
 	addr = ras_base + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
-	if (!(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK))
-		return false;
+	if (status == ~0U)
+		return true; /* Link gone mid error */
 
-	/* If multiple errors, log header points to first error from ctrl reg */
-	if (hweight32(status) > 1) {
-		void __iomem *rcc_addr =
-			ras_base + CXL_RAS_CAP_CONTROL_OFFSET;
+	/* Only consider architecturally-defined status bits */
+	status &= CXL_RAS_UNCORRECTABLE_STATUS_MASK;
+	err = status & ~mask;
 
-		fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
-				   readl(rcc_addr)));
-	} else {
-		fe = status;
+	if (err) {
+		u32 fe;
+
+		if (hweight32(err) > 1) {
+			void __iomem *rcc_addr =
+				ras_base + CXL_RAS_CAP_CONTROL_OFFSET;
+
+			fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
+					   readl(rcc_addr)));
+		} else {
+			fe = err;
+		}
+
+		header_log_copy(ras_base, hl);
+		trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev),
+						  err, fe, hl);
 	}
 
-	header_log_copy(ras_base, hl);
-	trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status, fe, hl);
-	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
+	writel(status, addr);
 
-	return true;
+	return err != 0;
 }
 
 void cxl_cor_error_detected(struct pci_dev *pdev)
