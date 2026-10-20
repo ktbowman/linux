@@ -198,17 +198,24 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_port_ras_setup, "CXL");
 void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 {
 	void __iomem *addr;
-	u32 status;
+	u32 status, mask;
 
 	if (!ras_base)
 		return;
 
 	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
-	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
-		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
-		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status);
-	}
+	mask = readl(ras_base + CXL_RAS_CORRECTABLE_MASK_OFFSET);
+
+	/*
+	 * The mask gates logging when the error is detected, so a bit that is
+	 * set while masked was recorded before the mask was raised and never
+	 * signaled. Acknowledge everything hardware logged, but report only
+	 * what the platform is currently asking to be told about.
+	 */
+	writel(status, addr);
+	if (status & ~mask)
+		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status & ~mask);
 }
 
 /* CXL spec rev3.0 8.2.4.16.1 */
@@ -236,7 +243,7 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 {
 	u32 hl[CXL_HEADERLOG_TRACE_SIZE_U32] = {};
 	void __iomem *addr;
-	u32 status;
+	u32 status, mask;
 	u32 fe;
 
 	if (!ras_base)
@@ -244,23 +251,41 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 
 	addr = ras_base + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
-	if (!(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK))
+	mask = readl(ras_base + CXL_RAS_UNCORRECTABLE_MASK_OFFSET);
+	/* A dead link returns all 1s from both registers, treat as unmasked */
+	if (status == ~0U)
+		mask = 0;
+
+	/*
+	 * The mask gates logging when the error is detected, so a bit that is
+	 * set while masked was recorded before the mask was raised and never
+	 * signaled. Report only what the platform is currently asking to be
+	 * told about, but acknowledge everything hardware logged below so a
+	 * suppressed bit cannot resurface as a current error later.
+	 *
+	 * The acknowledge has to come after the header log copy: clearing the
+	 * bit named by First Error Pointer releases the recorded header.
+	 */
+	if (!(status & ~mask)) {
+		writel(status, addr);
 		return false;
+	}
 
 	/* If multiple errors, log header points to first error from ctrl reg */
-	if (hweight32(status) > 1) {
+	if (hweight32(status & ~mask) > 1) {
 		void __iomem *rcc_addr =
 			ras_base + CXL_RAS_CAP_CONTROL_OFFSET;
 
 		fe = BIT(FIELD_GET(CXL_RAS_CAP_CONTROL_FE_MASK,
 				   readl(rcc_addr)));
 	} else {
-		fe = status;
+		fe = status & ~mask;
 	}
 
 	header_log_copy(ras_base, hl);
-	trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status, fe, hl);
-	writel(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK, addr);
+	trace_cxl_aer_uncorrectable_error(to_cxl_memdev(dev), status & ~mask,
+					  fe, hl);
+	writel(status, addr);
 
 	return true;
 }
