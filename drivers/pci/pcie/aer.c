@@ -37,6 +37,7 @@
 
 #include "../pci.h"
 #include "portdrv.h"
+#include "aer_cxl.h"
 
 #define aer_printk(level, pdev, fmt, arg...) \
 	dev_printk(level, &(pdev)->dev, fmt, ##arg)

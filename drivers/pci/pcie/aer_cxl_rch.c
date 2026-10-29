@@ -6,6 +6,7 @@
 #include <linux/bitfield.h>
 #include "../pci.h"
 #include "portdrv.h"
+#include "aer_cxl.h"
 
 static bool is_cxl_mem_dev(struct pci_dev *dev)
 {
