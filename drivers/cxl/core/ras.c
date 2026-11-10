@@ -296,9 +296,6 @@ pci_ers_result_t cxl_error_detected(struct pci_dev *pdev,
 	if (!port)
 		return PCI_ERS_RESULT_DISCONNECT;
 
-	if (is_cxl_restricted(pdev))
-		cxl_handle_rdport_errors(pdev);
-
 	scoped_guard(device, &port->dev) {
 		if (!port->dev.driver) {
 			dev_warn(&pdev->dev,
@@ -395,7 +392,7 @@ static void __cxl_proto_err_work_fn(struct cxl_proto_err_work_data *wd)
 	 * associated RCH Downstream Port or RCD device or both.
 	 */
 	if (pci_pcie_type(wd->pdev) == PCI_EXP_TYPE_RC_EC) {
-		pcie_walk_rcec(wd->pdev, cxl_rch_handle_error_iter, wd);
+		pcie_walk_rcec(wd->pdev, cxl_handle_rch_rcd_errors, wd);
 		return;
 	}
 

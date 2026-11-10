@@ -121,7 +121,7 @@ EXPORT_SYMBOL_NS_GPL(devm_cxl_dport_rch_ras_setup, "CXL");
  * @aer_base: base address of AER capability block in RCRB
  * @aer_regs: destination for copying AER capability
  */
-static bool cxl_rch_get_aer_info(void __iomem *aer_base,
+static bool cxl_get_rch_aer_info(void __iomem *aer_base,
 				 struct aer_capability_regs *aer_regs)
 {
 	/* A flat copy cannot fill the struct; aer_cap_regs_unpack() places it. */
@@ -148,33 +148,17 @@ static bool cxl_rch_get_aer_info(void __iomem *aer_base,
 	return true;
 }
 
-void cxl_handle_rdport_errors(struct pci_dev *pdev)
+static void cxl_handle_rdport_errors(struct pci_dev *pdev,
+				       struct cxl_port *port,
+				       struct cxl_dport *dport,
+				       struct aer_capability_regs *aer_regs)
 {
-	struct aer_capability_regs aer_regs, uncor_regs;
+	struct aer_capability_regs uncor_regs;
 	u32 cor_status, cor_mask, raw_uncor, print_uncor;
 	u32 cor_proto, uncor_proto;
-	struct cxl_dport *dport;
-
-	struct cxl_port *port __free(put_cxl_port) =
-		cxl_pci_find_port(pdev);
-	if (!port)
-		return;
-
-	/*
-	 * The dport may have been freed since the lookup above, so take the
-	 * lock that pins it and find it again.
-	 */
-	guard(device)(cxl_port_dport_host(port));
-
-	dport = cxl_pci_find_dport(pdev, port);
-	if (!dport)
-		return;
-
-	if (!cxl_rch_get_aer_info(dport->regs.dport_aer, &aer_regs))
-		return;
 
 	/* pci_print_aer() modifies aer_regs status. Make copy for UCE */
-	uncor_regs = aer_regs;
+	uncor_regs = *aer_regs;
 	cor_status = uncor_regs.cor_status;
 	cor_mask = uncor_regs.cor_mask;
 	raw_uncor = uncor_regs.uncor_status & ~uncor_regs.uncor_mask;
@@ -193,7 +177,7 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 
 	/* Handle CE and UCE errors independently, in the same pass */
 	if (cor_status & ~cor_mask) {
-		pci_print_aer(pdev, AER_CORRECTABLE, &aer_regs);
+		pci_print_aer(pdev, AER_CORRECTABLE, aer_regs);
 
 		if (cor_proto)
 			cxl_handle_proto_error(pdev, port, dport,
@@ -201,11 +185,15 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 
 		if (cor_status & ~cor_mask & PCI_ERR_COR_ADV_NFAT) {
 			/*
-			 * Pass CED set and NFED clear: no ERR_NONFATAL was
-			 * signalled alongside this correctable event, so
-			 * aer_compute_anfe_status() also folds in the
-			 * AER_POSSIBLE_ANFE bits. Exclude those from the
-			 * uncorrectable status logged below.
+			 * The RCRB AER mapping does not cover the PCIe
+			 * Capability where Device Status lives, so pass
+			 * a synthetic devsta with CED set and NFED
+			 * clear.  This is correct: the outer condition
+			 * already proves only ERR_COR was signalled, so
+			 * aer_compute_anfe_status() classifies the
+			 * AER_POSSIBLE_ANFE bits as Advisory and they
+			 * are excluded from the logged uncorrectable
+			 * status below.
 			 */
 			u32 anfe = aer_compute_anfe_status(PCI_EXP_DEVSTA_CED,
 							   uncor_regs.uncor_status,
@@ -233,18 +221,198 @@ void cxl_handle_rdport_errors(struct pci_dev *pdev)
 	}
 }
 
-int cxl_rch_handle_error_iter(struct pci_dev *pdev, void *data)
+/**
+ * cxl_get_rcd_aer_info - Read RCD config-space AER registers
+ * @pdev: the RCD PCI device
+ * @aer_regs: output — populated with AER register snapshot on success
+ *
+ * Pure reader: snapshots the AER capability registers from PCI config
+ * space and checks whether any unmasked internal errors are present.
+ *
+ * Returns: true if any unmasked internal error is present, false otherwise.
+ */
+static bool cxl_get_rcd_aer_info(struct pci_dev *pdev,
+				  struct aer_capability_regs *aer_regs)
 {
-	struct cxl_proto_err_work_data *wd = data;
+	int aer = pdev->aer_cap;
+	u32 cor_internal, uncor_internal;
+	unsigned int i, tlp_len;
+	bool flit;
+
+	if (!aer)
+		return false;
+
+	memset(aer_regs, 0, sizeof(*aer_regs));
+
+	pci_read_config_dword(pdev, aer + PCI_ERR_UNCOR_STATUS,
+			      &aer_regs->uncor_status);
+	pci_read_config_dword(pdev, aer + PCI_ERR_UNCOR_MASK,
+			      &aer_regs->uncor_mask);
+	pci_read_config_dword(pdev, aer + PCI_ERR_UNCOR_SEVER,
+			      &aer_regs->uncor_severity);
+	pci_read_config_dword(pdev, aer + PCI_ERR_COR_STATUS,
+			      &aer_regs->cor_status);
+	pci_read_config_dword(pdev, aer + PCI_ERR_COR_MASK,
+			      &aer_regs->cor_mask);
+
+	pci_read_config_dword(pdev, aer + PCI_ERR_CAP, &aer_regs->cap_control);
+
+	flit = FIELD_GET(PCI_ERR_CAP_TLP_LOG_FLIT, aer_regs->cap_control);
+	if (flit)
+		tlp_len = FIELD_GET(PCI_ERR_CAP_TLP_LOG_SIZE,
+				    aer_regs->cap_control);
+	else
+		tlp_len = PCIE_STD_NUM_TLP_HEADERLOG + PCIE_STD_MAX_TLP_PREFIXLOG;
+
+	tlp_len = min(tlp_len, ARRAY_SIZE(aer_regs->header_log.dw));
+
+	for (i = 0; i < tlp_len; i++) {
+		unsigned int off;
+
+		if (i < PCIE_STD_NUM_TLP_HEADERLOG)
+			off = PCI_ERR_HEADER_LOG + i * sizeof(u32);
+		else
+			off = PCI_ERR_PREFIX_LOG +
+			      (i - PCIE_STD_NUM_TLP_HEADERLOG) * sizeof(u32);
+
+		pci_read_config_dword(pdev, aer + off,
+				      &aer_regs->header_log.dw[i]);
+	}
+
+	aer_regs->header_log.header_len = flit ? i :
+					   min(i, PCIE_STD_NUM_TLP_HEADERLOG);
+	aer_regs->header_log.flit = flit;
+
+	cor_internal = aer_regs->cor_status & ~aer_regs->cor_mask &
+		       PCI_ERR_COR_INTERNAL;
+	uncor_internal = aer_regs->uncor_status & ~aer_regs->uncor_mask &
+			 PCI_ERR_UNC_INTN;
+
+	return cor_internal || uncor_internal;
+}
+
+/**
+ * cxl_handle_rcd_aer - Log and clear RCD internal AER errors
+ * @pdev: the RCD PCI device
+ * @aer_regs: AER register snapshot from cxl_get_rcd_aer_info()
+ * @has_cor: output — true if correctable internal error was reported
+ * @has_uncor: output — true if uncorrectable internal error was reported
+ * @severity: output — AER_FATAL or AER_NONFATAL, valid only when @has_uncor
+ *
+ * Logs correctable and uncorrectable internal errors independently (so
+ * neither is dropped when both are present simultaneously), and W1C-clears
+ * the full latched status of each class that was consumed.
+ *
+ * pci_print_aer() mutates the struct it is given: on the Advisory Non-Fatal
+ * recursion path it overwrites uncor_status and zeroes uncor_mask. Print
+ * from a copy so the uncorrectable W1C below still writes the status that
+ * was actually latched.
+ */
+static void cxl_handle_rcd_aer(struct pci_dev *pdev,
+				struct aer_capability_regs *aer_regs,
+				bool *has_cor, bool *has_uncor,
+				int *severity)
+{
+	int aer = pdev->aer_cap;
+	u32 cor_internal, uncor_internal;
+
+	*has_cor = false;
+	*has_uncor = false;
+
+	cor_internal = aer_regs->cor_status & ~aer_regs->cor_mask &
+		       PCI_ERR_COR_INTERNAL;
+	uncor_internal = aer_regs->uncor_status & ~aer_regs->uncor_mask &
+			 PCI_ERR_UNC_INTN;
+
+	/* Log CE and UCE independently — never drop one when both present */
+	if (cor_internal) {
+		struct aer_capability_regs cor_regs = *aer_regs;
+		u32 anfe;
+
+		pci_print_aer(pdev, AER_CORRECTABLE, &cor_regs);
+
+		/*
+		 * pci_print_aer() for correctable recurses on
+		 * PCI_ERR_COR_ADV_NFAT and logs those bits as
+		 * AER_NONFATAL. Exclude them from the uncorrectable
+		 * print below so they are not logged twice.
+		 */
+		anfe = aer_compute_anfe_status(PCI_EXP_DEVSTA_CED,
+					       aer_regs->uncor_status,
+					       aer_regs->uncor_mask,
+					       aer_regs->uncor_severity);
+		pci_write_config_dword(pdev, aer + PCI_ERR_COR_STATUS,
+				       aer_regs->cor_status);
+		aer_regs->uncor_status &= ~anfe;
+		*has_cor = true;
+	}
+
+	if (uncor_internal) {
+		struct aer_capability_regs uncor_regs = *aer_regs;
+
+		*severity = (uncor_internal & aer_regs->uncor_severity) ?
+			    AER_FATAL : AER_NONFATAL;
+
+		pci_print_aer(pdev, *severity, &uncor_regs);
+		pci_write_config_dword(pdev, aer + PCI_ERR_UNCOR_STATUS,
+				       aer_regs->uncor_status);
+		*has_uncor = true;
+	}
+}
+
+int cxl_handle_rch_rcd_errors(struct pci_dev *pdev, void *data)
+{
+	struct aer_capability_regs rdport_aer_regs;
+	struct aer_capability_regs rcd_aer_regs;
+	struct cxl_dport *dport;
+	bool has_cor, has_uncor;
+	int severity;
 
 	if (!is_cxl_mem_dev(pdev))
 		return 0;
 
-	/* RCH Downstream Port, located through the RCD */
-	cxl_handle_rdport_errors(pdev);
+	struct cxl_port *port __free(put_cxl_port) = cxl_pci_find_port(pdev);
+	if (!port)
+		return 0;
 
-	/* RCD Endpoint */
-	cxl_handle_pdev_proto_error(pdev, wd->severity);
+	/* Endpoint Port — owns the RCD's CXL RAS registers */
+	struct cxl_port *ep __free(put_cxl_port) = find_cxl_port_by_uport(&pdev->dev);
+
+	if (!ep)
+		return 0;
+
+	/*
+	 * Hold the Endpoint Port host lock across the whole handler so the
+	 * dport and the RCD RAS mapping cannot be torn down mid-handling.
+	 * The status is W1C, so the driver-bound check must also precede
+	 * any read or clear, or the error is consumed and dropped.
+	 */
+	struct device *host = cxl_port_dport_host(ep);
+
+	guard(device)(host);
+	if (!host->driver) {
+		dev_warn(&pdev->dev,
+			 "%s: port host unbound, abort error handling\n",
+			 dev_name(host));
+		return 0;
+	}
+
+	guard(device)(cxl_port_dport_host(port));
+	dport = cxl_pci_find_dport(pdev, port);
+	if (dport && cxl_get_rch_aer_info(dport->regs.dport_aer,
+					  &rdport_aer_regs))
+		cxl_handle_rdport_errors(pdev, port, dport, &rdport_aer_regs);
+
+	if (!cxl_get_rcd_aer_info(pdev, &rcd_aer_regs))
+		return 0;
+
+	/* RCD Endpoint — read config-space AER, handle internal errors */
+	cxl_handle_rcd_aer(pdev, &rcd_aer_regs, &has_cor, &has_uncor, &severity);
+
+	if (has_cor)
+		cxl_handle_proto_error(pdev, ep, NULL, AER_CORRECTABLE);
+	if (has_uncor)
+		cxl_handle_proto_error(pdev, ep, NULL, severity);
 
 	return 0;
 }
