@@ -164,9 +164,6 @@ void devm_cxl_dport_rch_ras_setup(struct cxl_dport *dport)
 {
 	struct pci_host_bridge *host_bridge;
 
-	if (!dev_is_pci(dport->dport_dev))
-		return;
-
 	devm_cxl_dport_ras_setup(dport);
 
 	host_bridge = to_pci_host_bridge(dport->dport_dev);
