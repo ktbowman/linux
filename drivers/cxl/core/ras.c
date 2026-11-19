@@ -201,6 +201,10 @@ void cxl_handle_cor_ras(struct device *dev, void __iomem *ras_base)
 
 	addr = ras_base + CXL_RAS_CORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
+	/* Card removal, nothing to report. */
+	if (status == ~0U)
+		return;
+
 	if (status & CXL_RAS_CORRECTABLE_STATUS_MASK) {
 		writel(status & CXL_RAS_CORRECTABLE_STATUS_MASK, addr);
 		trace_cxl_aer_correctable_error(to_cxl_memdev(dev), status);
@@ -240,6 +244,9 @@ bool cxl_handle_ras(struct device *dev, void __iomem *ras_base)
 
 	addr = ras_base + CXL_RAS_UNCORRECTABLE_STATUS_OFFSET;
 	status = readl(addr);
+	if (status == ~0U)
+		return true;
+
 	if (!(status & CXL_RAS_UNCORRECTABLE_STATUS_MASK))
 		return false;
 
